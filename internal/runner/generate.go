@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/shouni/go-gemini-client/gemini"
+
 	"ap-voice/internal/config"
 	"ap-voice/internal/domain"
-
-	"github.com/shouni/go-gemini-client/gemini"
 )
 
 // TemplateData はプロンプトテンプレートに渡すデータ構造です。
@@ -18,16 +18,10 @@ type TemplateData struct {
 	InputText string
 }
 
-// ContentReader は、指定されたURIからコンテンツを取得するためのインターフェースです。
-type ContentReader interface {
-	Open(ctx context.Context, uri string) (io.ReadCloser, error)
-	io.Closer
-}
-
 // GenerateRunner は generate コマンドの実行に必要な依存とオプションを保持します。
 type GenerateRunner struct {
 	options       *config.Config
-	reader        ContentReader
+	reader        domain.ContentReader
 	promptBuilder domain.PromptBuilder
 	aiClient      gemini.ContentGenerator
 }
@@ -35,7 +29,7 @@ type GenerateRunner struct {
 // NewGenerateRunner は、依存関係を注入して GenerateRunner の新しいインスタンスを生成します。
 func NewGenerateRunner(
 	options *config.Config,
-	reader ContentReader,
+	reader domain.ContentReader,
 	promptBuilder domain.PromptBuilder,
 	aiClient gemini.ContentGenerator,
 ) *GenerateRunner {
@@ -52,22 +46,19 @@ func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
 	if gr.options.URL == "" {
 		return "", fmt.Errorf("入力ソース(--url)が指定されていません")
 	}
-	inputContent, err := gr.readContent(ctx, gr.options.URL)
+	content, err := gr.readContent(ctx, gr.options.URL)
 	if err != nil {
 		return "", err
 	}
-	slog.Info("処理開始", "mode", gr.options.Mode, "model", gr.options.AIModel, "input_size", len(inputContent))
+	slog.Info("処理開始", "mode", gr.options.Mode, "model", gr.options.AIModel, "input_size", len(content))
 	slog.Info("AIによるスクリプト生成を開始します...")
 
-	data := TemplateData{
-		InputText: inputContent,
-	}
-	promptContent, err := gr.promptBuilder.Build(gr.options.Mode, data)
+	prompt, err := gr.promptBuilder.Generate(gr.options.Mode, content)
 	if err != nil {
 		return "", err
 	}
 
-	generatedResponse, err := gr.aiClient.GenerateContent(ctx, gr.options.AIModel, promptContent)
+	generatedResponse, err := gr.aiClient.GenerateContent(ctx, gr.options.AIModel, prompt)
 	if err != nil {
 		return "", fmt.Errorf("スクリプト生成に失敗しました: %w", err)
 	}

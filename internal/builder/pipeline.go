@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shouni/go-web-reader/pkg/reader"
-
 	"ap-voice/internal/adapters"
 	"ap-voice/internal/app"
 	"ap-voice/internal/pipeline"
@@ -30,11 +28,6 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildGenerateRunner は、GenerateRunner のインスタンスを返します。
 func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.GenerateRunner, error) {
-	contextReader, err := reader.New()
-	if err != nil {
-		return nil, fmt.Errorf("コンテントリーダーの初期化に失敗しました: %w", err)
-	}
-
 	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
 		return nil, fmt.Errorf("プロンプトビルダーの作成に失敗しました: %w", err)
@@ -47,7 +40,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 
 	return runner.NewGenerateRunner(
 		appCtx.Config,
-		contextReader,
+		appCtx.RemoteIO.Reader,
 		promptBuilder,
 		aiClient,
 	), nil

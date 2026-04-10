@@ -18,7 +18,7 @@
 * **✍️ AI-Driven Scripting**:
     * AIが技術ドキュメントを解析し、最適な話者スタイルを指定したナレーションスクリプトを自動生成。
 * **🔗 Cloud Native Input**:
-    * Web URL、ローカルファイル、GCS (`gs://`) からの直接読み込みを標準サポート。
+    * Web URL、GCS (`gs://`) からの直接読み込みを標準サポート。
 * **⚡️ High-Speed Parallel Synthesis**:
     * Go言語の並列処理と堅牢なリトライロジックを融合。VOICEVOXエンジンへの高速接続により、長文の音声合成も高い安定性と成功率で完結。
 * **🧬 Unified Audio Pipeline**:
