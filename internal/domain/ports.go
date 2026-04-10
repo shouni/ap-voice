@@ -22,5 +22,5 @@ type PublishRunner interface {
 
 // PromptBuilder は、プロンプト文字列を生成する責務を定義します。
 type PromptBuilder interface {
-	Build(mode string, data any) (string, error)
+	Generate(mode, content string) (string, error)
 }

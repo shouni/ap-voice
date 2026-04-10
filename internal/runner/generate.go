@@ -52,22 +52,19 @@ func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
 	if gr.options.URL == "" {
 		return "", fmt.Errorf("入力ソース(--url)が指定されていません")
 	}
-	inputContent, err := gr.readContent(ctx, gr.options.URL)
+	content, err := gr.readContent(ctx, gr.options.URL)
 	if err != nil {
 		return "", err
 	}
-	slog.Info("処理開始", "mode", gr.options.Mode, "model", gr.options.AIModel, "input_size", len(inputContent))
+	slog.Info("処理開始", "mode", gr.options.Mode, "model", gr.options.AIModel, "input_size", len(content))
 	slog.Info("AIによるスクリプト生成を開始します...")
 
-	data := TemplateData{
-		InputText: inputContent,
-	}
-	promptContent, err := gr.promptBuilder.Build(gr.options.Mode, data)
+	prompt, err := gr.promptBuilder.Generate(gr.options.Mode, content)
 	if err != nil {
 		return "", err
 	}
 
-	generatedResponse, err := gr.aiClient.GenerateContent(ctx, gr.options.AIModel, promptContent)
+	generatedResponse, err := gr.aiClient.GenerateContent(ctx, gr.options.AIModel, prompt)
 	if err != nil {
 		return "", fmt.Errorf("スクリプト生成に失敗しました: %w", err)
 	}
