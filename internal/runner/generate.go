@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/shouni/go-gemini-client/gemini"
+
 	"ap-voice/internal/config"
 	"ap-voice/internal/domain"
-
-	"github.com/shouni/go-gemini-client/gemini"
 )
 
 // TemplateData はプロンプトテンプレートに渡すデータ構造です。
@@ -18,16 +18,10 @@ type TemplateData struct {
 	InputText string
 }
 
-// ContentReader は、指定されたURIからコンテンツを取得するためのインターフェースです。
-type ContentReader interface {
-	Open(ctx context.Context, uri string) (io.ReadCloser, error)
-	io.Closer
-}
-
 // GenerateRunner は generate コマンドの実行に必要な依存とオプションを保持します。
 type GenerateRunner struct {
 	options       *config.Config
-	reader        ContentReader
+	reader        domain.ContentReader
 	promptBuilder domain.PromptBuilder
 	aiClient      gemini.ContentGenerator
 }
@@ -35,7 +29,7 @@ type GenerateRunner struct {
 // NewGenerateRunner は、依存関係を注入して GenerateRunner の新しいインスタンスを生成します。
 func NewGenerateRunner(
 	options *config.Config,
-	reader ContentReader,
+	reader domain.ContentReader,
 	promptBuilder domain.PromptBuilder,
 	aiClient gemini.ContentGenerator,
 ) *GenerateRunner {
