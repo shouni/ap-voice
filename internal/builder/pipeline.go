@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-web-reader/pkg/reader"
 
 	"ap-voice/internal/adapters"
@@ -30,10 +31,20 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildGenerateRunner は、GenerateRunner のインスタンスを返します。
 func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.GenerateRunner, error) {
-	contextReader, err := reader.New()
+	contextReader, err := reader.New(
+		reader.WithGCSFactory(func(ctx context.Context) (remoteio.ReadWriteFactory, error) {
+			return appCtx.RemoteIO.Factory, nil
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("コンテントリーダーの初期化に失敗しました: %w", err)
 	}
+
+	defer func() {
+		if err != nil {
+			_ = contextReader.Close()
+		}
+	}()
 
 	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
