@@ -3,11 +3,15 @@ package builder
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"ap-voice/internal/adapters"
 	"ap-voice/internal/app"
 	"ap-voice/internal/pipeline"
 	"ap-voice/internal/runner"
+
+	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-web-reader/pkg/reader"
 )
 
 // buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。
@@ -38,9 +42,21 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 		return nil, err
 	}
 
+	contentReader, err := reader.New(
+		reader.WithGCSFactory(func(ctx context.Context) (remoteio.ReadWriteFactory, error) {
+			return appCtx.RemoteIO.Factory, nil
+		}),
+	)
+	if err != nil {
+		if closeErr := appCtx.RemoteIO.Factory.Close(); closeErr != nil {
+			slog.Warn("failed to close GCS factory during cleanup", "error", closeErr)
+		}
+		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
+	}
+
 	return runner.NewGenerateRunner(
 		appCtx.Config,
-		appCtx.RemoteIO.Reader,
+		contentReader,
 		promptBuilder,
 		aiClient,
 	), nil

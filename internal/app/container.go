@@ -24,7 +24,6 @@ type Container struct {
 // RemoteIO は外部ストレージ操作に関するコンポーネントをまとめます。
 type RemoteIO struct {
 	Factory remoteio.ReadWriteFactory
-	Reader  domain.ContentReader
 	Writer  remoteio.Writer
 }
 
