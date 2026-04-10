@@ -13,7 +13,7 @@ type templateData struct {
 	InputText string
 }
 
-// promptBuilder は、フォーマット済みのプロンプトを作成するためのインターフェース
+// promptBuilder は、フォーマット済みのプロンプトを作成するためのインターフェースです。
 type promptBuilder interface {
 	Build(mode string, data any) (string, error)
 }

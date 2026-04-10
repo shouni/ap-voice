@@ -33,7 +33,7 @@ func buildRemoteIO(ctx context.Context) (*app.RemoteIO, error) {
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("コンテントリーダーの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
 	}
 
 	w, err := factory.Writer()
