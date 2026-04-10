@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/shouni/go-remote-io/remoteio"
-	"github.com/shouni/go-remote-io/remoteio/gcs"
-	"github.com/shouni/go-web-reader/pkg/reader"
-
 	"ap-voice/internal/app"
+
+	"github.com/shouni/go-remote-io/remoteio/gcs"
 )
 
 // buildRemoteIO は、GCS ベースの I/O コンポーネントを初期化します。
@@ -27,23 +25,13 @@ func buildRemoteIO(ctx context.Context) (*app.RemoteIO, error) {
 		}
 	}()
 
-	r, err := reader.New(
-		reader.WithGCSFactory(func(ctx context.Context) (remoteio.ReadWriteFactory, error) {
-			return factory, nil
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
-	}
-
 	w, err := factory.Writer()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create output writer: %w", err)
+		return nil, fmt.Errorf("failed to create writer: %w", err)
 	}
 
 	return &app.RemoteIO{
 		Factory: factory,
-		Reader:  r,
 		Writer:  w,
 	}, nil
 }
