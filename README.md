@@ -43,10 +43,7 @@
 
 ### 1. 透過的な I/O 管理 (Unified I/O)
 
-本ツールは `shouni/go-remote-io` をベースとした `UniversalInputReader` を採用しています。
-
-* **Webコンテンツ抽出**: `--script-url (-u)` を指定すると、Webサイトを解析し、タイトルと本文のみをクリーンに取得します。
-* **GCS・ローカル入力**: `--script-file (-f)` では、パスの接頭辞 (**`gs://`**) を自動判別し、クラウド上のドキュメントを直接ストリームとして読み込みます。
+* **Webコンテンツ抽出**: `--url (-u)` を指定すると、Webサイトを解析し、タイトルと本文のみをクリーンに取得します。(**`gs://`**) を自動判別し、クラウド上のドキュメントを直接ストリームとして読み込みます。 。
 * **一貫した出力**: 音声ファイル（WAV）の出力先も同様に、ローカルおよび **GCS (`gs://`)** をシームレスに切り替えます。
 
 ### 2. 超高速な並列処理 (High-Speed Parallel Processing)
@@ -90,9 +87,8 @@ paidgo generate [flags]
 
 | フラグ | 短縮形 | 説明 |
 | --- | --- | --- |
-| `--script-url` | `-u` | **入力ソースURL**。Webから記事本文を抽出してAIに渡します。 |
-| `--script-file` | `-f` | **入力ソースパス**。ローカル、**`gs://`** (GCS)、または `'-'` (stdin)。 |
-| `--output-file` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
+| `--url` | `-u` | **入力ソースURL**。Webから記事本文を抽出してAIに渡します。 |
+| `--output` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
 | `--voicevox` | `-v` | 音声WAVの保存先。ローカルパスまたは **`gs://`** (GCS)。 |
 | `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
@@ -106,7 +102,7 @@ paidgo generate [flags]
 ```bash
 # Webから入力し、生成された音声をGCSへ直接アップロード
 ./bin/paidgo generate \
-    --script-url "https://example.com/tech-news" \
+    --url "https://example.com/tech-news" \
     --mode dialogue \
     --voicevox "gs://my-audio-bucket/output/news.wav"
 
@@ -116,7 +112,7 @@ paidgo generate [flags]
 
 ```bash
 ./bin/paidgo generate \
-    --script-file "gs://my-source-bucket/docs/article.md" \
+    --url "gs://my-source-bucket/docs/article.md" \
     --mode solo \
     --voicevox "article.wav"
 

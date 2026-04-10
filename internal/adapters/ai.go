@@ -7,7 +7,7 @@ import (
 
 	"github.com/shouni/go-gemini-client/gemini"
 
-	"prototypus-ai-doc-go/internal/config"
+	"ap-voice/internal/config"
 )
 
 const (

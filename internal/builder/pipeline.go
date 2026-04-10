@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shouni/go-web-exact/v2/extract"
+	"github.com/shouni/go-web-reader/pkg/reader"
 
-	"prototypus-ai-doc-go/internal/adapters"
-	"prototypus-ai-doc-go/internal/app"
-	"prototypus-ai-doc-go/internal/pipeline"
-	"prototypus-ai-doc-go/internal/runner"
+	"ap-voice/internal/adapters"
+	"ap-voice/internal/app"
+	"ap-voice/internal/pipeline"
+	"ap-voice/internal/runner"
 )
 
 // buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。
@@ -30,10 +30,13 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildGenerateRunner は、GenerateRunner のインスタンスを返します。
 func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.GenerateRunner, error) {
-	extractor, err := extract.NewExtractor(appCtx.HTTPClient)
+	contextReader, err := reader.New()
 	if err != nil {
-		return nil, fmt.Errorf("エクストラクタの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("コンテントリーダーの初期化に失敗しました: %w", err)
 	}
+	defer func() {
+		_ = contextReader.Close()
+	}()
 
 	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
@@ -47,16 +50,15 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 
 	return runner.NewGenerateRunner(
 		appCtx.Config,
-		extractor,
+		contextReader,
 		promptBuilder,
 		aiClient,
-		appCtx.RemoteIO.Reader,
 	), nil
 }
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
 func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.PublishRunner, error) {
-	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer, appCtx.Config.VoicevoxOutput)
+	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer, appCtx.Config.Output)
 	if err != nil {
 		return nil, err
 	}

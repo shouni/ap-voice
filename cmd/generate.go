@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"prototypus-ai-doc-go/internal/builder"
+	"ap-voice/internal/builder"
 )
 
 // generateCmd はナレーションスクリプト生成のメインコマンドです。
@@ -14,18 +14,13 @@ var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "AIにナレーションスクリプトを生成させます。",
 	Long: `AIに渡す元となる文章を指定し、ナレーションスクリプトを生成します。
-Webページやファイル、標準入力から文章を読み込むことができます。`,
+Webページから文章を読み込むことができます。`,
 	RunE: generateCommand,
 }
 
 // generateCommand は、AIによるナレーションスクリプトを生成し、指定されたURIのクラウドストレージにWAVをアップロード
 func generateCommand(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-
-	// 制約チェック
-	if cmd.Flags().Changed("voicevox") && cmd.Flags().Changed("output-file") {
-		return fmt.Errorf("--voicevoxオプションと--output-fileオプションは同時に指定できません")
-	}
 
 	appCtx, err := builder.BuildContainer(ctx, &opts)
 	if err != nil {

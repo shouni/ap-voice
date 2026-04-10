@@ -1,8 +1,7 @@
 package main
 
-import "prototypus-ai-doc-go/cmd"
+import "ap-voice/cmd"
 
 func main() {
-	// cmd/root.go で定義されたルートコマンドを実行します
 	cmd.Execute()
 }

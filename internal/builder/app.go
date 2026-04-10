@@ -8,8 +8,8 @@ import (
 
 	"github.com/shouni/go-http-kit/httpkit"
 
-	"prototypus-ai-doc-go/internal/app"
-	"prototypus-ai-doc-go/internal/config"
+	"ap-voice/internal/app"
+	"ap-voice/internal/config"
 )
 
 // BuildContainer は外部サービスとの接続を確立し、依存関係を組み立てた app.Container を返します。

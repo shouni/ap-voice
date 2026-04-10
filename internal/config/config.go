@@ -9,23 +9,18 @@ import (
 
 // DefaultHTTPTimeout はHTTPリクエストのデフォルトタイムアウトを定義します。
 // DefaultModel はデフォルトの Google Gemini モデル名（例: "gemini-2.5-flash"）を指定します。
-// MinInputContentLength は入力されたコンテンツの最小バイト。
 const (
-	DefaultHTTPTimeout    = 60 * time.Second
-	DefaultModel          = "gemini-2.5-flash"
-	MinInputContentLength = 10
+	DefaultHTTPTimeout = 60 * time.Second
+	DefaultModel       = "gemini-2.5-flash"
 )
 
 // Config はコマンドラインフラグを保持する構造体です。
 type Config struct {
-	OutputFile     string
-	Mode           string
-	VoicevoxOutput string
-	ScriptURL      string
-	ScriptFile     string
-	AIModel        string
-	HTTPTimeout    time.Duration
-
+	URL          string
+	Output       string
+	Mode         string
+	AIModel      string
+	HTTPTimeout  time.Duration
 	ProjectID    string
 	GeminiAPIKey string
 }
@@ -35,10 +30,8 @@ func (c *Config) Normalize() {
 	if c == nil {
 		return
 	}
-	c.OutputFile = strings.TrimSpace(c.OutputFile)
-	c.VoicevoxOutput = strings.TrimSpace(c.VoicevoxOutput)
-	c.ScriptURL = strings.TrimSpace(c.ScriptURL)
-	c.ScriptFile = strings.TrimSpace(c.ScriptFile)
+	c.URL = strings.TrimSpace(c.URL)
+	c.Output = strings.TrimSpace(c.Output)
 	c.AIModel = strings.TrimSpace(c.AIModel)
 }
 
