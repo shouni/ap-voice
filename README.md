@@ -1,8 +1,8 @@
 # ✍️ AP Voice
 
 [![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/prototypus-ai-doc-go)](https://golang.org/)
-[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/prototypus-ai-doc-go)](https://github.com/shouni/prototypus-ai-doc-go/tags)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/ap-voice)](https://golang.org/)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/ap-voice)](https://github.com/shouni/ap-voice/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 💡 概要 (About)— **堅牢なGo並列処理とAIを統合した次世代ドキュメント音声化パイプライン**
