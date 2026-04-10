@@ -10,8 +10,9 @@ import (
 // DefaultHTTPTimeout はHTTPリクエストのデフォルトタイムアウトを定義します。
 // DefaultModel はデフォルトの Google Gemini モデル名（例: "gemini-2.5-flash"）を指定します。
 const (
-	DefaultHTTPTimeout = 60 * time.Second
-	DefaultModel       = "gemini-2.5-flash"
+	DefaultHTTPTimeout    = 60 * time.Second
+	DefaultModel          = "gemini-2.5-flash"
+	MinInputContentLength = 10
 )
 
 // Config はコマンドラインフラグを保持する構造体です。

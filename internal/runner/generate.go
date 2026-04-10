@@ -82,7 +82,9 @@ func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (st
 		return "", fmt.Errorf("failed to read source: %w", err)
 	}
 	defer func() {
-		_ = stream.Close()
+		if closeErr := stream.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "ストリームのクローズに失敗しました", "error", closeErr)
+		}
 	}()
 
 	body, err := io.ReadAll(stream)
@@ -90,5 +92,9 @@ func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (st
 		return "", fmt.Errorf("failed to consume source: %w", err)
 	}
 
-	return strings.TrimSpace(string(body)), nil
+	trimmedContent := strings.TrimSpace(string(body))
+	if len(trimmedContent) < config.MinInputContentLength {
+		return "", fmt.Errorf("入力されたコンテンツが短すぎます")
+	}
+	return trimmedContent, nil
 }

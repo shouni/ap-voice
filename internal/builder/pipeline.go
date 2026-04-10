@@ -34,9 +34,6 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 	if err != nil {
 		return nil, fmt.Errorf("コンテントリーダーの初期化に失敗しました: %w", err)
 	}
-	defer func() {
-		_ = contextReader.Close()
-	}()
 
 	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
