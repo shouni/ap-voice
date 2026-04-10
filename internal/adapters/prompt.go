@@ -23,7 +23,7 @@ type PromptAdapter struct {
 	scriptBuilder promptBuilder
 }
 
-// NewPromptAdapter は動的に読み込んだテンプレートを使用して Builder を構築します。
+// NewPromptAdapter は動的に読み込んだテンプレートを使用して PromptAdapter を構築します。
 func NewPromptAdapter() (*PromptAdapter, error) {
 	templates, err := assets.LoadPrompts()
 	if err != nil {
