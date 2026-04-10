@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"io"
 )
 
 // Pipeline は、処理を行うインターフェースです。
@@ -23,4 +24,10 @@ type PublishRunner interface {
 // PromptBuilder は、プロンプト文字列を生成する責務を定義します。
 type PromptBuilder interface {
 	Generate(mode, content string) (string, error)
+}
+
+// ContentReader は、指定されたURIからコンテンツを取得するためのインターフェースです。
+type ContentReader interface {
+	Open(ctx context.Context, uri string) (io.ReadCloser, error)
+	io.Closer
 }

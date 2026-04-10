@@ -3,11 +3,11 @@ package app
 import (
 	"errors"
 
-	"github.com/shouni/go-http-kit/httpkit"
-	"github.com/shouni/go-remote-io/remoteio"
-
 	"ap-voice/internal/config"
 	"ap-voice/internal/domain"
+
+	"github.com/shouni/go-http-kit/httpkit"
+	"github.com/shouni/go-remote-io/remoteio"
 )
 
 // Container はアプリケーションの依存関係（DIコンテナ）を保持します。
@@ -24,7 +24,7 @@ type Container struct {
 // RemoteIO は外部ストレージ操作に関するコンポーネントをまとめます。
 type RemoteIO struct {
 	Factory remoteio.ReadWriteFactory
-	Reader  remoteio.Reader
+	Reader  domain.ContentReader
 	Writer  remoteio.Writer
 }
 
