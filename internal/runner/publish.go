@@ -31,7 +31,7 @@ func NewPublishRunner(options *config.Config, voicevoxExecutor voicevox.EngineEx
 
 // Run は公開処理のパイプライン全体を実行します。
 func (pr *PublishRunner) Run(ctx context.Context, scriptContent string) error {
-	if pr.options.Output == "" {
+	if pr.options.OutputFile == "" {
 		return fmt.Errorf("出力先パス(--output)が指定されていません")
 	}
 	return pr.publishAudioAndScript(ctx, scriptContent)
@@ -39,15 +39,15 @@ func (pr *PublishRunner) Run(ctx context.Context, scriptContent string) error {
 
 // publishAudioAndScript は音声合成とスクリプトのアップロードを実行します。
 func (pr *PublishRunner) publishAudioAndScript(ctx context.Context, scriptContent string) error {
-	slog.InfoContext(ctx, "VOICEVOXによる音声合成を開始します。", "output_path", pr.options.Output)
-	if err := pr.voicevoxExecutor.Execute(ctx, scriptContent, pr.options.Output); err != nil {
-		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", pr.options.Output, err)
+	slog.InfoContext(ctx, "VOICEVOXによる音声合成を開始します。", "output_path", pr.options.OutputFile)
+	if err := pr.voicevoxExecutor.Execute(ctx, scriptContent, pr.options.OutputFile); err != nil {
+		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", pr.options.OutputFile, err)
 	}
-	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", pr.options.Output)
+	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", pr.options.OutputFile)
 
 	// スクリプトのアップロード
-	ext := filepath.Ext(pr.options.Output)
-	txtPath := strings.TrimSuffix(pr.options.Output, ext) + ".txt"
+	ext := filepath.Ext(pr.options.OutputFile)
+	txtPath := strings.TrimSuffix(pr.options.OutputFile, ext) + ".txt"
 	contentReader := strings.NewReader(scriptContent)
 
 	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。", "upload_path", txtPath)

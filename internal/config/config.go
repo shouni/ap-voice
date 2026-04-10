@@ -17,8 +17,9 @@ const (
 
 // Config はコマンドラインフラグを保持する構造体です。
 type Config struct {
-	URL          string
-	Output       string
+	InputFile  string
+	OutputFile string
+
 	Mode         string
 	AIModel      string
 	HTTPTimeout  time.Duration
@@ -31,8 +32,8 @@ func (c *Config) Normalize() {
 	if c == nil {
 		return
 	}
-	c.URL = strings.TrimSpace(c.URL)
-	c.Output = strings.TrimSpace(c.Output)
+	c.InputFile = strings.TrimSpace(c.InputFile)
+	c.OutputFile = strings.TrimSpace(c.OutputFile)
 	c.AIModel = strings.TrimSpace(c.AIModel)
 }
 
