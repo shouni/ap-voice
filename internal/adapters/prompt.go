@@ -39,14 +39,14 @@ func NewPromptAdapter() (*PromptAdapter, error) {
 	}, nil
 }
 
-// Generate はコードレビューのMarkdownを生成します。
+// Generate は指定されたモードとコンテンツに基づいてプロンプト文字列を生成します。
 func (pa *PromptAdapter) Generate(mode, content string) (string, error) {
 	data := templateData{
 		InputText: content,
 	}
 	prompt, err := pa.scriptBuilder.Build(mode, data)
 	if err != nil {
-		return "", fmt.Errorf("レビューテンプレートの実行に失敗: %w", err)
+		return "", fmt.Errorf("プロンプトテンプレートの実行に失敗: %w", err)
 	}
 	return prompt, nil
 }
