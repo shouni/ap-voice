@@ -13,11 +13,6 @@ import (
 	"ap-voice/internal/domain"
 )
 
-// TemplateData はプロンプトテンプレートに渡すデータ構造です。
-type TemplateData struct {
-	InputText string
-}
-
 // GenerateRunner は generate コマンドの実行に必要な依存とオプションを保持します。
 type GenerateRunner struct {
 	options       *config.Config

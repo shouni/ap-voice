@@ -8,8 +8,8 @@ import (
 	"ap-voice/assets"
 )
 
-// templateData はプロンプトのテンプレートに渡すデータ構造です。
-type templateData struct {
+// TemplateData はプロンプトのテンプレートに渡すデータ構造です。
+type TemplateData struct {
 	InputText string
 }
 
@@ -41,7 +41,7 @@ func NewPromptAdapter() (*PromptAdapter, error) {
 
 // Generate は指定されたモードとコンテンツに基づいてプロンプト文字列を生成します。
 func (pa *PromptAdapter) Generate(mode, content string) (string, error) {
-	data := templateData{
+	data := TemplateData{
 		InputText: content,
 	}
 	prompt, err := pa.scriptBuilder.Build(mode, data)
