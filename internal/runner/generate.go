@@ -39,7 +39,7 @@ func NewGenerateRunner(
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用してナレーションスクリプトを生成する一連の処理を実行します。
 func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
 	if gr.options.InputFile == "" {
-		return "", fmt.Errorf("入力ソース(--url)が指定されていません")
+		return "", fmt.Errorf("入力ソース(--input)が指定されていません")
 	}
 	content, err := gr.readContent(ctx, gr.options.InputFile)
 	if err != nil {
