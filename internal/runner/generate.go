@@ -76,6 +76,7 @@ func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
 	return generatedResponse.Text, nil
 }
 
+// readContent は、指定されたソースURLからコンテンツを取得します。
 func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (string, error) {
 	stream, err := gr.reader.Open(ctx, sourceURL)
 	if err != nil {
@@ -89,7 +90,7 @@ func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (st
 
 	body, err := io.ReadAll(stream)
 	if err != nil {
-		return "", fmt.Errorf("failed to consume source: %w", err)
+		return "", fmt.Errorf("コンテンツの読み込みに失敗しました: %w", err)
 	}
 
 	trimmedContent := strings.TrimSpace(string(body))

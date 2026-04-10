@@ -87,7 +87,7 @@ paidgo generate [flags]
 
 | フラグ | 短縮形 | 説明 |
 | --- | --- | --- |
-| `--url` | `-u` | **入力ソースURL**。Webから記事本文を抽出してAIに渡します。 |
+| `--url` | `-u` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
 | `--output` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
 | `--voicevox` | `-v` | 音声WAVの保存先。ローカルパスまたは **`gs://`** (GCS)。 |
