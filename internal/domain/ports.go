@@ -29,5 +29,4 @@ type PromptBuilder interface {
 // ContentReader は、指定されたURIからコンテンツを取得するためのインターフェースです。
 type ContentReader interface {
 	Open(ctx context.Context, uri string) (io.ReadCloser, error)
-	io.Closer
 }
