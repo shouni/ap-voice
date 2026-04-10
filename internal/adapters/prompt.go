@@ -3,7 +3,7 @@ package adapters
 import (
 	"github.com/shouni/go-prompt-kit/prompts"
 
-	"prototypus-ai-doc-go/assets"
+	"ap-voice/assets"
 )
 
 // NewPromptAdapter は動的に読み込んだテンプレートを使用して Builder を構築します。

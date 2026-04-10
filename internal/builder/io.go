@@ -7,7 +7,7 @@ import (
 
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 
-	"prototypus-ai-doc-go/internal/app"
+	"ap-voice/internal/app"
 )
 
 // buildRemoteIO は、GCS ベースの I/O コンポーネントを初期化します。

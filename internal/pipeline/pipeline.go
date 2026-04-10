@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"prototypus-ai-doc-go/internal/domain"
+	"ap-voice/internal/domain"
 )
 
 // Pipeline はパイプラインの実行に必要な外部依存関係を保持するサービス構造体です。
