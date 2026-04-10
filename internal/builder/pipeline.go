@@ -1,14 +1,12 @@
 package builder
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-
 	"ap-voice/internal/adapters"
 	"ap-voice/internal/app"
 	"ap-voice/internal/pipeline"
 	"ap-voice/internal/runner"
+	"context"
+	"fmt"
 
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-web-reader/pkg/reader"
@@ -48,9 +46,6 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 		}),
 	)
 	if err != nil {
-		if closeErr := appCtx.RemoteIO.Factory.Close(); closeErr != nil {
-			slog.Warn("failed to close GCS factory during cleanup", "error", closeErr)
-		}
 		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
 	}
 
