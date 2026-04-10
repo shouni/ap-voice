@@ -102,9 +102,9 @@ ap-voice generate \
 
 * **[Go Gemini Client](https://github.com/shouni/go-gemini-client)**: Gemini API 通信の抽象化と生成ロジックの最適化
 * **[Go Voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンとの通信および音声合成の制御
-* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出。
-* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化。
-* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出。
+* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出
+* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化
+* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出
 
 
 ---
