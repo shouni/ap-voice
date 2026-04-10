@@ -26,16 +26,20 @@
 
 ---
 
-## ✨ 技術スタック (Technology Stack)
+## ✨ 技術スタック
 
 | 要素 | 技術 / ライブラリ | 役割 |
-| --- | --- | --- |
-| **言語** | **Go (Golang)** | クロスプラットフォームでの高速な実行を実現。 |
-| **並行処理** | **Goroutines (`sync` パッケージ)** | 複数の音声リクエストを**並列**で実行し、処理時間を大幅に短縮。 |
-| **AI モデル** | **Google Gemini API** | 独自のクライアントを通じ、入力文章を高度に分析・スクリプト化。 |
-| **リモート I/O** | **`shouni/go-remote-io`** | **GCS, ローカル**への透過的な読み書き（Input/Output）を管理。 |
-| **コンテンツ抽出** | **`shouni/go-web-exact`** | URLから不要な広告要素を排除し、本文のみを特定して抽出。 |
-| **ネットワーク** | **`shouni/go-http-kit`** | 通信におけるリトライとタイムアウトを堅牢に制御。 |
+| :--- | :--- | :--- |
+| **言語** | **Go (Golang)** | ツールの開発言語。並列処理と堅牢な実行環境を提供します。 |
+| **CLI** | **Cobra** | コマンドライン引数とオプションの解析に使用します。 |
+
+
+## 🧱 基盤ライブラリ (Core Components)
+
+AP Chain は以下の自作ライブラリ群を統合して構築されています：
+* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出。
+* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化。
+* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出。
 
 ---
 
