@@ -62,7 +62,7 @@
 ### 2. スクリプト生成コマンド
 
 ```bash
-paidgo generate [flags]
+ap-voice generate [flags]
 
 ```
 
@@ -70,7 +70,7 @@ paidgo generate [flags]
 
 | フラグ | 短縮形 | 説明 |
 | --- | --- | --- |
-| `--url` | `-u` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
+| `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
 | `--output` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
 | `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
@@ -83,20 +83,20 @@ paidgo generate [flags]
 
 ```bash
 # Webから入力し、生成された音声をGCSへ直接アップロード
-./bin/paidgo generate \
-    --url "https://example.com/tech-news" \
-    --mode dialogue \
-    --voicevox "gs://my-audio-bucket/output/news.wav"
+ap-voice generate \
+    --input "https://example.com/tech-news" \
+    --output "gs://my-bucket/audio/tech-news.wav" \
+    --mode dialogue
 
 ```
 
 ### 例 2: GCS上の文書を読み込み、モノローグ化してローカルに保存
 
 ```bash
-./bin/paidgo generate \
-    --url "gs://my-source-bucket/docs/article.md" \
-    --mode solo \
-    --voicevox "article.wav"
+ap-voice generate \
+    --input "gs://my-source-bucket/docs/article.md" \
+    --output "article.wav" \
+    --mode solo
 
 ```
 
