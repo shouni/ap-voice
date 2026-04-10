@@ -31,6 +31,9 @@ func NewPublishRunner(options *config.Config, voicevoxExecutor voicevox.EngineEx
 
 // Run は公開処理のパイプライン全体を実行します。
 func (pr *PublishRunner) Run(ctx context.Context, scriptContent string) error {
+	if pr.options.Output == "" {
+		return fmt.Errorf("出力先パス(--output)が指定されていません")
+	}
 	return pr.publishAudioAndScript(ctx, scriptContent)
 }
 

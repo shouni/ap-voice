@@ -49,7 +49,10 @@ func NewGenerateRunner(
 
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用してナレーションスクリプトを生成する一連の処理を実行します。
 func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
-	inputContent, err := gr.readFromURL(ctx, gr.options.URL)
+	if gr.options.URL == "" {
+		return "", fmt.Errorf("入力ソース(--url)が指定されていません")
+	}
+	inputContent, err := gr.readContent(ctx, gr.options.URL)
 	if err != nil {
 		return "", err
 	}
@@ -73,11 +76,7 @@ func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
 	return generatedResponse.Text, nil
 }
 
-// --------------------------------------------------------------------------------
-// ヘルパー関数 (入力処理)
-// --------------------------------------------------------------------------------
-
-func (gr *GenerateRunner) readFromURL(ctx context.Context, sourceURL string) (string, error) {
+func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (string, error) {
 	stream, err := gr.reader.Open(ctx, sourceURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to read source: %w", err)
