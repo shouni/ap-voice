@@ -33,14 +33,6 @@
 | **言語** | **Go (Golang)** | ツールの開発言語。並列処理と堅牢な実行環境を提供します。 |
 | **CLI** | **Cobra** | コマンドライン引数とオプションの解析に使用します。 |
 
-
-## 🧱 基盤ライブラリ (Core Components)
-
-AP Chain は以下の自作ライブラリ群を統合して構築されています：
-* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出。
-* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化。
-* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出。
-
 ---
 
 ## ✨ 主な機能
@@ -108,9 +100,12 @@ ap-voice generate \
 
 ## 🤝 依存関係 (Dependencies)
 
-* [shouni/go-gemini-client](https://github.com/shouni/go-gemini-client) - Gemini API 通信の抽象化と生成ロジックの最適化
-* [shouni/go-voicevox](https://github.com/shouni/go-voicevox) - VOICEVOX エンジンとの通信および音声合成の制御
-* [shouni/go-remote-io](https://github.com/shouni/go-remote-io) - ストレージを透過的に扱うマルチストレージ I/O
+* **[Go Gemini Client](https://github.com/shouni/go-gemini-client)**: Gemini API 通信の抽象化と生成ロジックの最適化
+* **[Go Voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンとの通信および音声合成の制御
+* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出
+* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化
+* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出
+
 
 ---
 
