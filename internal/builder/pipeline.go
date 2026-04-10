@@ -59,7 +59,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
 func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.PublishRunner, error) {
-	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer, appCtx.Config.Output)
+	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer, appCtx.Config.OutputFile)
 	if err != nil {
 		return nil, err
 	}

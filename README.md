@@ -26,16 +26,20 @@
 
 ---
 
-## ✨ 技術スタック (Technology Stack)
+## ✨ 技術スタック
 
 | 要素 | 技術 / ライブラリ | 役割 |
-| --- | --- | --- |
-| **言語** | **Go (Golang)** | クロスプラットフォームでの高速な実行を実現。 |
-| **並行処理** | **Goroutines (`sync` パッケージ)** | 複数の音声リクエストを**並列**で実行し、処理時間を大幅に短縮。 |
-| **AI モデル** | **Google Gemini API** | 独自のクライアントを通じ、入力文章を高度に分析・スクリプト化。 |
-| **リモート I/O** | **`shouni/go-remote-io`** | **GCS, ローカル**への透過的な読み書き（Input/Output）を管理。 |
-| **コンテンツ抽出** | **`shouni/go-web-exact`** | URLから不要な広告要素を排除し、本文のみを特定して抽出。 |
-| **ネットワーク** | **`shouni/go-http-kit`** | 通信におけるリトライとタイムアウトを堅牢に制御。 |
+| :--- | :--- | :--- |
+| **言語** | **Go (Golang)** | ツールの開発言語。並列処理と堅牢な実行環境を提供します。 |
+| **CLI** | **Cobra** | コマンドライン引数とオプションの解析に使用します。 |
+
+
+## 🧱 基盤ライブラリ (Core Components)
+
+AP Chain は以下の自作ライブラリ群を統合して構築されています：
+* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出。
+* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化。
+* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出。
 
 ---
 
@@ -62,7 +66,7 @@
 ### 2. スクリプト生成コマンド
 
 ```bash
-paidgo generate [flags]
+ap-voice generate [flags]
 
 ```
 
@@ -70,7 +74,7 @@ paidgo generate [flags]
 
 | フラグ | 短縮形 | 説明 |
 | --- | --- | --- |
-| `--url` | `-u` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
+| `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
 | `--output` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
 | `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
@@ -83,20 +87,20 @@ paidgo generate [flags]
 
 ```bash
 # Webから入力し、生成された音声をGCSへ直接アップロード
-./bin/paidgo generate \
-    --url "https://example.com/tech-news" \
-    --mode dialogue \
-    --voicevox "gs://my-audio-bucket/output/news.wav"
+ap-voice generate \
+    --input "https://example.com/tech-news" \
+    --output "gs://my-bucket/audio/tech-news.wav" \
+    --mode dialogue
 
 ```
 
 ### 例 2: GCS上の文書を読み込み、モノローグ化してローカルに保存
 
 ```bash
-./bin/paidgo generate \
-    --url "gs://my-source-bucket/docs/article.md" \
-    --mode solo \
-    --voicevox "article.wav"
+ap-voice generate \
+    --input "gs://my-source-bucket/docs/article.md" \
+    --output "article.wav" \
+    --mode solo
 
 ```
 
