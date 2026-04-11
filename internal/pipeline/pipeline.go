@@ -10,12 +10,12 @@ import (
 
 // Pipeline はパイプラインの実行に必要な外部依存関係を保持するサービス構造体です。
 type Pipeline struct {
-	generator domain.GenerateRunner
-	publisher domain.PublishRunner
+	generator GenerateRunner
+	publisher PublishRunner
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator domain.GenerateRunner, publisher domain.PublishRunner) *Pipeline {
+func NewPipeline(generator GenerateRunner, publisher PublishRunner) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
@@ -23,46 +23,16 @@ func NewPipeline(generator domain.GenerateRunner, publisher domain.PublishRunner
 }
 
 // Execute は、すべての依存関係を構築し実行します。
-func (p *Pipeline) Execute(
-	ctx context.Context,
-) error {
-	generatedScript, err := p.generate(ctx)
+func (p *Pipeline) Execute(ctx context.Context, req domain.Request) error {
+	content, err := p.generator.Run(ctx, req)
 	if err != nil {
-		return err
+		return fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
 	}
-	if strings.TrimSpace(generatedScript) == "" {
+	if strings.TrimSpace(content) == "" {
 		return fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
 	}
-	err = p.publish(ctx, generatedScript)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// generate は、スクリプトテキスト作成を実行します。
-// 実行結果の文字列とエラーを返します。
-func (p *Pipeline) generate(
-	ctx context.Context,
-) (string, error) {
-	generatedScript, err := p.generator.Run(ctx)
-	if err != nil {
-		return "", fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
-	}
-
-	return generatedScript, nil
-}
-
-// publish は、パブリッシュを実行します。
-func (p *Pipeline) publish(
-	ctx context.Context,
-	scriptContent string,
-) error {
-	err := p.publisher.Run(ctx, scriptContent)
-	if err != nil {
+	if err = p.publisher.Run(ctx, req.OutputURI, content); err != nil {
 		return fmt.Errorf("公開処理の実行に失敗しました: %w", err)
 	}
-
 	return nil
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"ap-voice/internal/domain"
 	"fmt"
 	"log/slog"
 
@@ -21,7 +22,6 @@ Webページから文章を読み込むことができます。`,
 // generateCommand は、AIによるナレーションスクリプトを生成し、指定されたURIのクラウドストレージにWAVをアップロード
 func generateCommand(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-
 	appCtx, err := builder.BuildContainer(ctx, &opts)
 	if err != nil {
 		// コンテナの構築エラーをラップして返す
@@ -33,7 +33,13 @@ func generateCommand(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	err = appCtx.Pipeline.Execute(ctx)
+	req := domain.Request{
+		InputURI:  opts.InputFile,
+		OutputURI: opts.OutputFile,
+		Mode:      opts.Mode,
+		AIModel:   opts.AIModel,
+	}
+	err = appCtx.Pipeline.Execute(ctx, req)
 	if err != nil {
 		return err
 	}

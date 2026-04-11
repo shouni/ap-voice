@@ -1,15 +1,16 @@
 package builder
 
 import (
-	"ap-voice/internal/adapters"
-	"ap-voice/internal/app"
-	"ap-voice/internal/pipeline"
-	"ap-voice/internal/runner"
 	"context"
 	"fmt"
 
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-web-reader/pkg/reader"
+
+	"ap-voice/internal/adapters"
+	"ap-voice/internal/app"
+	"ap-voice/internal/pipeline"
+	"ap-voice/internal/runner"
 )
 
 // buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。
@@ -50,7 +51,6 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 	}
 
 	return runner.NewGenerateRunner(
-		appCtx.Config,
 		contentReader,
 		promptBuilder,
 		aiClient,
@@ -59,13 +59,12 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
 func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.PublishRunner, error) {
-	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer, appCtx.Config.OutputFile)
+	voicevoxExecutor, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.RemoteIO.Writer)
 	if err != nil {
 		return nil, err
 	}
 
 	return runner.NewPublishRunner(
-		appCtx.Config,
 		voicevoxExecutor,
 		appCtx.RemoteIO.Writer,
 	), nil
