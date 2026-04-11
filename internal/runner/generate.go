@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -46,7 +47,7 @@ func NewGenerateRunner(
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用してナレーションスクリプトを生成する一連の処理を実行します。
 func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) (string, error) {
 	if req.InputURI == "" {
-		return "", fmt.Errorf("入力ソース(--input)が指定されていません")
+		return "", errors.New("入力ソース(InputURI)が指定されていません")
 	}
 	content, err := gr.readContent(ctx, req.InputURI)
 	if err != nil {

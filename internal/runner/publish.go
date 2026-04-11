@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -28,7 +29,7 @@ func NewPublishRunner(voicevoxExecutor voicevox.EngineExecutor, writer remoteio.
 // Run は公開処理のパイプライン全体を実行します。
 func (r *PublishRunner) Run(ctx context.Context, outputURI string, content string) error {
 	if outputURI == "" {
-		return fmt.Errorf("出力先パス(--output)が指定されていません")
+		return errors.New("出力先パス(outputURI)が指定されていません")
 	}
 	return r.publishAudioAndScript(ctx, outputURI, content)
 }

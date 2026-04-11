@@ -31,8 +31,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) error {
 	if strings.TrimSpace(content) == "" {
 		return fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
 	}
-	err = p.publisher.Run(ctx, req.OutputURI, content)
-	if err != nil {
+	if err = p.publisher.Run(ctx, req.OutputURI, content); err != nil {
 		return fmt.Errorf("公開処理の実行に失敗しました: %w", err)
 	}
 	return nil
