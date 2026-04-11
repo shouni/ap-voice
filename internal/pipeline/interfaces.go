@@ -13,6 +13,6 @@ type (
 	}
 	// PublishRunner は、生成されたスクリプトの公開処理を実行する責務を持つインターフェースです。
 	PublishRunner interface {
-		Run(ctx context.Context, req domain.Request) error
+		Run(ctx context.Context, outputURI string, content string) error
 	}
 )

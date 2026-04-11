@@ -6,5 +6,4 @@ type Request struct {
 	OutputURI string `json:"output_uri"`
 	Mode      string `json:"mode"`
 	AIModel   string `json:"ai_model"`
-	Context   string `json:"context"`
 }
