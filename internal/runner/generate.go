@@ -13,23 +13,30 @@ import (
 	"ap-voice/internal/domain"
 )
 
+// PromptBuilder は、プロンプト文字列を生成する責務を定義します。
+type PromptBuilder interface {
+	Generate(mode, content string) (string, error)
+}
+
+// ContentReader は、指定されたURIからコンテンツを取得するためのインターフェースです。
+type ContentReader interface {
+	Open(ctx context.Context, uri string) (io.ReadCloser, error)
+}
+
 // GenerateRunner は generate コマンドの実行に必要な依存とオプションを保持します。
 type GenerateRunner struct {
-	options       *config.Config
-	reader        domain.ContentReader
-	promptBuilder domain.PromptBuilder
+	reader        ContentReader
+	promptBuilder PromptBuilder
 	aiClient      gemini.ContentGenerator
 }
 
 // NewGenerateRunner は、依存関係を注入して GenerateRunner の新しいインスタンスを生成します。
 func NewGenerateRunner(
-	options *config.Config,
-	reader domain.ContentReader,
-	promptBuilder domain.PromptBuilder,
+	reader ContentReader,
+	promptBuilder PromptBuilder,
 	aiClient gemini.ContentGenerator,
 ) *GenerateRunner {
 	return &GenerateRunner{
-		options:       options,
 		reader:        reader,
 		promptBuilder: promptBuilder,
 		aiClient:      aiClient,
@@ -37,23 +44,23 @@ func NewGenerateRunner(
 }
 
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用してナレーションスクリプトを生成する一連の処理を実行します。
-func (gr *GenerateRunner) Run(ctx context.Context) (string, error) {
-	if gr.options.InputFile == "" {
+func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) (string, error) {
+	if req.InputURI == "" {
 		return "", fmt.Errorf("入力ソース(--input)が指定されていません")
 	}
-	content, err := gr.readContent(ctx, gr.options.InputFile)
+	content, err := gr.readContent(ctx, req.InputURI)
 	if err != nil {
 		return "", err
 	}
-	slog.Info("処理開始", "mode", gr.options.Mode, "model", gr.options.AIModel, "input_size", len(content))
+	slog.Info("処理開始", "mode", req.Mode, "model", req.AIModel, "input_size", len(content))
 	slog.Info("AIによるスクリプト生成を開始します...")
 
-	prompt, err := gr.promptBuilder.Generate(gr.options.Mode, content)
+	prompt, err := gr.promptBuilder.Generate(req.Mode, content)
 	if err != nil {
 		return "", err
 	}
 
-	generatedResponse, err := gr.aiClient.GenerateContent(ctx, gr.options.AIModel, prompt)
+	generatedResponse, err := gr.aiClient.GenerateContent(ctx, req.AIModel, prompt)
 	if err != nil {
 		return "", fmt.Errorf("スクリプト生成に失敗しました: %w", err)
 	}
