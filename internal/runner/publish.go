@@ -5,25 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"path/filepath"
-	"strings"
-
-	"github.com/shouni/go-remote-io/remoteio"
 
 	"ap-voice/internal/domain"
 )
 
 // PublishRunner は、スクリプトの公開処理を実行する具象構造体です。
 type PublishRunner struct {
-	executor domain.VoicevoxExecutor
-	writer   remoteio.Writer
+	voice domain.Voice
 }
 
 // NewPublishRunner は PublishRunner の新しいインスタンスを作成します。
-func NewPublishRunner(engine domain.VoicevoxExecutor, writer remoteio.Writer) *PublishRunner {
+func NewPublishRunner(voice domain.Voice) *PublishRunner {
 	return &PublishRunner{
-		executor: engine,
-		writer:   writer,
+		voice: voice,
 	}
 }
 
@@ -32,27 +26,18 @@ func (r *PublishRunner) Run(ctx context.Context, outputURI string, content strin
 	if outputURI == "" {
 		return errors.New("出力先パス(outputURI)が指定されていません")
 	}
-	return r.publishAudioAndScript(ctx, outputURI, content)
-}
 
-// publishAudioAndScript は音声合成とスクリプトのアップロードを実行します。
-func (r *PublishRunner) publishAudioAndScript(ctx context.Context, outputURI, content string) error {
-	slog.InfoContext(ctx, "VOICEVOXによる音声合成を開始します。", "output_path", outputURI)
-	if err := r.executor.Run(ctx, outputURI, content); err != nil {
+	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
+	if err := r.voice.UploadWav(ctx, outputURI, content); err != nil {
 		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
 
-	// スクリプトのアップロード
-	ext := filepath.Ext(outputURI)
-	txtPath := strings.TrimSuffix(outputURI, ext) + ".txt"
-	contentReader := strings.NewReader(content)
-
-	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。", "upload_path", txtPath)
-	if err := r.writer.Write(ctx, txtPath, contentReader, "text/plain; charset=utf-8"); err != nil {
-		return fmt.Errorf("スクリプトのアップロードに失敗しました (%s): %w", txtPath, err)
+	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。", "output_path", outputURI)
+	if err := r.voice.UploadScript(ctx, outputURI, content); err != nil {
+		return fmt.Errorf("スクリプトのアップロードに失敗しました (%s): %w", outputURI, err)
 	}
-	slog.InfoContext(ctx, "スクリプトのアップロードが完了しました。", "upload_path", txtPath)
+	slog.InfoContext(ctx, "スクリプトのアップロードが完了しました。", "output_path", outputURI)
 
 	return nil
 }

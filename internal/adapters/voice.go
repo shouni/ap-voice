@@ -3,6 +3,8 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/shouni/go-http-kit/httpkit"
@@ -21,12 +23,13 @@ const (
 
 // VoiceAdapter は、音声合成する役割を担います。
 type VoiceAdapter struct {
-	engine ports.EngineRunner
+	engine ports.Engine
+	writer remoteio.Writer
 }
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
 func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (*VoiceAdapter, error) {
-	engine, err := builder.New(
+	engine, err := builder.NewEngine(
 		ctx,
 		httpClient,
 		writer,
@@ -42,10 +45,20 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer r
 
 	return &VoiceAdapter{
 		engine: engine,
+		writer: writer,
 	}, nil
 }
 
-// Run は、音声合成を実行します。
-func (a *VoiceAdapter) Run(ctx context.Context, outputURI, content string) error {
+// UploadWav は、音声合成を実行します。
+func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI, content string) error {
 	return a.engine.Run(ctx, outputURI, content)
+}
+
+// UploadScript は指定されたURIの拡張子を.txtに変更してスクリプトをアップロードします。
+func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, content string) error {
+	ext := filepath.Ext(outputURI)
+	txtPath := strings.TrimSuffix(outputURI, ext) + ".txt"
+	contentReader := strings.NewReader(content)
+
+	return a.writer.Write(ctx, txtPath, contentReader, "text/plain; charset=utf-8")
 }
