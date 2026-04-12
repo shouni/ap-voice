@@ -12,25 +12,40 @@ import (
 )
 
 const (
-	defaultMaxParallelSegments = 5
-	defaultSegmentTimeout      = 180 * time.Second
-	defaultSegmentRateLimit    = 1000 * time.Millisecond
+	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
+	defaultMaxParallelSegments = 8
+	// defaultSegmentRateLimit はAPIのレートリミット仕様に準拠
+	defaultSegmentRateLimit = 500 * time.Millisecond
+	defaultSegmentTimeout   = 120 * time.Second
 )
 
-// NewVoiceAdapter は、ports.EngineRunnerを初期化します。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (ports.EngineRunner, error) {
-	engineRunner, err := builder.New(
+// VoiceAdapter は、音声合成する役割を担います。
+type VoiceAdapter struct {
+	engine ports.EngineRunner
+}
+
+// NewVoiceAdapter は、VoiceAdapterを初期化します。
+func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (*VoiceAdapter, error) {
+	engine, err := builder.New(
 		ctx,
 		httpClient,
 		writer,
 		true,
 		ports.WithMaxParallelSegments(defaultMaxParallelSegments),
-		ports.WithSegmentTimeout(defaultSegmentTimeout),
 		ports.WithSegmentRateLimit(defaultSegmentRateLimit),
+		ports.WithSegmentTimeout(defaultSegmentTimeout),
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("EngineRunnerの初期化に失敗しました: %w", err)
 	}
-	return engineRunner, nil
+
+	return &VoiceAdapter{
+		engine: engine,
+	}, nil
+}
+
+// Run は、音声合成を実行します。
+func (a *VoiceAdapter) Run(ctx context.Context, outputURI, content string) error {
+	return a.engine.Run(ctx, outputURI, content)
 }
