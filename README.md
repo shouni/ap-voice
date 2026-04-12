@@ -9,7 +9,7 @@
 
 **AP Voice** は、独自の **Gemini API クライアントライブラリ** [`shouni/go-gemini-client`](https://github.com/shouni/go-gemini-client) と **Go言語の強力な並列制御**を融合させたCLI ツールです。
 
-長文の技術ドキュメントやWeb記事を、AIが話者とスタイルを明確に指示した**ナレーションスクリプト**に変換するだけでなく、その台本をローカルの **VOICEVOXエンジンに高速接続**し、**最終的な音声ファイル (WAV)** を生成します。
+長文の技術ドキュメントやWeb記事を、AIが話者とスタイルを明確に指示した**ナレーションスクリプト**に変換し、その台本を **VOICEVOXエンジンで合成**して**最終的な音声ファイル (WAV)** を生成します。
 
 本ツールは **Google Cloud 連携に最適化された I/O 設計**を採用。入力ソースとして **Web URL**、**GCS (`gs://`)** を透過的に扱うことができ、生成された音声も**ローカルまたは GCS** へ直接保存可能です。
 
@@ -18,7 +18,7 @@
 * **✍️ AI-Driven Scripting**:
     * AIが技術ドキュメントを解析し、最適な話者スタイルを指定したナレーションスクリプトを自動生成。
 * **🔗 Cloud Native Input**:
-    * Web URL、GCS (`gs://`) からの直接読み込みを標準サポート。
+    * Web URL、GCS (`gs://`) からの直接読み込みをサポート。
 * **⚡️ High-Speed Parallel Synthesis**:
     * Go言語の並列処理と堅牢なリトライロジックを融合。VOICEVOXエンジンへの高速接続により、長文の音声合成も高い安定性と成功率で完結。
 * **🧬 Unified Audio Pipeline**:
@@ -38,7 +38,7 @@
 ## ✨ 主な機能
 
 1. **Webからの自動抽出**: URLから記事タイトルと本文のみを整形してAIに渡します。
-2. **マルチプロトコル入力**: ローカル、**GCS (`gs://`)** に対応。
+2. **マルチソース入力**: Web URL、**GCS (`gs://`)** に対応。
 3. **AIスクリプト生成**: **`solo`**, **`dialogue`**, **`duet`** の3形式をサポート。
 4. **VOICEVOX並列合成**: 生成された台本を並列処理で高速にWAV化し、連結して出力。
 5. **クラウド直接出力**: 生成されたWAVを **GCS (`gs://`)** へ直接保存可能。
@@ -51,11 +51,12 @@
 
 | 変数名 | 必須/任意 | 説明 |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | 必須 | Google AI Studio で取得した API キー。 |
+| `GEMINI_API_KEY` | いずれか必須 | Google AI Studio で取得した API キー。 |
+| `GCP_PROJECT_ID` | いずれか必須 | Vertex AI 経由で Gemini を利用する場合の GCP Project ID。 |
 | `VOICEVOX_API_URL` | VOICEVOX使用時 | エンジンのURL (例: `http://localhost:50021`)。 |
-| `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時 | GCS権限を持つサービスアカウントのJSONパス。 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時に必要な場合 | GCS権限を持つサービスアカウントのJSONパス（ADC利用時）。 |
 
-### 2. スクリプト生成コマンド
+### 2. 生成・音声化コマンド
 
 ```bash
 ap-voice generate [flags]
@@ -67,9 +68,12 @@ ap-voice generate [flags]
 | フラグ | 短縮形 | 説明 |
 | --- | --- | --- |
 | `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
-| `--output` | `-o` | 生成スクリプト（テキスト）の保存先。省略時は標準出力。 |
+| `--output` | `-o` | **出力先URI**。WAVを保存し、同名の `.txt` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
+| `--model` | `-g` | 使用する Gemini モデル名。 (Default: `gemini-2.5-flash`) |
 | `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
+
+> `--input` は必須フラグです。`--output` は必須フラグではありませんが、未指定の場合は実行時エラーになります。
 
 ---
 
