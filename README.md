@@ -110,32 +110,37 @@ sequenceDiagram
     participant User as User
     participant CLI as ap-voice CLI (cmd)
     participant Builder as builder.BuildContainer
+    participant Pipeline as pipeline.Pipeline
+    participant GenRunner as runner.GenerateRunner
     participant Reader as go-web-reader
     participant Prompt as PromptAdapter
     participant Gemini as go-gemini-client (Gemini/Vertex AI)
+    participant PubRunner as runner.PublishRunner
     participant Voice as go-voicevox
     participant Store as go-remote-io (Local/GCS)
 
     User->>CLI: ap-voice generate --input --output --mode
     CLI->>Builder: BuildContainer(ctx, config)
     Builder-->>CLI: Container(Pipeline, HTTP, RemoteIO)
+    CLI->>Pipeline: Execute(ctx, req)
+    Pipeline->>GenRunner: Run(ctx, req)
+    GenRunner->>Reader: Open(inputURI)
+    Reader-->>GenRunner: source content
+    GenRunner->>Prompt: Generate(mode, content)
+    Prompt-->>GenRunner: prompt text
+    GenRunner->>Gemini: GenerateContent(model, prompt)
+    Gemini-->>GenRunner: script text
+    GenRunner-->>Pipeline: script text
 
-    CLI->>Reader: Open(inputURI)
-    Reader-->>CLI: source content
-    CLI->>Prompt: Generate(mode, content)
-    Prompt-->>CLI: prompt text
-    CLI->>Gemini: GenerateContent(model, prompt)
-    Gemini-->>CLI: script text
-
-    CLI->>Voice: UploadWav(outputURI, script)
+    Pipeline->>PubRunner: Run(ctx, outputURI, script)
+    PubRunner->>Voice: UploadWav(outputURI, script)
     Voice->>Store: write wav (local/gs://)
-    Store-->>Voice: ok
-    Voice-->>CLI: ok
-
-    CLI->>Voice: UploadScript(outputURI, script)
+    Store-->>PubRunner: ok
+    PubRunner->>Voice: UploadScript(outputURI, script)
     Voice->>Store: write txt (local/gs://)
-    Store-->>Voice: ok
-    Voice-->>CLI: ok
+    Store-->>PubRunner: ok
+    PubRunner-->>Pipeline: ok
+    Pipeline-->>CLI: ok
     CLI-->>User: 完了
 ```
 
