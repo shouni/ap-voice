@@ -10,7 +10,8 @@ type Pipeline interface {
 	Execute(ctx context.Context, req Request) error
 }
 
-// VoicevoxExecutor は、音声合成を行うインターフェースです。
-type VoicevoxExecutor interface {
-	Run(ctx context.Context, outputURI, content string) error
+// Voice は、音声合成を行うインターフェースです。
+type Voice interface {
+	UploadWav(ctx context.Context, outputURI, content string) error
+	UploadScript(ctx context.Context, outputURI string, content string) error
 }
