@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"ap-voice/internal/domain"
 	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
 
 	"ap-voice/internal/builder"
+	"ap-voice/internal/domain"
 )
 
 // generateCmd はナレーションスクリプト生成のメインコマンドです。
