@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	defaultMaxParallelSegments = 10
+	defaultMaxParallelSegments = 5
 	defaultSegmentTimeout      = 180 * time.Second
-	defaultSegmentRateLimit    = 1000 * time.Millisecond
+	defaultSegmentRateLimit    = 2000 * time.Millisecond
 )
 
 // NewVoiceAdapter は、ports.EngineRunnerを初期化します。
