@@ -12,9 +12,11 @@ import (
 )
 
 const (
+	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
 	defaultMaxParallelSegments = 8
-	defaultSegmentRateLimit    = 500 * time.Millisecond
-	defaultSegmentTimeout      = 120 * time.Second
+	// defaultSegmentRateLimit はAPIのレートリミット仕様に準拠
+	defaultSegmentRateLimit = 500 * time.Millisecond
+	defaultSegmentTimeout   = 120 * time.Second
 )
 
 // VoiceAdapter は、音声合成する役割を担います。
@@ -22,7 +24,7 @@ type VoiceAdapter struct {
 	engine ports.EngineRunner
 }
 
-// NewVoiceAdapter は、ports.EngineRunnerを初期化します。
+// NewVoiceAdapter は、VoiceAdapterを初期化します。
 func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := builder.New(
 		ctx,
