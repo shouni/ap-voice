@@ -27,17 +27,17 @@ func (r *PublishRunner) Run(ctx context.Context, outputURI string, content strin
 		return errors.New("出力先パス(outputURI)が指定されていません")
 	}
 
-	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。")
-	if err := r.voice.UploadScript(ctx, outputURI, content); err != nil {
-		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
-	}
-	slog.InfoContext(ctx, "スクリプトのアップロードが完了しました。")
-
 	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
 	if err := r.voice.UploadWav(ctx, outputURI, content); err != nil {
 		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
+
+	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。", "output_path", outputURI)
+	if err := r.voice.UploadScript(ctx, outputURI, content); err != nil {
+		return fmt.Errorf("スクリプトのアップロードに失敗しました (%s): %w", outputURI, err)
+	}
+	slog.InfoContext(ctx, "スクリプトのアップロードが完了しました。", "output_path", outputURI)
 
 	return nil
 }
