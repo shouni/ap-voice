@@ -9,20 +9,20 @@ import (
 	"strings"
 
 	"github.com/shouni/go-remote-io/remoteio"
-	"github.com/shouni/go-voicevox/voicevox"
+	"github.com/shouni/go-voicevox/ports"
 )
 
 // PublishRunner は、スクリプトの公開処理を実行する具象構造体です。
 type PublishRunner struct {
-	voicevoxExecutor voicevox.EngineExecutor
-	writer           remoteio.Writer
+	engine ports.EngineRunner
+	writer remoteio.Writer
 }
 
 // NewPublishRunner は PublishRunner の新しいインスタンスを作成します。
-func NewPublishRunner(voicevoxExecutor voicevox.EngineExecutor, writer remoteio.Writer) *PublishRunner {
+func NewPublishRunner(engine ports.EngineRunner, writer remoteio.Writer) *PublishRunner {
 	return &PublishRunner{
-		voicevoxExecutor: voicevoxExecutor,
-		writer:           writer,
+		engine: engine,
+		writer: writer,
 	}
 }
 
@@ -37,7 +37,7 @@ func (r *PublishRunner) Run(ctx context.Context, outputURI string, content strin
 // publishAudioAndScript は音声合成とスクリプトのアップロードを実行します。
 func (r *PublishRunner) publishAudioAndScript(ctx context.Context, outputURI, content string) error {
 	slog.InfoContext(ctx, "VOICEVOXによる音声合成を開始します。", "output_path", outputURI)
-	if err := r.voicevoxExecutor.Execute(ctx, content, outputURI); err != nil {
+	if err := r.engine.Run(ctx, outputURI, content); err != nil {
 		return fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
