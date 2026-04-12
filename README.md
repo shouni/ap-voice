@@ -98,13 +98,79 @@ ap-voice generate \
 
 ---
 
+## 🔄 処理シーケンス図
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as User
+    participant CLI as ap-voice CLI (cmd)
+    participant Builder as builder.BuildContainer
+    participant Reader as go-web-reader
+    participant Prompt as PromptAdapter
+    participant Gemini as go-gemini-client (Gemini/Vertex AI)
+    participant Voice as go-voicevox
+    participant Store as go-remote-io (Local/GCS)
+
+    User->>CLI: ap-voice generate --input --output --mode
+    CLI->>Builder: BuildContainer(ctx, config)
+    Builder-->>CLI: Container(Pipeline, HTTP, RemoteIO)
+
+    CLI->>Reader: Open(inputURI)
+    Reader-->>CLI: source content
+    CLI->>Prompt: Generate(mode, content)
+    Prompt-->>CLI: prompt text
+    CLI->>Gemini: GenerateContent(model, prompt)
+    Gemini-->>CLI: script text
+
+    CLI->>Voice: UploadWav(outputURI, script)
+    Voice->>Store: write wav (local/gs://)
+    Store-->>Voice: ok
+    Voice-->>CLI: ok
+
+    CLI->>Voice: UploadScript(outputURI, script)
+    Voice->>Store: write txt (local/gs://)
+    Store-->>Voice: ok
+    Voice-->>CLI: ok
+    CLI-->>User: 完了
+```
+
+## 🌳 プロジェクト構成ツリー図
+
+```text
+ap-voice/
+├── main.go                  # エントリポイント（CLI 起動）
+├── cmd/                     # CLI コマンド定義（root / generate）
+├── assets/                  # 埋め込みプロンプト管理（prompt_*.md）
+└── internal/
+    ├── config/              # 設定読み込みとデフォルト値管理
+    ├── domain/              # ドメインモデルとポート定義
+    ├── app/                 # DI コンテナとリソース管理
+    ├── builder/             # 外部依存とパイプライン組み立て
+    ├── pipeline/            # Generate/Publish 実行オーケストレーション
+    ├── runner/              # 生成処理・公開処理のユースケース実装
+    └── adapters/            # Gemini / Prompt / VOICEVOX の実装アダプタ
+```
+
 ## 🤝 依存関係 (Dependencies)
 
-* **[Go Gemini Client](https://github.com/shouni/go-gemini-client)**: Gemini API 通信の抽象化と生成ロジックの最適化
-* **[Go Voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンとの通信および音声合成の制御
-* **[Go Web Reader](https://github.com/shouni/go-web-reader)**: マルチプロトコル I/O と本文抽出
-* **[Go Remote IO](https://github.com/shouni/go-remote-io)**: GCS/ローカルストレージの抽象化
-* **[Go Web Exact](https://github.com/shouni/go-web-exact)**: 高精度なメインコンテンツ抽出
+主要な direct dependency（`go.mod`）:
+
+* **[spf13/cobra](https://github.com/spf13/cobra)**: CLI コマンド/フラグ定義
+* **[shouni/clibase](https://github.com/shouni/clibase)**: CLI 実行基盤（共通初期化・実行ラッパー）
+* **[shouni/go-gemini-client](https://github.com/shouni/go-gemini-client)**: Gemini / Vertex AI への生成リクエスト
+* **[shouni/go-voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンによる音声合成
+* **[shouni/go-web-reader](https://github.com/shouni/go-web-reader)**: `https://` / `gs://` 入力の読み込み
+* **[shouni/go-remote-io](https://github.com/shouni/go-remote-io)**: ローカル/GCS への書き込み抽象化
+* **[shouni/go-http-kit](https://github.com/shouni/go-http-kit)**: HTTP クライアント（タイムアウト/リトライ）
+* **[shouni/go-prompt-kit](https://github.com/shouni/go-prompt-kit)**: プロンプトテンプレートのロードとレンダリング
+* **[shouni/go-utils](https://github.com/shouni/go-utils)**: 環境変数読み込みなどのユーティリティ
+
+実行時の外部依存:
+
+* **Google Gemini API または Vertex AI**: スクリプト生成
+* **VOICEVOX Engine** (`VOICEVOX_API_URL`): 音声合成
+* **Google Cloud Storage**（任意）: `gs://` 入出力利用時
 
 
 ---
