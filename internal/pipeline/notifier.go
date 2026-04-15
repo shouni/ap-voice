@@ -13,7 +13,7 @@ func (p *Pipeline) notifySuccess(ctx context.Context, req domain.Request, public
 		return
 	}
 	if err := p.notifier.Notify(ctx, req, publicURL); err != nil {
-		slog.Error("Slack通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "output_uri", req.OutputURI)
+		slog.Error("通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "output_uri", req.OutputURI)
 	}
 }
 
@@ -23,7 +23,7 @@ func (p *Pipeline) notifyFailure(ctx context.Context, req domain.Request, runErr
 		return
 	}
 	if err := p.notifier.NotifyFailure(ctx, req, runErr); err != nil {
-		slog.Error("Slackへの失敗通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", runErr)
+		slog.Error("失敗通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", runErr)
 	}
 }
 
@@ -33,6 +33,6 @@ func (p *Pipeline) notifySkipped(ctx context.Context, req domain.Request, reason
 		return
 	}
 	if err := p.notifier.NotifySkipped(ctx, req, reason); err != nil {
-		slog.Error("Slackへのスキップ通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", reason)
+		slog.Error("スキップ通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", reason)
 	}
 }
