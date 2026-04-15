@@ -44,11 +44,11 @@ func TestRequiresGCS(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "trimmed gcs uri",
+			name: "untrimmed gcs uri should be invalid",
 			cfg: &config.Config{
 				InputFile: "  gs://bucket/input.txt  ",
 			},
-			want: true,
+			want: false,
 		},
 	}
 
@@ -56,6 +56,7 @@ func TestRequiresGCS(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Normalize() は呼び出さない
 			if got := requiresGCS(tt.cfg); got != tt.want {
 				t.Fatalf("requiresGCS() = %v, want %v", got, tt.want)
 			}
