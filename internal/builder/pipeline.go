@@ -24,7 +24,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 		return nil, fmt.Errorf("パブリッシャーランナーの初期化に失敗しました: %w", err)
 	}
 
-	p := pipeline.NewPipeline(generateRunner, publisherRunner)
+	p := pipeline.NewPipeline(generateRunner, publisherRunner, appCtx.Notifier)
 
 	return p, nil
 }
@@ -66,5 +66,6 @@ func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.Pub
 
 	return runner.NewPublishRunner(
 		voiceAdapter,
+		appCtx.RemoteIO.Signer,
 	), nil
 }

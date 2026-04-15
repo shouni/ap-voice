@@ -17,6 +17,7 @@ type Container struct {
 	RemoteIO *RemoteIO
 	// External Adapters
 	HTTPClient httpkit.Requester
+	Notifier   domain.Notifier
 	// Business Logic
 	Pipeline domain.Pipeline
 }
@@ -25,6 +26,7 @@ type Container struct {
 type RemoteIO struct {
 	Factory remoteio.ReadWriteFactory
 	Writer  remoteio.Writer
+	Signer  remoteio.URLSigner
 }
 
 // Close は、RemoteIO が保持する Factory などの内部リソースを解放します。

@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/shouni/clibase v1.0.3
+	github.com/shouni/code-reviewer v1.0.7
 	github.com/shouni/go-gemini-client v1.2.4
 	github.com/shouni/go-http-kit v1.4.0
 	github.com/shouni/go-prompt-kit v1.0.4
@@ -68,6 +69,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shouni/go-web-exact/v2 v2.2.0 // indirect
 	github.com/shouni/netarmor v1.0.2 // indirect
+	github.com/slack-go/slack v0.17.3 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

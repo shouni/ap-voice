@@ -17,8 +17,9 @@ const (
 
 // Config はコマンドラインフラグを保持する構造体です。
 type Config struct {
-	InputFile  string
-	OutputFile string
+	InputFile       string
+	OutputFile      string
+	SlackWebhookURL string
 
 	Mode         string
 	AIModel      string
@@ -35,6 +36,7 @@ func (c *Config) Normalize() {
 	c.InputFile = strings.TrimSpace(c.InputFile)
 	c.OutputFile = strings.TrimSpace(c.OutputFile)
 	c.AIModel = strings.TrimSpace(c.AIModel)
+	c.SlackWebhookURL = strings.TrimSpace(c.SlackWebhookURL)
 }
 
 // FillDefaults は、現在の設定で空のフィールドを envCfg の値で補完します。
@@ -45,12 +47,16 @@ func (c *Config) FillDefaults(envCfg *Config) {
 	if c.GeminiAPIKey == "" {
 		c.GeminiAPIKey = envCfg.GeminiAPIKey
 	}
+	if c.SlackWebhookURL == "" {
+		c.SlackWebhookURL = envCfg.SlackWebhookURL
+	}
 }
 
 // LoadConfig は環境変数から設定を読み込みます。
 func LoadConfig() *Config {
 	return &Config{
-		ProjectID:    envutil.GetEnv("GCP_PROJECT_ID", ""),
-		GeminiAPIKey: envutil.GetEnv("GEMINI_API_KEY", ""),
+		ProjectID:       envutil.GetEnv("GCP_PROJECT_ID", ""),
+		GeminiAPIKey:    envutil.GetEnv("GEMINI_API_KEY", ""),
+		SlackWebhookURL: envutil.GetEnv("SLACK_WEBHOOK_URL", ""),
 	}
 }
