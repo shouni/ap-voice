@@ -9,8 +9,7 @@ import (
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
-	"github.com/shouni/go-voicevox/builder"
-	"github.com/shouni/go-voicevox/ports"
+	"github.com/shouni/go-voicevox/voicevox"
 )
 
 const (
@@ -23,20 +22,21 @@ const (
 
 // VoiceAdapter は、音声合成する役割を担います。
 type VoiceAdapter struct {
-	engine ports.Engine
+	engine voicevox.Engine
 	writer remoteio.Writer
 }
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
 func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (*VoiceAdapter, error) {
-	engine, err := builder.NewEngine(
+	engine, err := voicevox.New(
 		ctx,
 		httpClient,
 		writer,
+		"",
 		true,
-		ports.WithMaxParallelSegments(defaultMaxParallelSegments),
-		ports.WithSegmentRateLimit(defaultSegmentRateLimit),
-		ports.WithSegmentTimeout(defaultSegmentTimeout),
+		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
+		voicevox.WithSegmentRateLimit(defaultSegmentRateLimit),
+		voicevox.WithSegmentTimeout(defaultSegmentTimeout),
 	)
 
 	if err != nil {

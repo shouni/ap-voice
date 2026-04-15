@@ -10,7 +10,7 @@ require (
 	github.com/shouni/go-prompt-kit v1.0.4
 	github.com/shouni/go-remote-io v1.3.2
 	github.com/shouni/go-utils v1.0.20
-	github.com/shouni/go-voicevox v1.3.4
+	github.com/shouni/go-voicevox v1.3.6
 	github.com/shouni/go-web-reader v1.0.2
 	github.com/spf13/cobra v1.10.2
 )
