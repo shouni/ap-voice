@@ -110,6 +110,7 @@ sequenceDiagram
     participant User as User
     participant CLI as ap-voice CLI (cmd)
     participant Builder as builder.BuildContainer
+    participant Notifier as domain.Notifier (Slack/Noop)
     participant Pipeline as pipeline.Pipeline
     participant GenRunner as runner.GenerateRunner
     participant Reader as go-web-reader
@@ -118,10 +119,11 @@ sequenceDiagram
     participant PubRunner as runner.PublishRunner
     participant Voice as go-voicevox
     participant Store as go-remote-io (Local/GCS)
+    participant Signer as remoteio.URLSigner
 
     User->>CLI: ap-voice generate --input --output --mode
     CLI->>Builder: BuildContainer(ctx, config)
-    Builder-->>CLI: Container(Pipeline, HTTP, RemoteIO)
+    Builder-->>CLI: Container(Pipeline, HTTP, RemoteIO, Notifier)
     CLI->>Pipeline: Execute(ctx, req)
     Pipeline->>GenRunner: Run(ctx, req)
     GenRunner->>Reader: Open(inputURI)
@@ -139,9 +141,15 @@ sequenceDiagram
     PubRunner->>Voice: UploadScript(outputURI, script)
     Voice->>Store: write txt (local/gs://)
     Store-->>PubRunner: ok
-    PubRunner-->>Pipeline: ok
+    opt signer is configured
+        PubRunner->>Signer: GenerateSignedURL(outputURI, GET, 1h)
+        Signer-->>PubRunner: publicURL
+    end
+    PubRunner-->>Pipeline: publicURL / ""
+    Pipeline->>Notifier: Notify(req, publicURL)
+    Notifier-->>Pipeline: ok
     Pipeline-->>CLI: ok
-    CLI-->>User: 完了
+    CLI-->>User: 完了（必要なら通知送信）
 ```
 
 ## 🌳 プロジェクト構成ツリー図
