@@ -7,9 +7,13 @@ import (
 	"log/slog"
 
 	"github.com/shouni/go-http-kit/httpkit"
+	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-remote-io/remoteio/gcs"
 
+	"ap-voice/internal/adapters"
 	"ap-voice/internal/app"
 	"ap-voice/internal/config"
+	"ap-voice/internal/domain"
 )
 
 // BuildContainer は外部サービスとの接続を確立し、依存関係を組み立てた app.Container を返します。
@@ -25,11 +29,19 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		}
 	}()
 
-	rio, err := buildRemoteIO(ctx)
+	// 2. I/O Infrastructure
+	var storage *gcs.GCSClientFactory
+	if requiresGCS(cfg) {
+		storage, err = gcs.New(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GCS factory: %w", err)
+		}
+		resources = append(resources, storage)
+	}
+	rio, err := buildRemoteIO(storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}
-	resources = append(resources, rio)
 
 	timeout := cfg.HTTPTimeout
 	if timeout == 0 {
@@ -42,10 +54,17 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		httpkit.WithSkipNetworkValidation(true),
 	)
 
+	// 3. Notifier
+	notifier, err := buildNotifier(httpClient, cfg.SlackWebhookURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize notifier: %w", err)
+	}
+
 	appCtx := &app.Container{
 		Config:     cfg,
 		RemoteIO:   rio,
 		HTTPClient: httpClient,
+		Notifier:   notifier,
 	}
 
 	p, err := buildPipeline(ctx, appCtx)
@@ -55,4 +74,21 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	appCtx.Pipeline = p
 
 	return appCtx, nil
+}
+
+// buildNotifier は、通知機能を初期化します。
+func buildNotifier(httpClient httpkit.Requester, webhookURL string) (domain.Notifier, error) {
+	if webhookURL == "" {
+		slog.Info("Slack Webhook URL が未設定のため、通知は無効化されます。")
+		return &adapters.NoopNotifier{}, nil
+	}
+
+	return adapters.NewSlackAdapter(httpClient, webhookURL)
+}
+
+func requiresGCS(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return remoteio.IsGCSURI(cfg.InputFile) || remoteio.IsGCSURI(cfg.OutputFile)
 }
