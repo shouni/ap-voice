@@ -42,7 +42,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 	}
 
 	contentReader, err := reader.New(
-		reader.WithGCSFactory(func(ctx context.Context) (remoteio.ReadWriteFactory, error) {
+		reader.WithGCSFactory(func(ctx context.Context) (remoteio.IOFactory, error) {
 			return appCtx.RemoteIO.Factory, nil
 		}),
 	)
