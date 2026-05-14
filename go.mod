@@ -5,12 +5,12 @@ go 1.26
 require (
 	github.com/shouni/clibase v1.0.3
 	github.com/shouni/code-reviewer v1.0.8
-	github.com/shouni/go-gemini-client v1.2.11
+	github.com/shouni/go-gemini-client v1.2.13
 	github.com/shouni/go-http-kit v1.4.2
 	github.com/shouni/go-prompt-kit v1.0.4
-	github.com/shouni/go-remote-io v1.4.0
+	github.com/shouni/go-remote-io v1.5.2
 	github.com/shouni/go-utils v1.0.20
-	github.com/shouni/go-voicevox v1.3.8
+	github.com/shouni/go-voicevox v1.3.10
 	github.com/shouni/go-web-reader v1.0.5
 	github.com/spf13/cobra v1.10.2
 )
@@ -67,7 +67,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/shouni/audio v1.0.2 // indirect
+	github.com/shouni/audio v1.0.6 // indirect
 	github.com/shouni/go-web-exact/v2 v2.2.1 // indirect
 	github.com/shouni/netarmor v1.0.3 // indirect
 	github.com/slack-go/slack v0.17.3 // indirect
@@ -90,10 +90,10 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.273.0 // indirect
-	google.golang.org/genai v1.56.0 // indirect
+	google.golang.org/genai v1.57.0 // indirect
 	google.golang.org/genproto v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/grpc v1.81.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
