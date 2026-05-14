@@ -30,14 +30,12 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}()
 
 	// 2. I/O Infrastructure
-	var storage *gcs.GCSClientFactory
-	if requiresGCS(cfg) {
-		storage, err = gcs.New(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create GCS factory: %w", err)
-		}
-		resources = append(resources, storage)
+	storage, err := gcs.New(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCS factory: %w", err)
 	}
+
+	resources = append(resources, storage)
 	rio, err := buildRemoteIO(storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
