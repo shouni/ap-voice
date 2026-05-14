@@ -60,5 +60,5 @@ func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, conte
 	txtPath := strings.TrimSuffix(outputURI, ext) + ".txt"
 	contentReader := strings.NewReader(content)
 
-	return a.writer.Write(ctx, txtPath, contentReader, "text/plain; charset=utf-8")
+	return a.writer.Write(ctx, txtPath, contentReader, remoteio.WithContentType("text/plain; charset=utf-8"))
 }
