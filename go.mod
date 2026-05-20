@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/shouni/clibase v1.0.3
 	github.com/shouni/code-reviewer v1.0.8
-	github.com/shouni/go-gemini-client v1.2.13
+	github.com/shouni/go-gemini-client v1.3.0
 	github.com/shouni/go-http-kit v1.4.2
 	github.com/shouni/go-prompt-kit v1.0.4
 	github.com/shouni/go-remote-io v1.5.2
