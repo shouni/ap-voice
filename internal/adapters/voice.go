@@ -1,8 +1,11 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -10,7 +13,32 @@ import (
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/voicevox"
+
+	"ap-voice/internal/domain"
 )
+
+// voicevoxWriter は、go-remote-io の remoteio.Writer を go-voicevox の voicevox.Writer に適合させます。
+// go-voicevox 自体はクラウドストレージ等の外部I/Oライブラリに依存しないため、
+// GCS 等への出力が必要な呼び出し側でこの変換を担う。
+type voicevoxWriter struct {
+	writer remoteio.Writer
+}
+
+func (w voicevoxWriter) Write(ctx context.Context, path string, contentReader io.Reader, opts ...voicevox.WriteOption) error {
+	cfg := voicevox.NewWriteConfig(opts...)
+	remoteOpts := make([]remoteio.WriteOption, 0, 3)
+	if cfg.ContentType != "" {
+		remoteOpts = append(remoteOpts, remoteio.WithContentType(cfg.ContentType))
+	}
+	if cfg.Inline {
+		remoteOpts = append(remoteOpts, remoteio.WithInline())
+	}
+	if cfg.CacheControl != "" {
+		remoteOpts = append(remoteOpts, remoteio.WithCacheControl(cfg.CacheControl))
+	}
+
+	return w.writer.Write(ctx, path, contentReader, remoteOpts...)
+}
 
 const (
 	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
@@ -31,7 +59,7 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer r
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
-		writer,
+		voicevoxWriter{writer: writer},
 		"",
 		true,
 		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
@@ -50,15 +78,33 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer r
 }
 
 // UploadWav は、音声合成を実行します。
-func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI, content string) error {
-	return a.engine.Run(ctx, outputURI, content)
+func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
+	return a.engine.RunScript(ctx, outputURI, toVoicevoxLines(lines))
 }
 
-// UploadScript は指定されたURIの拡張子を.txtに変更してスクリプトをアップロードします。
-func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, content string) error {
+// UploadScript は指定されたURIの拡張子を.jsonに変更してスクリプトをアップロードします。
+func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
 	ext := filepath.Ext(outputURI)
-	txtPath := strings.TrimSuffix(outputURI, ext) + ".txt"
-	contentReader := strings.NewReader(content)
+	jsonPath := strings.TrimSuffix(outputURI, ext) + ".json"
 
-	return a.writer.Write(ctx, txtPath, contentReader, remoteio.WithContentType("text/plain; charset=utf-8"))
+	body, err := json.MarshalIndent(lines, "", "  ")
+	if err != nil {
+		return fmt.Errorf("スクリプトのJSONエンコードに失敗しました: %w", err)
+	}
+
+	return a.writer.Write(ctx, jsonPath, bytes.NewReader(body), remoteio.WithContentType("application/json; charset=utf-8"))
+}
+
+// toVoicevoxLines は、ドメイン層の ScriptLine を go-voicevox の ScriptLine に変換します。
+func toVoicevoxLines(lines []domain.ScriptLine) []voicevox.ScriptLine {
+	out := make([]voicevox.ScriptLine, len(lines))
+	for i, line := range lines {
+		out[i] = voicevox.ScriptLine{
+			Speaker:   line.Speaker,
+			Style:     line.Style,
+			Direction: line.Direction,
+			Text:      line.Text,
+		}
+	}
+	return out
 }

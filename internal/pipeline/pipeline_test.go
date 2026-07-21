@@ -13,25 +13,25 @@ var _ PublishRunner = (*MockPublishRunner)(nil)
 var _ domain.Notifier = (*MockNotifier)(nil)
 
 type MockGenerateRunner struct {
-	RunFunc func(ctx context.Context, req domain.Request) (string, error)
+	RunFunc func(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error)
 }
 
-func (m *MockGenerateRunner) Run(ctx context.Context, req domain.Request) (string, error) {
+func (m *MockGenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
 	if m.RunFunc == nil {
-		return "", nil
+		return nil, nil
 	}
 	return m.RunFunc(ctx, req)
 }
 
 type MockPublishRunner struct {
-	RunFunc func(ctx context.Context, outputURI, content string) (string, error)
+	RunFunc func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
 }
 
-func (m *MockPublishRunner) Run(ctx context.Context, outputURI, content string) (string, error) {
+func (m *MockPublishRunner) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 	if m.RunFunc == nil {
 		return "", nil
 	}
-	return m.RunFunc(ctx, outputURI, content)
+	return m.RunFunc(ctx, outputURI, lines)
 }
 
 type MockNotifier struct {
@@ -71,6 +71,9 @@ func TestPipelineExecute(t *testing.T) {
 		Mode:      "solo",
 		AIModel:   "gemini-2.5-flash",
 	}
+	sampleLines := []domain.ScriptLine{
+		{Speaker: "ずんだもん", Style: "ノーマル", Text: "generated script"},
+	}
 
 	t.Run("正常系: 生成と公開と成功通知が呼ばれること", func(t *testing.T) {
 		t.Parallel()
@@ -81,22 +84,22 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) (string, error) {
+				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
 					generateCalled = true
 					if got != req {
 						t.Fatalf("unexpected request: %+v", got)
 					}
-					return "generated script", nil
+					return sampleLines, nil
 				},
 			},
 			&MockPublishRunner{
-				RunFunc: func(ctx context.Context, outputURI, content string) (string, error) {
+				RunFunc: func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 					publishCalled = true
 					if outputURI != req.OutputURI {
 						t.Fatalf("unexpected outputURI: %s", outputURI)
 					}
-					if content != "generated script" {
-						t.Fatalf("unexpected content: %s", content)
+					if len(lines) != 1 || lines[0].Text != "generated script" {
+						t.Fatalf("unexpected lines: %+v", lines)
 					}
 					return "https://example.com/audio.wav", nil
 				},
@@ -131,8 +134,8 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) (string, error) {
-					return "", expectedErr
+				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+					return nil, expectedErr
 				},
 			},
 			&MockPublishRunner{},
@@ -159,15 +162,15 @@ func TestPipelineExecute(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 空文字生成時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
+	t.Run("異常系: 空スクリプト生成時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
 		t.Parallel()
 
 		failureNotified := false
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) (string, error) {
-					return "   ", nil
+				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+					return nil, nil
 				},
 			},
 			&MockPublishRunner{},
@@ -195,12 +198,12 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) (string, error) {
-					return "generated script", nil
+				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+					return sampleLines, nil
 				},
 			},
 			&MockPublishRunner{
-				RunFunc: func(ctx context.Context, outputURI, content string) (string, error) {
+				RunFunc: func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 					return "", expectedErr
 				},
 			},

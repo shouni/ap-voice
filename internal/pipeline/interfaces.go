@@ -9,10 +9,10 @@ import (
 type (
 	// GenerateRunner は、ナレーションスクリプト生成を実行する責務を持つインターフェースです。
 	GenerateRunner interface {
-		Run(ctx context.Context, req domain.Request) (string, error)
+		Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error)
 	}
 	// PublishRunner は、生成されたスクリプトの公開処理を実行する責務を持つインターフェースです。
 	PublishRunner interface {
-		Run(ctx context.Context, outputURI string, content string) (string, error)
+		Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
 	}
 )
