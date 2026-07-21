@@ -3,7 +3,7 @@ module ap-voice
 go 1.26
 
 require (
-	github.com/shouni/clibase v1.0.3
+	github.com/shouni/clibase v1.0.4
 	github.com/shouni/go-gemini-client v1.13.0
 	github.com/shouni/go-http-kit v1.6.0
 	github.com/shouni/go-notifier v1.3.0

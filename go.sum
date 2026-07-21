@@ -132,8 +132,8 @@ github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUc
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/shouni/audio v1.1.1 h1:j7XCwANGmwZOlAQSzW4Gb2EwumONCIDXhWXl4hc7jaU=
 github.com/shouni/audio v1.1.1/go.mod h1:4j6OqZMB2LhDYk6ThHlsrzyYHBSQcQTKNPLiGPYOwqA=
-github.com/shouni/clibase v1.0.3 h1:2VBU0PCJYXRFM9wjJNM9EpVLfutlaizhL1PUpndSQIM=
-github.com/shouni/clibase v1.0.3/go.mod h1:q40nTjGV4DguTP9Jo2FyblMnOCI53/qzr2GE5vwGV3Q=
+github.com/shouni/clibase v1.0.4 h1:eppU3pCVbTXuSqKx6iwgWEByJB2FSVWGyTuMYLcmJck=
+github.com/shouni/clibase v1.0.4/go.mod h1:q40nTjGV4DguTP9Jo2FyblMnOCI53/qzr2GE5vwGV3Q=
 github.com/shouni/go-gemini-client v1.13.0 h1:HfQyTza7sP50rSm6fr6lz/L+BGcSFJJvkn0pVkOzmYI=
 github.com/shouni/go-gemini-client v1.13.0/go.mod h1:i6w7TiRKM0RKwb/jmPspy0bNQi3jFuWbsDQjLWxUP/I=
 github.com/shouni/go-http-kit v1.6.0 h1:ZE5X6cnoakIwKeXZj+Rr0fvN+GyuFGvUKwPGB4LsHNQ=
