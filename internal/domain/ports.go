@@ -12,6 +12,6 @@ type Pipeline interface {
 
 // Voice は、音声合成を行うインターフェースです。
 type Voice interface {
-	UploadWav(ctx context.Context, outputURI, content string) error
-	UploadScript(ctx context.Context, outputURI string, content string) error
+	UploadWav(ctx context.Context, outputURI string, lines []ScriptLine) error
+	UploadScript(ctx context.Context, outputURI string, lines []ScriptLine) error
 }

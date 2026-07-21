@@ -27,19 +27,19 @@ func NewPublishRunner(voice domain.Voice, signer remoteio.URLSigner) *PublishRun
 }
 
 // Run は公開処理のパイプライン全体を実行します。
-func (r *PublishRunner) Run(ctx context.Context, outputURI string, content string) (string, error) {
+func (r *PublishRunner) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 	if outputURI == "" {
 		return "", errors.New("出力先パス(outputURI)が指定されていません")
 	}
 
 	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
-	if err := r.voice.UploadWav(ctx, outputURI, content); err != nil {
+	if err := r.voice.UploadWav(ctx, outputURI, lines); err != nil {
 		return "", fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
 
 	slog.InfoContext(ctx, "スクリプトのアップロードを開始します。", "output_path", outputURI)
-	if err := r.voice.UploadScript(ctx, outputURI, content); err != nil {
+	if err := r.voice.UploadScript(ctx, outputURI, lines); err != nil {
 		return "", fmt.Errorf("スクリプトのアップロードに失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "スクリプトのアップロードが完了しました。", "output_path", outputURI)

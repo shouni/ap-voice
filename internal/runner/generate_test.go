@@ -11,6 +11,7 @@ import (
 	"ap-voice/internal/domain"
 
 	"github.com/shouni/go-gemini-client/gemini"
+	"google.golang.org/genai"
 )
 
 type mockContentReader struct {
@@ -30,11 +31,11 @@ func (m *mockPromptBuilder) Generate(mode, content string) (string, error) {
 }
 
 type mockAIClient struct {
-	generateContentFunc func(ctx context.Context, modelName string, prompt string) (*gemini.Response, error)
+	generateWithPartsFunc func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
-func (m *mockAIClient) GenerateContent(ctx context.Context, modelName string, prompt string) (*gemini.Response, error) {
-	return m.generateContentFunc(ctx, modelName, prompt)
+func (m *mockAIClient) GenerateWithParts(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
+	return m.generateWithPartsFunc(ctx, modelName, parts, opts)
 }
 
 type closeTrackingReader struct {
@@ -61,7 +62,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		AIModel:  "gemini-2.5-flash",
 	}
 
-	t.Run("正常系: 読み込みから生成まで通ること", func(t *testing.T) {
+	t.Run("正常系: 読み込みからJSONデコードまで通ること", func(t *testing.T) {
 		t.Parallel()
 
 		reader := &closeTrackingReader{reader: strings.NewReader("  これは十分に長い入力テキストです。  ")}
@@ -92,15 +93,21 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateContentFunc: func(ctx context.Context, modelName string, prompt string) (*gemini.Response, error) {
+				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					aiCalled = true
 					if modelName != req.AIModel {
 						t.Fatalf("unexpected model: %s", modelName)
 					}
-					if prompt != "prompt-body" {
-						t.Fatalf("unexpected prompt: %s", prompt)
+					if len(parts) != 1 || parts[0].Text != "prompt-body" {
+						t.Fatalf("unexpected parts: %+v", parts)
 					}
-					return &gemini.Response{Text: "generated script"}, nil
+					if opts.ResponseMIMEType != "application/json" {
+						t.Fatalf("unexpected ResponseMIMEType: %s", opts.ResponseMIMEType)
+					}
+					if opts.ResponseSchema == nil {
+						t.Fatal("expected ResponseSchema to be set")
+					}
+					return &gemini.Response{Text: `[{"speaker":"ずんだもん","style":"ノーマル","direction":"呼びかけ","text":"こんにちはなのだ"}]`}, nil
 				},
 			},
 		)
@@ -109,8 +116,11 @@ func TestGenerateRunnerRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run() failed: %v", err)
 		}
-		if got != "generated script" {
-			t.Fatalf("unexpected output: %s", got)
+		want := []domain.ScriptLine{
+			{Speaker: "ずんだもん", Style: "ノーマル", Direction: "呼びかけ", Text: "こんにちはなのだ"},
+		}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("unexpected output: %+v", got)
 		}
 		if !readerCalled || !promptCalled || !aiCalled {
 			t.Fatalf("unexpected calls: reader=%v prompt=%v ai=%v", readerCalled, promptCalled, aiCalled)
@@ -215,7 +225,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateContentFunc: func(ctx context.Context, modelName string, prompt string) (*gemini.Response, error) {
+				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					return nil, expectedErr
 				},
 			},
@@ -224,6 +234,33 @@ func TestGenerateRunnerRun(t *testing.T) {
 		_, err := runner.Run(ctx, req)
 		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %v, got %v", expectedErr, err)
+		}
+	})
+
+	t.Run("異常系: 不正なJSON応答はエラーになること", func(t *testing.T) {
+		t.Parallel()
+
+		runner := NewGenerateRunner(
+			&mockContentReader{
+				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
+				},
+			},
+			&mockPromptBuilder{
+				generateFunc: func(mode, content string) (string, error) {
+					return "prompt-body", nil
+				},
+			},
+			&mockAIClient{
+				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
+					return &gemini.Response{Text: "not json"}, nil
+				},
+			},
+		)
+
+		_, err := runner.Run(ctx, req)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 }

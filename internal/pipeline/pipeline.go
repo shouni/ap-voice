@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"ap-voice/internal/domain"
 )
@@ -32,18 +31,18 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		}
 	}()
 
-	var content string
-	content, err = p.generator.Run(ctx, req)
+	var lines []domain.ScriptLine
+	lines, err = p.generator.Run(ctx, req)
 	if err != nil {
 		err = fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
 		return err
 	}
-	if strings.TrimSpace(content) == "" {
+	if len(lines) == 0 {
 		err = fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
 		return err
 	}
 	var publicURL string
-	publicURL, err = p.publisher.Run(ctx, req.OutputURI, content)
+	publicURL, err = p.publisher.Run(ctx, req.OutputURI, lines)
 	if err != nil {
 		err = fmt.Errorf("公開処理の実行に失敗しました: %w", err)
 		return err
