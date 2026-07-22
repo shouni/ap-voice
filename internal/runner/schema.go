@@ -2,14 +2,17 @@ package runner
 
 import (
 	"google.golang.org/genai"
+
+	"github.com/shouni/go-voicevox/speaker"
 )
 
-// 許可される話者・スタイル・演出タグの値。VOICEVOX側の go-voicevox/speaker と対応する。
+// 許可される話者・スタイルは go-voicevox/speaker を単一の情報源とする（値の重複によるドリフトを防ぐ）。
+// direction は動画演出用の独自タグでVOICEVOX側に対応物がないため、ここで定義する。
 // 話者ごと・モードごとにどのスタイルを使うべきかという意味的な制約は、
 // スキーマではなくプロンプト文章側の指示に委ねる。
 var (
-	allowedSpeakers   = []string{"ずんだもん", "めたん"}
-	allowedStyles     = []string{"ノーマル", "あまあま", "ツンツン", "セクシー", "ささやき"}
+	allowedSpeakers   = speaker.SupportedSpeakerNames()
+	allowedStyles     = speaker.SupportedStyleNames()
 	allowedDirections = []string{
 		"解説", "疑問", "驚き", "理解", "落ち着き", "納得", "断定", "呼びかけ",
 	}
