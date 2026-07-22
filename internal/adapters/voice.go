@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,28 +16,13 @@ import (
 	"ap-voice/internal/domain"
 )
 
-// voicevoxWriter は、go-remote-io の remoteio.Writer を go-voicevox の voicevox.Writer に適合させます。
-// go-voicevox 自体はクラウドストレージ等の外部I/Oライブラリに依存しないため、
-// GCS 等への出力が必要な呼び出し側でこの変換を担う。
-type voicevoxWriter struct {
-	writer remoteio.Writer
-}
-
-func (w voicevoxWriter) Write(ctx context.Context, path string, contentReader io.Reader, opts ...voicevox.WriteOption) error {
-	cfg := voicevox.NewWriteConfig(opts...)
-	remoteOpts := make([]remoteio.WriteOption, 0, 3)
-	if cfg.ContentType != "" {
-		remoteOpts = append(remoteOpts, remoteio.WithContentType(cfg.ContentType))
-	}
-	if cfg.Inline {
-		remoteOpts = append(remoteOpts, remoteio.WithInline())
-	}
-	if cfg.CacheControl != "" {
-		remoteOpts = append(remoteOpts, remoteio.WithCacheControl(cfg.CacheControl))
-	}
-
-	return w.writer.Write(ctx, path, contentReader, remoteOpts...)
-}
+// voicevoxWavContentType と voicevoxWavCacheControl は、Engine.Run が返す WAV バイト列を
+// GCS へ保存する際に設定するメタデータです。go-voicevox はクラウドストレージに依存せず
+// バイト列を返すだけなので、こうしたHTTP/CDN寄りの既定値は呼び出し側であるここで持つ。
+const (
+	voicevoxWavContentType  = "audio/wav"
+	voicevoxWavCacheControl = "public, max-age=1800"
+)
 
 const (
 	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
@@ -59,7 +43,6 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer r
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
-		voicevoxWriter{writer: writer},
 		"",
 		true,
 		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
@@ -77,9 +60,18 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer r
 	}, nil
 }
 
-// UploadWav は、音声合成を実行します。
+// UploadWav は、音声合成を実行し、結果のWAVを指定されたURIへ保存します。
 func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
-	return a.engine.RunScript(ctx, outputURI, toVoicevoxLines(lines))
+	wavBytes, err := a.engine.Run(ctx, toVoicevoxLines(lines))
+	if err != nil {
+		return fmt.Errorf("音声合成に失敗しました: %w", err)
+	}
+
+	return a.writer.Write(ctx, outputURI, bytes.NewReader(wavBytes),
+		remoteio.WithContentType(voicevoxWavContentType),
+		remoteio.WithInline(),
+		remoteio.WithCacheControl(voicevoxWavCacheControl),
+	)
 }
 
 // UploadScript は指定されたURIの拡張子を.jsonに変更してスクリプトをアップロードします。
