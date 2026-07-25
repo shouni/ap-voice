@@ -4,16 +4,16 @@ go 1.26
 
 require (
 	github.com/shouni/clibase v1.0.4
-	github.com/shouni/go-gemini-client v1.13.4
-	github.com/shouni/go-http-kit v1.6.0
-	github.com/shouni/go-notifier v1.3.0
+	github.com/shouni/go-gemini-client v1.13.8
+	github.com/shouni/go-http-kit v1.7.2
+	github.com/shouni/go-notifier v1.3.2
 	github.com/shouni/go-prompt-kit v1.2.0
 	github.com/shouni/go-remote-io v1.6.1
 	github.com/shouni/go-utils v1.1.0
-	github.com/shouni/go-voicevox v1.5.1
-	github.com/shouni/go-web-reader v1.1.1
+	github.com/shouni/go-voicevox v1.5.2
+	github.com/shouni/go-web-reader v1.1.4
 	github.com/spf13/cobra v1.10.2
-	google.golang.org/genai v1.64.0
+	google.golang.org/genai v1.65.0
 )
 
 require (
@@ -48,7 +48,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.1 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
-	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
@@ -71,9 +71,9 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shouni/audio v1.1.1 // indirect
-	github.com/shouni/go-web-exact/v2 v2.4.0 // indirect
-	github.com/shouni/netarmor v1.1.0 // indirect
-	github.com/slack-go/slack v0.26.0 // indirect
+	github.com/shouni/go-web-exact/v2 v2.5.0 // indirect
+	github.com/shouni/netarmor v1.2.0 // indirect
+	github.com/slack-go/slack v0.27.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
