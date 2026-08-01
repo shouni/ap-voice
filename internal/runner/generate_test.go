@@ -11,7 +11,6 @@ import (
 	"ap-voice/internal/domain"
 
 	"github.com/shouni/go-gemini-client/gemini"
-	"google.golang.org/genai"
 )
 
 type mockContentReader struct {
@@ -31,11 +30,11 @@ func (m *mockPromptBuilder) Generate(mode, content string) (string, error) {
 }
 
 type mockAIClient struct {
-	generateWithPartsFunc func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error)
+	generateFunc func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
-func (m *mockAIClient) GenerateWithParts(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
-	return m.generateWithPartsFunc(ctx, modelName, parts, opts)
+func (m *mockAIClient) GenerateWithAttachments(ctx context.Context, modelName string, prompt string, _ []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error) {
+	return m.generateFunc(ctx, modelName, prompt, opts)
 }
 
 type closeTrackingReader struct {
@@ -93,13 +92,13 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					aiCalled = true
 					if modelName != req.AIModel {
 						t.Fatalf("unexpected model: %s", modelName)
 					}
-					if len(parts) != 1 || parts[0].Text != "prompt-body" {
-						t.Fatalf("unexpected parts: %+v", parts)
+					if prompt != "prompt-body" {
+						t.Fatalf("unexpected prompt: %q", prompt)
 					}
 					if opts.ResponseMIMEType != "application/json" {
 						t.Fatalf("unexpected ResponseMIMEType: %s", opts.ResponseMIMEType)
@@ -225,7 +224,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					return nil, expectedErr
 				},
 			},
@@ -252,7 +251,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateWithPartsFunc: func(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					return &gemini.Response{Text: "not json"}, nil
 				},
 			},
