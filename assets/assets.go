@@ -1,3 +1,4 @@
+// Package assets は、ナレーション生成に使うプロンプトを埋め込みリソースとして提供します。
 package assets
 
 import (
@@ -11,6 +12,8 @@ const (
 	promptPrefix = "prompt_"
 )
 
+// PromptFiles は埋め込まれたプロンプトファイル群です。
+//
 //go:embed prompts/prompt_*.md
 var PromptFiles embed.FS
 

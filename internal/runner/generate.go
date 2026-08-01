@@ -1,3 +1,4 @@
+// Package runner は、ナレーションスクリプトの生成・整形・出力を実行します。
 package runner
 
 import (

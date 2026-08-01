@@ -25,7 +25,7 @@ func Execute() {
 }
 
 // initAppPreRunE は、コマンド実行前にログ設定やクライアント初期化を行います。
-func initAppPreRunE(cmd *cobra.Command, args []string) error {
+func initAppPreRunE(_ *cobra.Command, _ []string) error {
 	opts.FillDefaults(config.LoadConfig())
 	opts.Normalize()
 

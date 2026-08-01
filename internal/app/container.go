@@ -1,3 +1,4 @@
+// Package app は、アプリケーションの依存関係を組み立てて保持する DI コンテナを提供します。
 package app
 
 import (

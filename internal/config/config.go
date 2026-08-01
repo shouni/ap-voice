@@ -1,3 +1,4 @@
+// Package config は、環境変数からアプリケーション設定を読み込み検証します。
 package config
 
 import (

@@ -9,14 +9,17 @@ import (
 // NoopNotifier は通知を破棄する Notifier 実装です。
 type NoopNotifier struct{}
 
-func (n *NoopNotifier) Notify(ctx context.Context, req domain.Request, publicURL string) error {
+// Notify は何も送信せず、常に成功を返します。
+func (n *NoopNotifier) Notify(_ context.Context, _ domain.Request, _ string) error {
 	return nil
 }
 
-func (n *NoopNotifier) NotifyFailure(ctx context.Context, req domain.Request, err error) error {
+// NotifyFailure は何も送信せず、常に成功を返します。
+func (n *NoopNotifier) NotifyFailure(_ context.Context, _ domain.Request, _ error) error {
 	return nil
 }
 
-func (n *NoopNotifier) NotifySkipped(ctx context.Context, req domain.Request, reason error) error {
+// NotifySkipped は何も送信せず、常に成功を返します。
+func (n *NoopNotifier) NotifySkipped(_ context.Context, _ domain.Request, _ error) error {
 	return nil
 }

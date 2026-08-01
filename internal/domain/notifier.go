@@ -1,3 +1,4 @@
+// Package domain は、ap-voice のフレームワーク非依存なドメイン型とインターフェースを定義します。
 package domain
 
 import "context"

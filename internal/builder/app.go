@@ -1,3 +1,4 @@
+// Package builder は、設定値から各クライアントと DI コンテナを組み立てます。
 package builder
 
 import (

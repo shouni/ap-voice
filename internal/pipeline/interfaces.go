@@ -1,3 +1,4 @@
+// Package pipeline は、ナレーション生成の各段階を実行するインターフェースを定義します。
 package pipeline
 
 import (

@@ -1,3 +1,4 @@
+// Package cmd は、ap-voice の CLI コマンドとフラグを定義します。
 package cmd
 
 import (
@@ -20,7 +21,7 @@ Webページから文章を読み込むことができます。`,
 }
 
 // generateCommand は、AIによるナレーションスクリプトを生成し、指定されたURIのクラウドストレージにWAVをアップロード
-func generateCommand(cmd *cobra.Command, args []string) error {
+func generateCommand(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	appCtx, err := builder.BuildContainer(ctx, &opts)
 	if err != nil {
