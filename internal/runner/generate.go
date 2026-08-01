@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/shouni/go-gemini-client/gemini"
-	"google.golang.org/genai"
 
 	"ap-voice/internal/config"
 	"ap-voice/internal/domain"
@@ -27,8 +26,11 @@ type ContentReader interface {
 }
 
 // StructuredGenerator は、ResponseSchema による構造化出力に対応した生成インターフェースです。
+//
+// go-gemini-client の MultimodalGenerator と同じ形にしています。genai の型を含まないため、
+// このパッケージは genai SDK を import せずに済み、モックも1メソッドで書けます。
 type StructuredGenerator interface {
-	GenerateWithParts(ctx context.Context, modelName string, parts []*genai.Part, opts gemini.GenerateOptions) (*gemini.Response, error)
+	GenerateWithAttachments(ctx context.Context, modelName string, prompt string, attachments []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
 // GenerateRunner は generate コマンドの実行に必要な依存とオプションを保持します。
@@ -68,7 +70,7 @@ func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain
 		return nil, err
 	}
 
-	generatedResponse, err := gr.aiClient.GenerateWithParts(ctx, req.AIModel, []*genai.Part{{Text: prompt}}, gemini.GenerateOptions{
+	generatedResponse, err := gr.aiClient.GenerateWithAttachments(ctx, req.AIModel, prompt, nil, gemini.GenerateOptions{
 		ResponseMIMEType: "application/json",
 		ResponseSchema:   scriptResponseSchema(),
 	})

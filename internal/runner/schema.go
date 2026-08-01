@@ -1,7 +1,7 @@
 package runner
 
 import (
-	"google.golang.org/genai"
+	"github.com/shouni/go-gemini-client/gemini"
 
 	"github.com/shouni/go-voicevox/speaker"
 )
@@ -23,32 +23,32 @@ var (
 const scriptTextMaxLength = 200
 
 // scriptResponseSchema は、ナレーションスクリプトを ScriptLine の配列として
-// 受け取るための genai.Schema を構築します。
-func scriptResponseSchema() *genai.Schema {
+// 受け取るための gemini.Schema を構築します。
+func scriptResponseSchema() *gemini.Schema {
 	maxLength := int64(scriptTextMaxLength)
 
-	return &genai.Schema{
-		Type: genai.TypeArray,
-		Items: &genai.Schema{
-			Type: genai.TypeObject,
-			Properties: map[string]*genai.Schema{
+	return &gemini.Schema{
+		Type: gemini.TypeArray,
+		Items: &gemini.Schema{
+			Type: gemini.TypeObject,
+			Properties: map[string]*gemini.Schema{
 				"speaker": {
-					Type:        genai.TypeString,
+					Type:        gemini.TypeString,
 					Enum:        allowedSpeakers,
 					Description: "発言する話者名。",
 				},
 				"style": {
-					Type:        genai.TypeString,
+					Type:        gemini.TypeString,
 					Enum:        allowedStyles,
 					Description: "VOICEVOXのスタイル名。話者ごとに許可される組み合わせはプロンプトの指示に従うこと。",
 				},
 				"direction": {
-					Type:        genai.TypeString,
+					Type:        gemini.TypeString,
 					Enum:        allowedDirections,
 					Description: "任意の演出用感情タグ。合成音声には含まれない。",
 				},
 				"text": {
-					Type:        genai.TypeString,
+					Type:        gemini.TypeString,
 					MaxLength:   &maxLength,
 					Description: "合成対象のテキスト。句読点を含めて200文字を目安に収めること。",
 				},
