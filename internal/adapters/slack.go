@@ -25,7 +25,7 @@ func NewSlackAdapter(httpClient httpkit.Requester, webhookURL string) (*SlackAda
 
 	client, err := slack.NewClient(httpClient, webhookURL)
 	if err != nil {
-		return nil, fmt.Errorf("Slackクライアントの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("slackクライアントの初期化に失敗しました: %w", err)
 	}
 
 	return &SlackAdapter{
@@ -52,7 +52,7 @@ func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, er
 	content := s.buildSlackFailureContent(req, err)
 
 	if sendErr := s.slackClient.SendTextWithHeader(ctx, title, content); sendErr != nil {
-		return fmt.Errorf("Slackへの失敗通知投稿に失敗しました: %w", sendErr)
+		return fmt.Errorf("slackへの失敗通知投稿に失敗しました: %w", sendErr)
 	}
 
 	slog.Info("パイプライン失敗通知を Slack に投稿しました。", "output_uri", req.OutputURI)
@@ -65,7 +65,7 @@ func (s *SlackAdapter) NotifySkipped(ctx context.Context, req domain.Request, re
 	content := s.buildSlackSkippedContent(req, reason)
 
 	if sendErr := s.slackClient.SendTextWithHeader(ctx, title, content); sendErr != nil {
-		return fmt.Errorf("Slackへのスキップ通知投稿に失敗しました: %w", sendErr)
+		return fmt.Errorf("slackへのスキップ通知投稿に失敗しました: %w", sendErr)
 	}
 
 	slog.Info("パイプラインスキップ通知を Slack に投稿しました。", "output_uri", req.OutputURI)

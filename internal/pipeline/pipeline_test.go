@@ -84,7 +84,7 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+				RunFunc: func(_ context.Context, got domain.Request) ([]domain.ScriptLine, error) {
 					generateCalled = true
 					if got != req {
 						t.Fatalf("unexpected request: %+v", got)
@@ -93,7 +93,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockPublishRunner{
-				RunFunc: func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+				RunFunc: func(_ context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 					publishCalled = true
 					if outputURI != req.OutputURI {
 						t.Fatalf("unexpected outputURI: %s", outputURI)
@@ -105,7 +105,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockNotifier{
-				NotifyFunc: func(ctx context.Context, got domain.Request, publicURL string) error {
+				NotifyFunc: func(_ context.Context, got domain.Request, publicURL string) error {
 					notifyCalled = true
 					if got != req {
 						t.Fatalf("unexpected request: %+v", got)
@@ -134,13 +134,13 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return nil, expectedErr
 				},
 			},
 			&MockPublishRunner{},
 			&MockNotifier{
-				NotifyFailureFunc: func(ctx context.Context, got domain.Request, err error) error {
+				NotifyFailureFunc: func(_ context.Context, got domain.Request, err error) error {
 					failureNotified = true
 					if got != req {
 						t.Fatalf("unexpected request: %+v", got)
@@ -169,13 +169,13 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return nil, nil
 				},
 			},
 			&MockPublishRunner{},
 			&MockNotifier{
-				NotifyFailureFunc: func(ctx context.Context, got domain.Request, err error) error {
+				NotifyFailureFunc: func(_ context.Context, _ domain.Request, _ error) error {
 					failureNotified = true
 					return nil
 				},
@@ -198,17 +198,17 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockGenerateRunner{
-				RunFunc: func(ctx context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return sampleLines, nil
 				},
 			},
 			&MockPublishRunner{
-				RunFunc: func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+				RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
 					return "", expectedErr
 				},
 			},
 			&MockNotifier{
-				NotifyFailureFunc: func(ctx context.Context, got domain.Request, err error) error {
+				NotifyFailureFunc: func(_ context.Context, _ domain.Request, err error) error {
 					failureNotified = true
 					if !errors.Is(err, expectedErr) {
 						t.Fatalf("unexpected error: %v", err)
@@ -247,7 +247,7 @@ func TestPipelineNotifications(t *testing.T) {
 		reason := errors.New("skip reason")
 		p := &Pipeline{
 			notifier: &MockNotifier{
-				NotifySkippedFunc: func(ctx context.Context, got domain.Request, gotReason error) error {
+				NotifySkippedFunc: func(_ context.Context, got domain.Request, gotReason error) error {
 					called = true
 					if got != req {
 						t.Fatalf("unexpected request: %+v", got)

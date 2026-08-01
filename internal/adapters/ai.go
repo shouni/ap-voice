@@ -1,3 +1,4 @@
+// Package adapters は、外部サービス（Gemini・Slack 等）との接続を実装します。
 package adapters
 
 import (
@@ -26,12 +27,13 @@ func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, erro
 
 	// GeminiAPIKeyが設定されている場合は優先して使用し、
 	// 設定されていない場合はGCPのProjectIDを使用したVertex AI経由の認証を試みる。
-	if cfg.GeminiAPIKey != "" {
+	switch {
+	case cfg.GeminiAPIKey != "":
 		clientConfig.APIKey = cfg.GeminiAPIKey
-	} else if cfg.ProjectID != "" {
+	case cfg.ProjectID != "":
 		clientConfig.ProjectID = cfg.ProjectID
 		clientConfig.LocationID = defaultLocationID
-	} else {
+	default:
 		return nil, fmt.Errorf("GEMINI_API_KEY or GCP_PROJECT_ID is not set")
 	}
 

@@ -71,7 +71,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, uri string) (io.ReadCloser, error) {
 					readerCalled = true
 					if uri != req.InputURI {
 						t.Fatalf("unexpected uri: %s", uri)
@@ -92,7 +92,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{
-				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(_ context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
 					aiCalled = true
 					if modelName != req.AIModel {
 						t.Fatalf("unexpected model: %s", modelName)
@@ -150,7 +150,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		expectedErr := errors.New("open failed")
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return nil, expectedErr
 				},
 			},
@@ -170,7 +170,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		short := strings.Repeat("a", config.MinInputContentLength-1)
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader(short)), nil
 				},
 			},
@@ -190,12 +190,12 @@ func TestGenerateRunnerRun(t *testing.T) {
 		expectedErr := errors.New("prompt failed")
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
 				},
 			},
 			&mockPromptBuilder{
-				generateFunc: func(mode, content string) (string, error) {
+				generateFunc: func(_, _ string) (string, error) {
 					return "", expectedErr
 				},
 			},
@@ -214,17 +214,17 @@ func TestGenerateRunnerRun(t *testing.T) {
 		expectedErr := errors.New("ai failed")
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
 				},
 			},
 			&mockPromptBuilder{
-				generateFunc: func(mode, content string) (string, error) {
+				generateFunc: func(_, _ string) (string, error) {
 					return "prompt-body", nil
 				},
 			},
 			&mockAIClient{
-				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(_ context.Context, _ string, _ string, _ gemini.GenerateOptions) (*gemini.Response, error) {
 					return nil, expectedErr
 				},
 			},
@@ -241,17 +241,17 @@ func TestGenerateRunnerRun(t *testing.T) {
 
 		runner := NewGenerateRunner(
 			&mockContentReader{
-				openFunc: func(ctx context.Context, uri string) (io.ReadCloser, error) {
+				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
 				},
 			},
 			&mockPromptBuilder{
-				generateFunc: func(mode, content string) (string, error) {
+				generateFunc: func(_, _ string) (string, error) {
 					return "prompt-body", nil
 				},
 			},
 			&mockAIClient{
-				generateFunc: func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error) {
+				generateFunc: func(_ context.Context, _ string, _ string, _ gemini.GenerateOptions) (*gemini.Response, error) {
 					return &gemini.Response{Text: "not json"}, nil
 				},
 			},
