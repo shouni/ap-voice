@@ -3,7 +3,7 @@ package builder
 import (
 	"testing"
 
-	"ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/config"
 )
 
 func TestRequiresGCS(t *testing.T) {

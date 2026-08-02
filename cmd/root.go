@@ -6,7 +6,7 @@ import (
 	"github.com/shouni/clibase"
 	"github.com/spf13/cobra"
 
-	"ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/config"
 )
 
 // opts は、実行のパラメータです

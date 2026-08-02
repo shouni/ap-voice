@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 var _ GenerateRunner = (*MockGenerateRunner)(nil)

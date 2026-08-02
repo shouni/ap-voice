@@ -1,4 +1,4 @@
-module ap-voice
+module github.com/shouni/ap-voice
 
 go 1.26
 
@@ -6,10 +6,10 @@ require (
 	github.com/shouni/clibase v1.0.4
 	github.com/shouni/go-gemini-client v1.16.4
 	github.com/shouni/go-http-kit v1.7.2
-	github.com/shouni/go-notifier v1.3.3
+	github.com/shouni/go-notifier v1.3.4
 	github.com/shouni/go-prompt-kit v1.4.1
 	github.com/shouni/go-remote-io v1.7.2
-	github.com/shouni/go-utils v1.3.0
+	github.com/shouni/go-utils v1.5.0
 	github.com/shouni/go-voicevox v1.6.0
 	github.com/shouni/go-web-reader v1.1.6
 	github.com/spf13/cobra v1.10.2

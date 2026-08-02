@@ -9,7 +9,7 @@ import (
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-notifier/pkg/slack"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // SlackAdapter は、Slack APIと連携し、Webhookを介してメッセージを投稿するためのアダプタを表します。

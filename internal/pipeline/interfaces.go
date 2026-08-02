@@ -4,7 +4,7 @@ package pipeline
 import (
 	"context"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 type (

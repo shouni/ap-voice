@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // notifySuccess は、処理成功の通知を送信します。

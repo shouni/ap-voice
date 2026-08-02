@@ -3,7 +3,7 @@ package adapters
 import (
 	"context"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // NoopNotifier は通知を破棄する Notifier 実装です。

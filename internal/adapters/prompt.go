@@ -5,7 +5,7 @@ import (
 
 	"github.com/shouni/go-prompt-kit/prompts"
 
-	"ap-voice/assets"
+	"github.com/shouni/ap-voice/assets"
 )
 
 // TemplateData はプロンプトのテンプレートに渡すデータ構造です。

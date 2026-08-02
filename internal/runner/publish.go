@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-remote-io/remoteio"
 )

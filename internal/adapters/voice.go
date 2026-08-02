@@ -13,7 +13,7 @@ import (
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/voicevox"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // voicevoxWavContentType と voicevoxWavCacheControl は、Engine.Run が返す WAV バイト列を

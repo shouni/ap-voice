@@ -8,7 +8,7 @@ import (
 
 	"github.com/shouni/go-gemini-client/gemini"
 
-	"ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/config"
 )
 
 const (
