@@ -11,10 +11,10 @@ import (
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 
-	"ap-voice/internal/adapters"
-	"ap-voice/internal/app"
-	"ap-voice/internal/config"
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/adapters"
+	"github.com/shouni/ap-voice/internal/app"
+	"github.com/shouni/ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // BuildContainer は外部サービスとの接続を確立し、依存関係を組み立てた app.Container を返します。

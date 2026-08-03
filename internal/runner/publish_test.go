@@ -8,7 +8,7 @@ import (
 
 	"github.com/shouni/go-remote-io/remoteio"
 
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 type mockVoice struct {

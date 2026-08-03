@@ -4,8 +4,8 @@ package app
 import (
 	"errors"
 
-	"ap-voice/internal/config"
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"

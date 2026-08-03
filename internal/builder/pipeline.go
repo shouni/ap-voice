@@ -7,10 +7,10 @@ import (
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-web-reader/pkg/reader"
 
-	"ap-voice/internal/adapters"
-	"ap-voice/internal/app"
-	"ap-voice/internal/pipeline"
-	"ap-voice/internal/runner"
+	"github.com/shouni/ap-voice/internal/adapters"
+	"github.com/shouni/ap-voice/internal/app"
+	"github.com/shouni/ap-voice/internal/pipeline"
+	"github.com/shouni/ap-voice/internal/runner"
 )
 
 // buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。

@@ -5,7 +5,7 @@ import (
 
 	"github.com/shouni/go-remote-io/remoteio"
 
-	"ap-voice/internal/app"
+	"github.com/shouni/ap-voice/internal/app"
 )
 
 // buildRemoteIO は、I/O コンポーネントを初期化します。

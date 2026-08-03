@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ap-voice/internal/builder"
-	"ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/builder"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // generateCmd はナレーションスクリプト生成のメインコマンドです。
