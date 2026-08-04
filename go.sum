@@ -139,6 +139,8 @@ github.com/shouni/go-http-kit v1.8.0 h1:CWAJ/7mJ6i2q8SAK4iHZvJOIvfQeKIKkcZb0YZVu
 github.com/shouni/go-http-kit v1.8.0/go.mod h1:EBhrRSrscGl/5J6vG4x/KuEk/W3UelBsj3gg0ycNneM=
 github.com/shouni/go-notify v1.1.1 h1:SqUwsxuf4kXni/+fNYOhlbEieFYt6Ah+xgXSd0aDOsU=
 github.com/shouni/go-notify v1.1.1/go.mod h1:aB6AEsZlQY7on8+r+YjRVeLIKb6ozb0Oh+eIiqX/PpA=
+github.com/shouni/go-notify v1.2.2 h1:2B4y8eq/Ode3mYGnKFuzS4+cvSKPuY6GQ4vMmIqPVTA=
+github.com/shouni/go-notify v1.2.2/go.mod h1:aB6AEsZlQY7on8+r+YjRVeLIKb6ozb0Oh+eIiqX/PpA=
 github.com/shouni/go-prompt-kit v1.4.1 h1:eH7ZLVFPgeRix/53/uzixHOi9MxVMp76ZIHxYgZcx2w=
 github.com/shouni/go-prompt-kit v1.4.1/go.mod h1:V7zDajbwItE1NWNG3xuzCJQKutB9GQksEyppVrsqiUE=
 github.com/shouni/go-remote-io v1.7.2 h1:Oq1MEt6o3PW/U0naoKUZcBBxUI0s0EycHvLIiJ2PrdE=
