@@ -5,13 +5,13 @@ go 1.26
 require (
 	github.com/shouni/clibase v1.0.4
 	github.com/shouni/go-gemini-client v1.16.4
-	github.com/shouni/go-http-kit v1.7.2
-	github.com/shouni/go-notifier v1.3.4
+	github.com/shouni/go-http-kit v1.8.0
+	github.com/shouni/go-notify v1.1.1
 	github.com/shouni/go-prompt-kit v1.4.1
 	github.com/shouni/go-remote-io v1.7.2
 	github.com/shouni/go-utils v1.5.0
 	github.com/shouni/go-voicevox v1.6.0
-	github.com/shouni/go-web-reader v1.1.6
+	github.com/shouni/go-web-reader v1.1.7
 	github.com/spf13/cobra v1.10.2
 )
 
@@ -70,7 +70,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shouni/audio v1.2.1 // indirect
-	github.com/shouni/go-web-exact/v2 v2.5.1 // indirect
+	github.com/shouni/go-web-exact/v2 v2.5.2 // indirect
 	github.com/shouni/netarmor v1.2.0 // indirect
 	github.com/slack-go/slack v0.27.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
