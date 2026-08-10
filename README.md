@@ -53,6 +53,7 @@
 
 | 変数名 | 必須/任意 | 説明 |
 | --- | --- | --- |
+| `GEMINI_MODEL` | 必須 | 使用する Gemini モデル名。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、どちらも未指定なら実行時にエラー**になります。 |
 | `GEMINI_API_KEY` | いずれか必須 | Google AI Studio で取得した API キー。 |
 | `GCP_PROJECT_ID` | いずれか必須 | Vertex AI 経由で Gemini を利用する場合の GCP Project ID。 |
 | `VOICEVOX_API_URL` | VOICEVOX使用時 | エンジンのURL (例: `http://localhost:50021`)。 |
@@ -72,7 +73,7 @@ ap-voice generate [flags]
 | `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
 | `--output` | `-o` | **出力先URI**。WAVを保存し、同名の `.txt` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
-| `--model` | `-g` | 使用する Gemini モデル名。 (Default: `gemini-2.5-flash`) |
+| `--model` | `-g` | 使用する Gemini モデル名。**必須**（環境変数 `GEMINI_MODEL` でも指定可。既定値なし） |
 | `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
 
 > `--input` は必須フラグです。`--output` は必須フラグではありませんが、未指定の場合は実行時エラーになります。
@@ -80,6 +81,8 @@ ap-voice generate [flags]
 ---
 
 ## 🔊 実行例
+
+以下の例は `GEMINI_MODEL` を環境変数で設定済みとしています（未設定なら `-g` でモデル名を渡してください）。
 
 ### 例 1: Web記事を対話形式で音声化し、GCSへ保存
 

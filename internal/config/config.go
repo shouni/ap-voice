@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -9,10 +10,9 @@ import (
 )
 
 // DefaultHTTPTimeout はHTTPリクエストのデフォルトタイムアウトを定義します。
-// DefaultModel はデフォルトの Google Gemini モデル名（例: "gemini-2.5-flash"）を指定します。
+// MinInputContentLength は生成に必要な入力テキストの最小長です。
 const (
 	DefaultHTTPTimeout    = 60 * time.Second
-	DefaultModel          = "gemini-2.5-flash"
 	MinInputContentLength = 10
 )
 
@@ -22,8 +22,14 @@ type Config struct {
 	OutputFile      string
 	SlackWebhookURL string
 
-	Mode         string
-	AIModel      string
+	Mode string
+
+	// AIModel は使用する Gemini モデル名です。既定値は持たず、--model か
+	// GEMINI_MODEL で必ず指定させます。モデル ID が古くなるのは Google の
+	// リリース周期であってこのリポジトリの都合ではないため、既定値を置くと
+	// 誰も気付かないまま古いモデルを使い続けることになります。
+	AIModel string
+
 	HTTPTimeout  time.Duration
 	ProjectID    string
 	GeminiAPIKey string
@@ -42,6 +48,9 @@ func (c *Config) Normalize() {
 
 // FillDefaults は、現在の設定で空のフィールドを envCfg の値で補完します。
 func (c *Config) FillDefaults(envCfg *Config) {
+	if c.AIModel == "" {
+		c.AIModel = envCfg.AIModel
+	}
 	if c.ProjectID == "" {
 		c.ProjectID = envCfg.ProjectID
 	}
@@ -53,9 +62,19 @@ func (c *Config) FillDefaults(envCfg *Config) {
 	}
 }
 
+// Validate は実行に最低限必要な設定が揃っているかを確認します。
+// フラグと環境変数の両方を見たあと（FillDefaults の後）に呼びます。
+func (c *Config) Validate() error {
+	if c.AIModel == "" {
+		return errors.New("モデル名が指定されていません。--model / -g フラグか GEMINI_MODEL 環境変数で指定してください")
+	}
+	return nil
+}
+
 // LoadConfig は環境変数から設定を読み込みます。
 func LoadConfig() *Config {
 	return &Config{
+		AIModel:         envutil.GetEnv("GEMINI_MODEL", ""),
 		ProjectID:       envutil.GetEnv("GCP_PROJECT_ID", ""),
 		GeminiAPIKey:    envutil.GetEnv("GEMINI_API_KEY", ""),
 		SlackWebhookURL: envutil.GetEnv("SLACK_WEBHOOK_URL", ""),
