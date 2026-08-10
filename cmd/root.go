@@ -29,7 +29,7 @@ func initAppPreRunE(_ *cobra.Command, _ []string) error {
 	opts.FillDefaults(config.LoadConfig())
 	opts.Normalize()
 
-	return nil
+	return opts.Validate()
 }
 
 // addAppPersistentFlags は、アプリケーション固有の永続フラグをルートコマンドに追加します。
@@ -37,7 +37,7 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().StringVarP(&opts.InputFile, "input", "i", "", "入力ソースURI。Web URL、GCS (gs://)を指定します。")
 	rootCmd.PersistentFlags().StringVarP(&opts.OutputFile, "output", "o", "", "生成されたスクリプトをVOICEVOXエンジンで合成し、指定されたパスに出力します (例: output.wav, gs://my-bucket/audio.wav)。")
 	rootCmd.PersistentFlags().StringVarP(&opts.Mode, "mode", "m", "duet", "スクリプト生成モード。'dialogue', 'solo', 'duet' などを指定します。")
-	rootCmd.PersistentFlags().StringVarP(&opts.AIModel, "model", "g", config.DefaultModel, "使用する Google Gemini モデル名 (例: gemini-2.5-flash, gemini-2.5-pro)")
+	rootCmd.PersistentFlags().StringVarP(&opts.AIModel, "model", "g", "", "使用する Google Gemini モデル名（必須。環境変数 GEMINI_MODEL でも指定できます）")
 	rootCmd.PersistentFlags().DurationVar(&opts.HTTPTimeout, "http-timeout", config.DefaultHTTPTimeout, "Webリクエストのタイムアウト時間 (例: 15s, 1m)。")
 
 	if err := rootCmd.MarkPersistentFlagRequired("input"); err != nil {

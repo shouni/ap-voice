@@ -22,12 +22,13 @@ There is no Makefile/CI config in the repo — the commands above are the whole 
 
 ### Required environment for running `generate`
 
+- `GEMINI_MODEL` — required unless `--model`/`-g` is passed. There is deliberately **no default model in the code**: model IDs age on Google's release schedule, not this repo's, so a default would keep an outdated model in use unnoticed. `Config.Validate` (called from the root `PreRunE`) fails the run when neither is set — do not reintroduce a fallback.
 - `GEMINI_API_KEY` or `GCP_PROJECT_ID` (one required — direct Gemini API key vs. Vertex AI via project ID)
 - `VOICEVOX_API_URL` — VOICEVOX engine endpoint (e.g. `http://localhost:50021`)
 - `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs
 - `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op
 
-`--input`/`-i` is a required flag; `--output`/`-o` has no default and errors at runtime if omitted.
+`--input`/`-i` is a required flag; `--output`/`-o` has no default and errors at runtime if omitted. `--model`/`-g` is required too, but via `Config.Validate` rather than cobra, so that `GEMINI_MODEL` can supply it.
 
 ## Architecture
 
