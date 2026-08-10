@@ -28,7 +28,7 @@ type ContentReader interface {
 
 // StructuredGenerator は、ResponseSchema による構造化出力に対応した生成インターフェースです。
 //
-// go-gemini-client の MultimodalGenerator と同じ形にしています。genai の型を含まないため、
+// go-gemini-client の Generator と同じ形にしています。genai の型を含まないため、
 // このパッケージは genai SDK を import せずに済み、モックも1メソッドで書けます。
 type StructuredGenerator interface {
 	GenerateWithAttachments(ctx context.Context, modelName string, prompt string, attachments []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error)
