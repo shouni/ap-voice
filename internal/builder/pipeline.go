@@ -31,7 +31,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildGenerateRunner は、GenerateRunner のインスタンスを返します。
 func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.GenerateRunner, error) {
-	promptBuilder, err := adapters.NewPromptAdapter()
+	promptBuilder, err := adapters.NewPromptAdapter(appCtx.Speakers)
 	if err != nil {
 		return nil, fmt.Errorf("プロンプトビルダーの作成に失敗しました: %w", err)
 	}
