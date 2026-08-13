@@ -1,4 +1,4 @@
-// Package assets は、プロンプトと話者一覧を埋め込みリソースとして提供します。
+// Package assets は、プロンプト・話者一覧・HTML テンプレートを埋め込みリソースとして提供します。
 package assets
 
 import (
@@ -34,6 +34,11 @@ var PromptFiles embed.FS
 //
 //go:embed speakers.json
 var SpeakersJSON []byte
+
+// Templates は Web 面の HTML テンプレートです。
+//
+//go:embed templates/*.html
+var Templates embed.FS
 
 // LoadPrompts は埋め込まれたプロンプトファイルを読み込みます。
 func LoadPrompts() (map[string]string, error) {

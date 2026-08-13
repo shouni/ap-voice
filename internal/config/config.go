@@ -17,10 +17,9 @@ const (
 	DefaultHTTPTimeout = 60 * time.Second
 	// MinInputContentLength は生成に必要な入力テキストの最小長です。
 	MinInputContentLength = 10
-	// defaultLocationID は Vertex AI のロケーションのデフォルト値です。
-	// フリートの他アプリは asia-northeast1 を渡しますが、ap-voice の Gemini 呼び出しは
-	// 従来 "global" で動いているため、既定値はそちらに合わせます。
-	defaultLocationID = "global"
+	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
+	// ap-infra はフリート全体で asia-northeast1 を使っています。
+	defaultLocationID = "asia-northeast1"
 )
 
 // ServerConfig は HTTP サーバーの設定です。
@@ -39,6 +38,10 @@ type TasksConfig struct {
 	QueueID         string `env:"CLOUD_TASKS_QUEUE_ID"`
 	WorkerURL       string `env:"WORKER_URL"`
 	TaskAudienceURL string `env:"TASK_AUDIENCE_URL"`
+	// CallerServiceAccountEmail は、投入するタスクの oidcToken.serviceAccountEmail に
+	// 指定する caller SA です。トークンを生成して付与するのは Cloud Tasks であり、
+	// このプロセスが署名するわけではありません。投入側＝ Web 面だけの設定です。
+	CallerServiceAccountEmail string `env:"TASK_CALLER_SERVICE_ACCOUNT_EMAIL"`
 	// AllowedServiceAccounts は、worker が受け付ける caller SA の許可リスト（カンマ区切り）です。
 	// 受信側が許可すべきは自分自身ではなく投入側の SA で、web と worker で実行 SA を
 	// 分けているため、worker には「他人の SA」が並びます。
@@ -54,8 +57,10 @@ type TasksConfig struct {
 // ADC（gcloud auth application-default login）が要ります。
 type GCPConfig struct {
 	ProjectID string `env:"GCP_PROJECT_ID"`
-	// 既定値は envDefault ではなく normalize で埋めます。envDefault は変数が
-	// 未設定のときしか効かず、空文字を渡された場合に素通りするためです。
+	// LocationID は **Cloud Tasks のキューが存在するリージョン**です（ap-infra は
+	// asia-northeast1 を渡します）。Vertex AI のエンドポイントとは別物で、そちらは
+	// adapters.defaultVertexLocationID に固定してあります。混同すると、キューを
+	// 見失うか Vertex が存在しないリージョンを指すかのどちらかになります。
 	LocationID string `env:"GCP_LOCATION_ID"`
 }
 
@@ -79,6 +84,16 @@ type VoicevoxConfig struct {
 	APIURL string `env:"VOICEVOX_API_URL"`
 }
 
+// AuthConfig は認証と認可の設定です。Web 面だけが読みます。
+type AuthConfig struct {
+	GoogleClientID     string   `env:"GOOGLE_CLIENT_ID"`
+	GoogleClientSecret string   `env:"GOOGLE_CLIENT_SECRET"`
+	SessionSecret      string   `env:"SESSION_SECRET"`
+	SessionEncryptKey  string   `env:"SESSION_ENCRYPT_KEY"`
+	AllowedEmails      []string `env:"ALLOWED_EMAILS"`
+	AllowedDomains     []string `env:"ALLOWED_DOMAINS"`
+}
+
 // NotificationConfig は通知の設定です。
 type NotificationConfig struct {
 	SlackWebhookURL string `env:"SLACK_WEBHOOK_URL"`
@@ -98,6 +113,7 @@ type HTTPConfig struct {
 type Config struct {
 	Server       ServerConfig
 	Tasks        TasksConfig
+	Auth         AuthConfig
 	GCP          GCPConfig
 	AI           AIConfig
 	Voicevox     VoicevoxConfig
@@ -137,7 +153,11 @@ func (c *Config) normalize() error {
 	if c.Tasks.TaskAudienceURL == "" {
 		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
 	}
+	c.Tasks.CallerServiceAccountEmail = strings.TrimSpace(c.Tasks.CallerServiceAccountEmail)
 	c.Tasks.AllowedServiceAccounts = normalizeList(c.Tasks.AllowedServiceAccounts)
+
+	c.Auth.AllowedEmails = normalizeList(c.Auth.AllowedEmails)
+	c.Auth.AllowedDomains = normalizeList(c.Auth.AllowedDomains)
 
 	c.GCP.ProjectID = strings.TrimSpace(c.GCP.ProjectID)
 	c.GCP.LocationID = strings.TrimSpace(c.GCP.LocationID)
@@ -171,6 +191,12 @@ func (c *Config) ValidateEssentialConfig() error {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
 	}
 
+	if c.Server.Role.ServesWeb() {
+		if err := c.validateWebConfig(); err != nil {
+			return err
+		}
+	}
+
 	if c.Server.Role.ServesWorker() {
 		if c.Tasks.TaskAudienceURL == "" {
 			return fmt.Errorf("TASK_AUDIENCE_URL が設定されていません。Cloud Tasks の OIDC 検証に必須です")
@@ -179,6 +205,41 @@ func (c *Config) ValidateEssentialConfig() error {
 		if len(c.Tasks.AllowedServiceAccounts) == 0 {
 			return fmt.Errorf("許可する caller SA が 1 件も指定されていません。ALLOWED_TASK_SERVICE_ACCOUNTS を設定してください")
 		}
+	}
+
+	return nil
+}
+
+// validateWebConfig は Web 面（OAuth ログインとセッション、タスク投入）に必要な設定を検証します。
+//
+// Worker 面には要求しません。担当しない面の設定まで求めると、使わない認証情報への
+// アクセス権を配ることになります。
+func (c *Config) validateWebConfig() error {
+	// タスクを投入するのは Web 面だけなので、キュー名も Web 面の要件です。
+	if c.Tasks.QueueID == "" {
+		return fmt.Errorf("CLOUD_TASKS_QUEUE_ID が設定されていません")
+	}
+	if c.Tasks.WorkerURL == "" {
+		return fmt.Errorf("WORKER_URL が設定されていません")
+	}
+	// caller SA はタスクを投入する側＝ Web 面の要件です。worker が受け付ける許可リストは
+	// ALLOWED_TASK_SERVICE_ACCOUNTS で別に指定します。
+	if c.Tasks.CallerServiceAccountEmail == "" {
+		return fmt.Errorf("TASK_CALLER_SERVICE_ACCOUNT_EMAIL が設定されていません")
+	}
+
+	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {
+		return fmt.Errorf("Google OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SECRET）が不足しています")
+	}
+	if len(c.Auth.AllowedEmails) == 0 && len(c.Auth.AllowedDomains) == 0 {
+		return fmt.Errorf("許可されたメールアドレスまたはドメインが一つも設定されていません（認可リストが空です）")
+	}
+	if c.Auth.SessionEncryptKey == "" {
+		return fmt.Errorf("SESSION_ENCRYPT_KEY が設定されていません")
+	}
+	// AES の要件。長さが違うとセッションの暗号化に失敗します。
+	if n := len(c.Auth.SessionEncryptKey); n != 16 && n != 24 && n != 32 {
+		return fmt.Errorf("SESSION_ENCRYPT_KEY の長さが不正です (%d バイト)。16, 24, 32 のいずれかにしてください", n)
 	}
 
 	return nil

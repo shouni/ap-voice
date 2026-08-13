@@ -11,9 +11,37 @@ import (
 // テストが手元でだけ通る（あるいは落ちる）ためです。
 var managedEnvKeys = []string{
 	"SERVER_ROLE", "SERVICE_URL", "PORT",
-	"CLOUD_TASKS_QUEUE_ID", "WORKER_URL", "TASK_AUDIENCE_URL", "ALLOWED_TASK_SERVICE_ACCOUNTS",
+	"CLOUD_TASKS_QUEUE_ID", "WORKER_URL", "TASK_AUDIENCE_URL",
+	"TASK_CALLER_SERVICE_ACCOUNT_EMAIL", "ALLOWED_TASK_SERVICE_ACCOUNTS",
+	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "SESSION_ENCRYPT_KEY",
+	"ALLOWED_EMAILS", "ALLOWED_DOMAINS",
 	"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS",
 	"VOICEVOX_API_URL", "SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
+}
+
+// essentialEnv は、どのロールでも要る最低限です。
+var essentialEnv = map[string]string{"GEMINI_MODELS": "model-a", "GCP_PROJECT_ID": "proj"}
+
+// webEnv は Web 面が起動できる一式を返します。overrides で個別に潰せます。
+func webEnv(overrides map[string]string) map[string]string {
+	envs := map[string]string{
+		"SERVER_ROLE":                       "web",
+		"CLOUD_TASKS_QUEUE_ID":              "voice-queue",
+		"WORKER_URL":                        "https://ap-voice-worker.example.run.app/tasks/generate",
+		"TASK_CALLER_SERVICE_ACCOUNT_EMAIL": "web-runner@example.iam.gserviceaccount.com",
+		"GOOGLE_CLIENT_ID":                  "client-id",
+		"GOOGLE_CLIENT_SECRET":              "client-secret",
+		"SESSION_SECRET":                    "session-secret",
+		"SESSION_ENCRYPT_KEY":               "0123456789abcdef",
+		"ALLOWED_EMAILS":                    "someone@example.com",
+	}
+	for k, v := range essentialEnv {
+		envs[k] = v
+	}
+	for k, v := range overrides {
+		envs[k] = v
+	}
+	return envs
 }
 
 // setEnv は managedEnvKeys を envs の内容で差し替えます。
@@ -93,14 +121,8 @@ func TestValidateEssentialConfig_ProjectIDRequired(t *testing.T) {
 		}
 	})
 
-	// Cloud Tasks の設定を要求しない web 面で確かめます。役割ごとの要件は
-	// TestValidateEssentialConfig_WorkerOnlyRequirements が別に見ています。
 	t.Run("揃っていれば通る", func(t *testing.T) {
-		cfg := loadFor(t, map[string]string{
-			"SERVER_ROLE":    "web",
-			"GEMINI_MODELS":  "model-a",
-			"GCP_PROJECT_ID": "proj",
-		})
+		cfg := loadFor(t, webEnv(nil))
 		if err := cfg.ValidateEssentialConfig(); err != nil {
 			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
 		}
@@ -196,11 +218,7 @@ func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 	})
 
 	t.Run("web は許可リストが要らない", func(t *testing.T) {
-		envs := map[string]string{"SERVER_ROLE": "web"}
-		for k, v := range base {
-			envs[k] = v
-		}
-		cfg := loadFor(t, envs)
+		cfg := loadFor(t, webEnv(nil))
 
 		if err := cfg.ValidateEssentialConfig(); err != nil {
 			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
@@ -246,4 +264,58 @@ func TestLoadConfig_ExplicitValuesWin(t *testing.T) {
 	if cfg.HTTP.Timeout != 15*time.Second {
 		t.Errorf("HTTP.Timeout = %v, want 15s", cfg.HTTP.Timeout)
 	}
+}
+
+// タスク投入と OAuth は Web 面だけの要件です。Worker 面に要求すると、
+// 使わない認証情報へのアクセス権を配ることになります。
+func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		missing string
+		wantIn  string
+	}{
+		{name: "キュー名", missing: "CLOUD_TASKS_QUEUE_ID", wantIn: "CLOUD_TASKS_QUEUE_ID"},
+		{name: "投入先", missing: "WORKER_URL", wantIn: "WORKER_URL"},
+		{name: "caller SA", missing: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL", wantIn: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL"},
+		{name: "OAuth クライアント", missing: "GOOGLE_CLIENT_ID", wantIn: "GOOGLE_CLIENT_ID"},
+		{name: "セッション鍵", missing: "SESSION_ENCRYPT_KEY", wantIn: "SESSION_ENCRYPT_KEY"},
+		{name: "許可リスト", missing: "ALLOWED_EMAILS", wantIn: "許可された"},
+	} {
+		t.Run(tt.name+"が無いと落ちる", func(t *testing.T) {
+			cfg := loadFor(t, webEnv(map[string]string{tt.missing: ""}))
+
+			err := cfg.ValidateEssentialConfig()
+			if err == nil {
+				t.Fatalf("%s の未設定が素通りした", tt.missing)
+			}
+			if !strings.Contains(err.Error(), tt.wantIn) {
+				t.Errorf("エラーに %q が無い: %v", tt.wantIn, err)
+			}
+		})
+	}
+
+	// セッション鍵は AES の要件で長さが決まっています。
+	t.Run("セッション鍵の長さが不正なら落ちる", func(t *testing.T) {
+		cfg := loadFor(t, webEnv(map[string]string{"SESSION_ENCRYPT_KEY": "みじかい"}))
+		if err := cfg.ValidateEssentialConfig(); err == nil {
+			t.Fatal("不正な長さの鍵が素通りした")
+		}
+	})
+
+	// worker 面は上記をどれも要求しません。
+	t.Run("worker は Web 面の設定を要求しない", func(t *testing.T) {
+		envs := map[string]string{
+			"SERVER_ROLE":                   "worker",
+			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
+			"ALLOWED_TASK_SERVICE_ACCOUNTS": "web-runner@example.iam.gserviceaccount.com",
+		}
+		for k, v := range essentialEnv {
+			envs[k] = v
+		}
+		cfg := loadFor(t, envs)
+
+		if err := cfg.ValidateEssentialConfig(); err != nil {
+			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
+		}
+	})
 }

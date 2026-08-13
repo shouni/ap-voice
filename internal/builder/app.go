@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/shouni/gcp-kit/tasks"
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
@@ -71,6 +72,25 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		RemoteIO:   rio,
 		HTTPClient: httpClient,
 		Notifier:   notifier,
+	}
+
+	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで
+	// 未使用の Cloud Tasks クライアントと CLOUD_TASKS_QUEUE_ID への依存を持たずに済みます。
+	if cfg.Server.Role.ServesWeb() {
+		queue, qErr := adapters.NewTaskQueueAdapter(ctx, tasks.Config{
+			ProjectID:           cfg.GCP.ProjectID,
+			LocationID:          cfg.GCP.LocationID,
+			QueueID:             cfg.Tasks.QueueID,
+			WorkerURL:           cfg.Tasks.WorkerURL,
+			ServiceAccountEmail: cfg.Tasks.CallerServiceAccountEmail,
+			Audience:            cfg.Tasks.TaskAudienceURL,
+		})
+		if qErr != nil {
+			return nil, qErr
+		}
+		appCtx.TaskQueue = queue
+		appCtx.Closers = append(appCtx.Closers, queue)
+		resources = append(resources, queue)
 	}
 
 	// パイプラインを実行するのは Worker 面だけです。Web 面は組み立てないことで、

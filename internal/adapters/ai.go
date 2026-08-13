@@ -11,8 +11,12 @@ import (
 	"github.com/shouni/ap-voice/internal/config"
 )
 
-// defaultInitialDelay リトライのデフォルトの遅延期間を指定します。
-const defaultInitialDelay = 30 * time.Second
+const (
+	// defaultVertexLocationID は Vertex AI のデフォルトロケーションです。
+	defaultVertexLocationID = "global"
+	// defaultInitialDelay リトライのデフォルトの遅延期間を指定します。
+	defaultInitialDelay = 30 * time.Second
+)
 
 // NewAIAdapter は Gemini APIと通信するためのクライアントを初期化します。
 func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, error) {
@@ -24,7 +28,7 @@ func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, erro
 	clientConfig := gemini.Config{
 		InitialDelay: defaultInitialDelay,
 		ProjectID:    cfg.GCP.ProjectID,
-		LocationID:   cfg.GCP.LocationID,
+		LocationID:   defaultVertexLocationID,
 	}
 
 	aiClient, err := gemini.NewClient(ctx, clientConfig)

@@ -50,6 +50,21 @@ func TestRouter_WorkerRouteAbsentWithoutTaskAuth(t *testing.T) {
 	}
 }
 
+// SERVER_ROLE=worker のプロセスには投入フォームがありません。
+// 非公開サービスに認証なしの画面が生えないことをここで固定します。
+func TestRouter_WebRouteAbsentWithoutWebHandler(t *testing.T) {
+	r := NewRouter(&builder.AppHandlers{}, "")
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		if got := do(t, r, method, "/"); got != http.StatusNotFound {
+			t.Errorf("%s / = %d, want %d", method, got, http.StatusNotFound)
+		}
+	}
+	if got := do(t, r, http.MethodGet, "/auth/login"); got != http.StatusNotFound {
+		t.Errorf("GET /auth/login = %d, want %d", got, http.StatusNotFound)
+	}
+}
+
 // Worker 面ではルートが登録され、かつ OIDC トークンが無いリクエストは
 // 検証ミドルウェアが弾きます。404 でないこと（=登録されていること）と、
 // 200 でないこと（=素通りしないこと）の両方を見ます。

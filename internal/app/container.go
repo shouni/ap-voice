@@ -3,6 +3,7 @@ package app
 
 import (
 	"errors"
+	"io"
 
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -20,11 +21,15 @@ type Container struct {
 	// Speakers は使用する話者・スタイルの一覧です。assets/speakers/speakers.json を
 	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
 	Speakers *speaker.Registry
+	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。
+	TaskQueue domain.TaskQueue
 	// External Adapters
 	HTTPClient httpkit.Requester
 	Notifier   domain.Notifier
 	// Business Logic
 	Pipeline domain.Pipeline
+	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。
+	Closers []io.Closer
 }
 
 // RemoteIO は外部ストレージ操作に関するコンポーネントをまとめます。
@@ -40,6 +45,14 @@ func (c *Container) Close() error {
 		return nil
 	}
 	var errs error
+	for _, closer := range c.Closers {
+		if closer == nil {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			errs = errors.Join(errs, err)
+		}
+	}
 	if c.RemoteIO != nil {
 		if err := c.RemoteIO.Close(); err != nil {
 			errs = errors.Join(errs, err)

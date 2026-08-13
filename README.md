@@ -51,7 +51,7 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | （次のコミットで投入フォームを追加） | `GET /health` |
+| `web` | 投入フォームと Cloud Tasks への投入 | `GET /health`, `GET /`, `POST /`, `/auth/*` |
 | `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `GET /health`, `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
 

@@ -49,6 +49,17 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   shipping a key would hand out access to a secret nothing reads — and Cloud Run resolves secret
   envs at startup, so an unused one cannot be dropped without a redeploy. Local runs need ADC
   (`gcloud auth application-default login`).
+- `CLOUD_TASKS_QUEUE_ID` / `WORKER_URL` / `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` and the OAuth set
+  (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `SESSION_ENCRYPT_KEY`,
+  `ALLOWED_EMAILS`/`ALLOWED_DOMAINS`) — **required for `web`/`both`**, and not read by `worker`.
+  The caller SA is the one Cloud Tasks is told to mint an OIDC token *as*; the worker's
+  `ALLOWED_TASK_SERVICE_ACCOUNTS` is the receiving end of the same pair. `SESSION_ENCRYPT_KEY`
+  must be 16/24/32 bytes (AES) and `SESSION_SECRET` at least 16 — the first is checked in
+  `validateWebConfig`, the second by `gcp-kit/auth` when the handler is built.
+- `GCP_LOCATION_ID` — the **Cloud Tasks queue region** (`asia-northeast1`), *not* the Vertex AI
+  endpoint. Vertex is pinned to `global` in `adapters.defaultVertexLocationID`, the same split
+  ap-comp and ap-story make; feeding the queue region to Vertex points it at an endpoint that
+  does not exist.
 - `TASK_AUDIENCE_URL` / `ALLOWED_TASK_SERVICE_ACCOUNTS` — **required for `worker`/`both`**, not
   read at all by `web`. The audience is the worker's own URL; the allowlist holds the *caller's*
   SA (on a split deployment that is the **web** SA, not the worker's own). Both must be present
@@ -56,8 +67,6 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_API_URL` — optional; unset falls back to `http://localhost:50021` (go-voicevox's
   default, with a warning), which is what both local runs and a Cloud Run sidecar want.
-- `GCP_LOCATION_ID` — optional, defaults to `global` (ap-voice's Gemini calls have always used
-  `global`; the rest of the fleet passes `asia-northeast1`).
 - `SERVICE_URL` / `PORT` / `HTTP_TIMEOUT` — optional; default to `http://localhost:8080`, `8080`
   and `60s`.
 - `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op.
@@ -97,6 +106,12 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
 - **Only the worker builds the pipeline.** The web role skips it, so the public service holds no
   Gemini client and never opens a VOICEVOX connection — `voicevox.New` calls `/speakers` at
   construction, so building it on the public side would make every cold start wait on the engine.
+- **The web role only enqueues.** `handlers.Handler` validates the form with the same
+  `Request.Validate` the worker runs and hands it to `domain.TaskQueue`; it never waits for
+  synthesis, which takes minutes. The form's mode list is read from the embedded prompts, so a
+  mode on screen is always a mode the worker can render. `Auth`/`Web` are a pair in
+  `AppHandlers.Validate` for the same reason `TaskAuth`/`Worker` are — a missing `Auth` would
+  publish the form unauthenticated.
 - **A new role never means touching the router.** `BuildHandlers` leaves the handlers a role does
   not serve as nil and `setupRoutes` guards each route group on nil, so `SERVER_ROLE=web` simply
   has no `/tasks/generate` — it 404s rather than existing unprotected. `AppHandlers.Validate`

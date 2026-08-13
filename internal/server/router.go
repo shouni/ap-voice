@@ -48,6 +48,27 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		return
 	}
 
+	// 認証関連 (OAuth2 フロー)。ログイン自体は保護しません。
+	if h.Auth != nil {
+		r.Route("/auth", func(r chi.Router) {
+			r.Get("/login", h.Auth.Login)
+			r.Get("/callback", h.Auth.Callback)
+			r.Get("/logout", h.Auth.Logout)
+		})
+	}
+
+	// Web 面。未認証のアクセスは Auth のミドルウェアが /auth/login へ送ります。
+	// Auth と Web は AppHandlers.Validate が対であることを保証しているので、
+	// ここでは片方の nil だけ見れば足ります。
+	r.Group(func(r chi.Router) {
+		if h.Web == nil {
+			return
+		}
+		r.Use(h.Auth.Middleware)
+		r.Get("/", h.Web.Home)
+		r.Post("/", h.Web.Enqueue)
+	})
+
 	// Cloud Tasks 専用ルート (Worker 用)。
 	// SERVER_ROLE=web のプロセスでは TaskAuth も Worker も nil になるため、
 	// このグループごと登録されず /tasks/generate は公開されません。
