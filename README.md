@@ -1,8 +1,6 @@
 # ✍️ AP Voice
 
 [![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/ap-voice)](https://golang.org/)
-[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/ap-voice)](https://github.com/shouni/ap-voice/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status](https://img.shields.io/badge/Status-WIP-orange)](#)
 
@@ -23,20 +21,46 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 
 ### 1. 環境設定
 
-| 変数名 | 必須/任意 | 説明 |
-| --- | --- | --- |
-| `SERVER_ROLE` | 必須 | `web` / `worker` / `both` のいずれか（`both` はローカル開発用）。**未設定・未知の値は起動時エラー**です。担当する面だけを組み立て、ルートもその面のものだけを登録します。 |
-| `TASK_AUDIENCE_URL` | worker で必須 | Cloud Tasks の OIDC 検証で使う audience（worker 自身の URL）。未設定なら `SERVICE_URL` を使います。 |
-| `ALLOWED_TASK_SERVICE_ACCOUNTS` | worker で必須 | 受け付ける caller SA（カンマ区切り）。**投入側**の SA を指定します（web/worker で実行 SA を分けるため、worker には「他人の SA」が並びます）。 |
-| `SERVICE_URL` | 任意 | サービスの公開 URL (Default: `http://localhost:8080`)。 |
-| `PORT` | 任意 | 待ち受けポート (Default: `8080`)。 |
-| `GEMINI_MODELS` | 必須 | 使用する Gemini モデル名。**カンマ区切りで複数指定でき、先頭が既定モデル**になります。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、未設定なら起動時にエラー**になります。 |
-| `GCP_PROJECT_ID` | 必須 | GCP Project ID。**Gemini は Vertex AI 経由でのみ呼びます**（API キー経路は持ちません）。ローカル実行では ADC が必要です。 |
-| `GCP_LOCATION_ID` | 任意 | Vertex AI のロケーション (Default: `global`)。 |
-| `VOICEVOX_API_URL` | 任意 | エンジンのURL (例: `http://localhost:50021`)。未設定なら `http://localhost:50021` を使います。フラグはありません（実行ごとではなくデプロイ先が決める値のため）。 |
-| `HTTP_TIMEOUT` | 任意 | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
-| `SLACK_WEBHOOK_URL` | 任意 | 完了・失敗の通知先。未設定なら通知は無効になります。 |
-| `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時に必要な場合 | GCS権限を持つサービスアカウントのJSONパス（ADC利用時）。 |
+`ValidateEssentialConfig` はロールごとに必要なものだけを検証します。担当しない面の設定を
+要求すると、使わない認証情報へのアクセス権を配ることになるためです。
+
+**どのロールでも必須**
+
+| 変数名 | 説明 |
+| --- | --- |
+| `SERVER_ROLE` | `web` / `worker` / `both`（`both` はローカル開発用）。**未設定・未知の値は起動時エラー**です。担当する面だけを組み立て、ルートもその面のものだけを登録します。 |
+| `GEMINI_MODELS` | Gemini モデル名。**カンマ区切りで複数指定でき、先頭が既定モデル**です。タスクの `ai_model` が空ならこれを使います。**既定値は持たず、未設定なら起動時にエラー**になります。 |
+| `GCP_PROJECT_ID` | GCP Project ID。**Gemini は Vertex AI 経由でのみ呼びます**（API キー経路は持ちません）。ローカル実行では ADC が必要です。 |
+
+**Web 面（`web` / `both`）で必須**
+
+| 変数名 | 説明 |
+| --- | --- |
+| `CLOUD_TASKS_QUEUE_ID` | 投入先のキュー名。 |
+| `WORKER_URL` | タスクの配信先（Worker 面の `/tasks/generate`）。 |
+| `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` | タスクに載せる caller SA。**トークンを発行するのは Cloud Tasks** であって、このプロセスが署名するわけではありません。 |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth のクライアント。 |
+| `SESSION_SECRET` | セッションの署名鍵。**16バイト以上**。 |
+| `SESSION_ENCRYPT_KEY` | セッションの暗号化鍵。AES の要件で **16 / 24 / 32 バイト**のいずれか。 |
+| `ALLOWED_EMAILS` / `ALLOWED_DOMAINS` | ログインを許可する相手（カンマ区切り）。**どちらも空だと起動しません。** |
+
+**Worker 面（`worker` / `both`）で必須**
+
+| 変数名 | 説明 |
+| --- | --- |
+| `TASK_AUDIENCE_URL` | OIDC 検証の audience（Worker 自身の URL）。未設定なら `SERVICE_URL` を使います。 |
+| `ALLOWED_TASK_SERVICE_ACCOUNTS` | 受け付ける caller SA（カンマ区切り）。**投入側**の SA を指定します。web/worker で実行 SA を分けるため、worker には「他人の SA」が並びます。 |
+
+**任意**
+
+| 変数名 | 説明 |
+| --- | --- |
+| `SERVICE_URL` / `PORT` | 公開 URL と待ち受けポート (Default: `http://localhost:8080` / `8080`)。 |
+| `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
+| `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
+| `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
+| `SLACK_WEBHOOK_URL` | 完了・失敗の通知先。未設定なら通知は無効になります。 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | `gs://` を読み書きする場合のみ（ADC 利用時）。 |
 
 > 環境変数が持つのは**デプロイ先が決める設定**だけです。入力元・出力先・生成モードといった
 > 実行ごとに変わる値は、タスクのペイロード（JSON）で渡します。
@@ -60,10 +84,9 @@ go run .        # SERVER_ROLE が必須
 
 #### タスクのペイロード
 
-**台本生成と音声合成は別の入口です。** 台本は成果物であると同時に入力でもあり
-（WAV の隣に `.json` で保存されます）、読みや話者を直して**合成だけやり直したい**ことが
-普通に起こるためです。1つの入口しか無いと、そのたびに Gemini の生成からやり直すことになり、
-費用と待ち時間が無駄になるうえ、直したかった1行以外まで別物になってしまいます。
+**台本生成と音声合成は別の入口です。** 台本は WAV の隣に `.json` で保存される成果物であると
+同時に、貼り戻せる入力でもあります。1行の読みを直すたびに Gemini の生成からやり直すと、
+費用と待ち時間が無駄になるうえ、直したかった1行以外まで変わってしまいます。
 
 | `command` | 何をするか | 必須フィールド |
 | --- | --- | --- |
@@ -75,7 +98,7 @@ go run .        # SERVER_ROLE が必須
 | `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `output_uri` | **出力先URI**。WAVを保存し、同名の `.json` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
-| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。`generate` のみ。`assets/prompts/<mode>.md` を置けばモードが増えます。 |
+| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<mode>.md` を置けばモードが増えます**（現在は `solo` / `dialogue` / `duet` / `promo`）。 |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
 | `script` | 台本（`ScriptLine` の配列）。`synthesize` で必須。保存された `.json` をそのまま貼り戻せます。 |
 
@@ -156,16 +179,19 @@ sequenceDiagram
 ```text
 ap-voice/
 ├── main.go                  # エントリポイント（サーバー起動）
-├── assets/                  # 埋め込みリソース（prompts/*.md・speakers.json）
+├── Dockerfile               # scratch イメージ（静的バイナリのみ）
+├── cloudbuild.yaml          # ビルドして2サービスへデプロイ
+├── assets/                  # 埋め込み（prompts/*.md・speakers.json・templates/*.html）
 └── internal/
-    ├── config/              # 環境変数の読み込みと検証（SERVER_ROLE を含む）
+    ├── config/              # 環境変数の読み込みとロール別検証
     ├── server/              # chi ルーター・グレースフルシャットダウン
+    │   └── handlers/        #   Web 面（投入フォームと実行受付）
     ├── domain/              # ドメインモデルとポート定義
     ├── app/                 # DI コンテナとリソース管理
-    ├── builder/             # 外部依存とパイプライン組み立て
+    ├── builder/             # 外部依存とハンドラーの組み立て
     ├── pipeline/            # command による分岐と publish/notify のオーケストレーション
     ├── runner/              # 台本生成・公開処理のユースケース実装
-    └── adapters/            # Gemini / Prompt / VOICEVOX の実装アダプタ
+    └── adapters/            # Gemini / VOICEVOX / Cloud Tasks / Slack / プロンプト
 ```
 
 ## 🤝 依存関係 (Dependencies)
@@ -195,4 +221,4 @@ ap-voice/
 ### 📜 ライセンス (License)
 
 * 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん（対応話者は `go-voicevox/speaker` が定義します）
-* このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
+* このリポジトリは非公開です。コードは [MIT License](https://opensource.org/licenses/MIT) の条件で提供されます。
