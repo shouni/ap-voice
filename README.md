@@ -4,46 +4,18 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/ap-voice)](https://golang.org/)
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/ap-voice)](https://github.com/shouni/ap-voice/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-Completed-brightgreen)](#)
+[![Status](https://img.shields.io/badge/Status-WIP-orange)](#)
 
-## 💡 概要 (About)— **堅牢なGo並列処理とAIを統合した次世代ドキュメント音声化パイプライン**
+## 💡 概要 (About)
 
-**AP Voice** は、独自の **Gemini API クライアントライブラリ** [`shouni/go-gemini-client`](https://github.com/shouni/go-gemini-client) と **Go言語の強力な並列制御**を融合させた、Cloud Run + Cloud Tasks 上で動くサービスです。
+**AP Voice** は、ドキュメントをナレーション音声に変換する Cloud Run + Cloud Tasks 上のサービスです。
 
-長文の技術ドキュメントやWeb記事を、AIが話者とスタイルを明確に指示した**ナレーションスクリプト**に変換し、その台本を **VOICEVOXエンジンで合成**して**最終的な音声ファイル (WAV)** を生成します。
+Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイルを指定した台本（JSON）**を生成させ、
+その台本を **VOICEVOX エンジンで並列合成**して WAV にまとめ、GCS またはローカルへ書き出します。
+台本は WAV の隣に `.json` として保存され、**そのまま貼り戻して合成だけやり直せます**。
 
-本ツールは **Google Cloud 連携に最適化された I/O 設計**を採用。入力ソースとして **Web URL**、**GCS (`gs://`)** を透過的に扱うことができ、生成された音声も**ローカルまたは GCS** へ直接保存可能です。
-
-## ✨ 主な特徴 (Features)
-
-* **✍️ AI-Driven Scripting**:
-    * AIが技術ドキュメントを解析し、最適な話者スタイルを指定したナレーションスクリプトを自動生成。
-* **🔗 Cloud Native Input**:
-    * Web URL、GCS (`gs://`) からの直接読み込みをサポート。
-* **⚡️ High-Speed Parallel Synthesis**:
-    * Go言語の並列処理と堅牢なリトライロジックを融合。VOICEVOXエンジンへの高速接続により、長文の音声合成も高い安定性と成功率で完結。
-* **🧬 Unified Audio Pipeline**:
-    * スクリプト生成からWAV出力、ストレージ保存までを一貫したパイプラインで完結。1つのイメージを Web 面と Worker 面の2サービスとしてデプロイします。
-
----
-
-## ✨ 技術スタック
-
-| 要素 | 技術 / ライブラリ | 役割 |
-| :--- | :--- | :--- |
-| **言語** | **Go (Golang)** | ツールの開発言語。並列処理と堅牢な実行環境を提供します。 |
-| **HTTP** | **chi** | ルーティングとミドルウェアに使用します。 |
-| **実行基盤** | **Cloud Run + Cloud Tasks** | Web 面がタスクを投入し、Worker 面が実行します。 |
-
----
-
-## ✨ 主な機能
-
-1. **Webからの自動抽出**: URLから記事タイトルと本文のみを整形してAIに渡します。
-2. **マルチソース入力**: Web URL、**GCS (`gs://`)** に対応。
-3. **AIスクリプト生成**: **`solo`**, **`dialogue`**, **`duet`** の3形式をサポート。
-4. **VOICEVOX並列合成**: 生成された台本を並列処理で高速にWAV化し、連結して出力。
-5. **クラウド直接出力**: 生成されたWAVを **GCS (`gs://`)** へ直接保存可能。
+1つのイメージを `SERVER_ROLE` で **Web 面（公開）と Worker 面（非公開）の2サービス**として
+デプロイします。入出力はどちらも Web URL / GCS (`gs://`) / ローカルを透過的に扱います。
 
 ---
 
@@ -191,8 +163,8 @@ ap-voice/
     ├── domain/              # ドメインモデルとポート定義
     ├── app/                 # DI コンテナとリソース管理
     ├── builder/             # 外部依存とパイプライン組み立て
-    ├── pipeline/            # Generate/Publish 実行オーケストレーション
-    ├── runner/              # 生成処理・公開処理のユースケース実装
+    ├── pipeline/            # command による分岐と publish/notify のオーケストレーション
+    ├── runner/              # 台本生成・公開処理のユースケース実装
     └── adapters/            # Gemini / Prompt / VOICEVOX の実装アダプタ
 ```
 
@@ -222,5 +194,5 @@ ap-voice/
 
 ### 📜 ライセンス (License)
 
-* デフォルトキャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん
+* 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん（対応話者は `go-voicevox/speaker` が定義します）
 * このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
