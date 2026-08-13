@@ -67,6 +67,15 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_API_URL` — optional; unset falls back to `http://localhost:50021` (go-voicevox's
   default, with a warning), which is what both local runs and a Cloud Run sidecar want.
+- `PIPELINE_TIMEOUT` / `TASK_DISPATCH_DEADLINE` — optional; default to `25m` and `30m`. These are
+  the top two rungs of the fleet's timeout ladder
+  (`PIPELINE_TIMEOUT` < dispatch deadline <= Cloud Run timeout). **The smallest wins**, so the
+  point of the app's own limit is to give up *before* Cloud Tasks does — otherwise the process is
+  SIGTERMed mid-job and the failure notification never fires, and with `max_attempts = 1` the job
+  is simply lost. `ValidateEssentialConfig` rejects a configuration that inverts them.
+  `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
+  for notifications** — reusing the timed-out one would silence the very notification the ladder
+  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`).
 - `SERVICE_URL` / `PORT` / `HTTP_TIMEOUT` — optional; default to `http://localhost:8080`, `8080`
   and `60s`.
 - `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op.

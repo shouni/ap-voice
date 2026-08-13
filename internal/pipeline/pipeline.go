@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -12,22 +13,40 @@ type Pipeline struct {
 	generator GenerateRunner
 	publisher PublishRunner
 	notifier  domain.Notifier
+	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
+	timeout time.Duration
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator GenerateRunner, publisher PublishRunner, notifier domain.Notifier) *Pipeline {
+func NewPipeline(generator GenerateRunner, publisher PublishRunner, notifier domain.Notifier, timeout time.Duration) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
 		notifier:  notifier,
+		timeout:   timeout,
 	}
 }
 
 // Execute は、すべての依存関係を構築し実行します。
 func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) {
+	// **通知は打ち切りの外側で送ります。** 下で ctx に上限を掛けるため、期限切れで
+	// 抜けたときには ctx は既にキャンセル済みです。そのまま通知に使うと通知自体が
+	// 送れず、「先に諦めて失敗を知らせる」という目的が達成できません。
+	notifyCtx := ctx
+
+	// **アプリが自分で先に諦めます。** Cloud Tasks の dispatch_deadline より内側で
+	// 打ち切ることで、下の defer が失敗通知を出す余地を残します。逆順だと
+	// Cloud Tasks が先にリクエストを打ち切り、プロセスは SIGTERM で落ちて
+	// 通知の機会を失います（キューは max_attempts = 1 なので再試行も来ません）。
+	if p.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+	}
+
 	defer func() {
 		if err != nil {
-			p.notifyFailure(ctx, req, err)
+			p.notifyFailure(notifyCtx, req, err)
 		}
 	}()
 
@@ -48,7 +67,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return err
 	}
 
-	p.notifySuccess(ctx, req, publicURL)
+	p.notifySuccess(notifyCtx, req, publicURL)
 
 	return nil
 }

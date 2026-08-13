@@ -84,6 +84,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 			WorkerURL:           cfg.Tasks.WorkerURL,
 			ServiceAccountEmail: cfg.Tasks.CallerServiceAccountEmail,
 			Audience:            cfg.Tasks.TaskAudienceURL,
+			DispatchDeadline:    cfg.Tasks.DispatchDeadline,
 		})
 		if qErr != nil {
 			return nil, qErr

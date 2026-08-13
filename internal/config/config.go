@@ -17,6 +17,13 @@ const (
 	DefaultHTTPTimeout = 60 * time.Second
 	// MinInputContentLength は生成に必要な入力テキストの最小長です。
 	MinInputContentLength = 10
+	// DefaultPipelineTimeout はジョブ 1 件の実行時間の上限のデフォルト値です。
+	// 合成はセグメント数に比例して伸びるため長めに取りますが、上限が無いと
+	// エンジンが応答しなくなった際に Cloud Run のインスタンスを占有し続けます。
+	DefaultPipelineTimeout = 25 * time.Minute
+	// DefaultDispatchDeadline は Cloud Tasks がワーカーの応答を待つ上限です。
+	// **Cloud Tasks の HTTP ターゲットは 30 分が上限**で、そこから先へは伸ばせません。
+	DefaultDispatchDeadline = 30 * time.Minute
 	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
 	// ap-infra はフリート全体で asia-northeast1 を使っています。
 	defaultLocationID = "asia-northeast1"
@@ -42,6 +49,12 @@ type TasksConfig struct {
 	// 指定する caller SA です。トークンを生成して付与するのは Cloud Tasks であり、
 	// このプロセスが署名するわけではありません。投入側＝ Web 面だけの設定です。
 	CallerServiceAccountEmail string `env:"TASK_CALLER_SERVICE_ACCOUNT_EMAIL"`
+	// DispatchDeadline は、投入するタスクに載せる応答待ちの上限です。
+	//
+	// 「待つ時間」ではなく **ワーカーの実行時間の実効上限**です。これを超えると
+	// ワーカーがまだ処理中でも Cloud Tasks が待受を打ち切ります。Cloud Run の timeout を
+	// いくら伸ばしてもこの上限は動きません。
+	DispatchDeadline time.Duration `env:"TASK_DISPATCH_DEADLINE"`
 	// AllowedServiceAccounts は、worker が受け付ける caller SA の許可リスト（カンマ区切り）です。
 	// 受信側が許可すべきは自分自身ではなく投入側の SA で、web と worker で実行 SA を
 	// 分けているため、worker には「他人の SA」が並びます。
@@ -84,6 +97,17 @@ type VoicevoxConfig struct {
 	APIURL string `env:"VOICEVOX_API_URL"`
 }
 
+// PipelineConfig はジョブ 1 件の実行に関する設定です。
+type PipelineConfig struct {
+	// Timeout はジョブ 1 件の実行時間の上限です。
+	//
+	// **三段のうち最も短く取ります。** アプリが自分で先に諦めることで、失敗を記録して
+	// Slack へ通知してから終われます。逆順にすると Cloud Tasks が先にリクエストを
+	// 打ち切り、プロセスは SIGTERM で落ちて通知の機会を失います。キューは
+	// max_attempts = 1 なので再試行も来ません。
+	Timeout time.Duration `env:"PIPELINE_TIMEOUT"`
+}
+
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。
 type AuthConfig struct {
 	GoogleClientID     string   `env:"GOOGLE_CLIENT_ID"`
@@ -113,6 +137,7 @@ type HTTPConfig struct {
 type Config struct {
 	Server       ServerConfig
 	Tasks        TasksConfig
+	Pipeline     PipelineConfig
 	Auth         AuthConfig
 	GCP          GCPConfig
 	AI           AIConfig
@@ -154,6 +179,12 @@ func (c *Config) normalize() error {
 		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
 	}
 	c.Tasks.CallerServiceAccountEmail = strings.TrimSpace(c.Tasks.CallerServiceAccountEmail)
+	if c.Tasks.DispatchDeadline <= 0 {
+		c.Tasks.DispatchDeadline = DefaultDispatchDeadline
+	}
+	if c.Pipeline.Timeout <= 0 {
+		c.Pipeline.Timeout = DefaultPipelineTimeout
+	}
 	c.Tasks.AllowedServiceAccounts = normalizeList(c.Tasks.AllowedServiceAccounts)
 
 	c.Auth.AllowedEmails = normalizeList(c.Auth.AllowedEmails)
@@ -189,6 +220,16 @@ func (c *Config) ValidateEssentialConfig() error {
 
 	if c.GCP.ProjectID == "" {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
+	}
+
+	// 三段のうち上二段の関係はどちらのロールでも検査します。web は投入時に
+	// dispatch_deadline を載せ、worker はその内側で PIPELINE_TIMEOUT を使うため、
+	// 崩れていると片方だけ直しても噛み合いません。
+	if c.Pipeline.Timeout >= c.Tasks.DispatchDeadline {
+		return fmt.Errorf(
+			"PIPELINE_TIMEOUT (%v) は TASK_DISPATCH_DEADLINE (%v) より短くしてください。"+
+				"逆だと Cloud Tasks が先に打ち切り、失敗通知を出せないままジョブが失われます",
+			c.Pipeline.Timeout, c.Tasks.DispatchDeadline)
 	}
 
 	if c.Server.Role.ServesWeb() {
