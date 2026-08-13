@@ -75,7 +75,7 @@ go run .        # SERVER_ROLE が必須
 | `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `output_uri` | **出力先URI**。WAVを保存し、同名の `.json` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
-| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。`generate` のみ。`assets/prompts/prompt_<mode>.md` を置けばモードが増えます。 |
+| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。`generate` のみ。`assets/prompts/<mode>.md` を置けばモードが増えます。 |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
 | `script` | 台本（`ScriptLine` の配列）。`synthesize` で必須。保存された `.json` をそのまま貼り戻せます。 |
 
@@ -156,7 +156,7 @@ sequenceDiagram
 ```text
 ap-voice/
 ├── main.go                  # エントリポイント（サーバー起動）
-├── assets/                  # 埋め込みプロンプト管理（prompt_*.md）
+├── assets/                  # 埋め込みリソース（prompts/*.md・speakers.json）
 └── internal/
     ├── config/              # 環境変数の読み込みと検証（SERVER_ROLE を含む）
     ├── server/              # chi ルーター・グレースフルシャットダウン

@@ -121,13 +121,16 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
   as `<output-basename>.json` via `Voice.UploadScript`. A signed URL is generated only when the
   RemoteIO's `URLSigner` is non-nil (GCS); local output never gets one and that is a soft failure
   (logged, not returned).
-- **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/prompt_*.md` and
-  `go-prompt-kit` keys them by the part after `prompt_`, so **dropping in
-  `assets/prompts/prompt_<mode>.md` adds a `mode` with no code change**. The mode string travels
-  from `Request.Mode` straight to `PromptAdapter.Generate` and is never validated against a list.
-- **`assets/speakers/speakers.json` is the speaker vocabulary**, and it is this app's file, not
+- **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
+  `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
+  `mode` with no code change** (the directory already says they are prompts, so filenames carry
+  no prefix — same as the sibling apps). The mode string travels from `Request.Mode` straight to
+  `PromptAdapter.Generate` and is never validated against a list. The one exception is `promo`,
+  named in `adapters/prompt.go` because it is the only mode whose *input type* differs: it reads
+  ap-comp's `recipe.json` and decodes it into a `music.Recipe` before rendering.
+- **`assets/speakers.json` is the speaker vocabulary**, and it is this app's file, not
   go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
-  updates produce a readable diff); refresh it with the curl in `assets/speakers.go`. `builder`
+  updates produce a readable diff); refresh it with the curl in `assets/assets.go`. `builder`
   turns it into a `speaker.Registry` before opening any connection, and the same registry feeds
   both the Gemini schema and `voicevox.New`. **Style IDs in that file are never used** — go-voicevox
   re-reads them from the live engine, since they shift between engine builds.

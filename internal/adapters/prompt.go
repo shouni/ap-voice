@@ -24,7 +24,7 @@ type TemplateData struct {
 // promoMode は、入力を楽曲レシピ（ap-comp が出力する recipe.json）として解釈する
 // 唯一のモードです。ほかのモードは入力を素のテキストとして扱います。
 //
-// モードは prompt_<mode>.md を置くだけで増える仕組みなので、ここに名前が要るのは
+// モードは prompts/<mode>.md を置くだけで増える仕組みなので、ここに名前が要るのは
 // 「入力の型が違う」モードだけです。文章を渡すモードを足すときはここを触りません。
 const promoMode = "promo"
 
