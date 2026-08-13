@@ -8,7 +8,7 @@
 
 ## 💡 概要 (About)— **堅牢なGo並列処理とAIを統合した次世代ドキュメント音声化パイプライン**
 
-**AP Voice** は、独自の **Gemini API クライアントライブラリ** [`shouni/go-gemini-client`](https://github.com/shouni/go-gemini-client) と **Go言語の強力な並列制御**を融合させたCLI ツールです。
+**AP Voice** は、独自の **Gemini API クライアントライブラリ** [`shouni/go-gemini-client`](https://github.com/shouni/go-gemini-client) と **Go言語の強力な並列制御**を融合させた、Cloud Run + Cloud Tasks 上で動くサービスです。
 
 長文の技術ドキュメントやWeb記事を、AIが話者とスタイルを明確に指示した**ナレーションスクリプト**に変換し、その台本を **VOICEVOXエンジンで合成**して**最終的な音声ファイル (WAV)** を生成します。
 
@@ -23,7 +23,7 @@
 * **⚡️ High-Speed Parallel Synthesis**:
     * Go言語の並列処理と堅牢なリトライロジックを融合。VOICEVOXエンジンへの高速接続により、長文の音声合成も高い安定性と成功率で完結。
 * **🧬 Unified Audio Pipeline**:
-    * スクリプト生成からWAV出力、ストレージ保存までを一貫したCLIで完結。複数ツールの連携作業を自動化し、ストレスフリーなドキュメント配信を実現。
+    * スクリプト生成からWAV出力、ストレージ保存までを一貫したパイプラインで完結。1つのイメージを Web 面と Worker 面の2サービスとしてデプロイします。
 
 ---
 
@@ -32,7 +32,8 @@
 | 要素 | 技術 / ライブラリ | 役割 |
 | :--- | :--- | :--- |
 | **言語** | **Go (Golang)** | ツールの開発言語。並列処理と堅牢な実行環境を提供します。 |
-| **CLI** | **Cobra** | コマンドライン引数とオプションの解析に使用します。 |
+| **HTTP** | **chi** | ルーティングとミドルウェアに使用します。 |
+| **実行基盤** | **Cloud Run + Cloud Tasks** | Web 面がタスクを投入し、Worker 面が実行します。 |
 
 ---
 
@@ -52,6 +53,11 @@
 
 | 変数名 | 必須/任意 | 説明 |
 | --- | --- | --- |
+| `SERVER_ROLE` | 必須 | `web` / `worker` / `both` のいずれか（`both` はローカル開発用）。**未設定・未知の値は起動時エラー**です。担当する面だけを組み立て、ルートもその面のものだけを登録します。 |
+| `TASK_AUDIENCE_URL` | worker で必須 | Cloud Tasks の OIDC 検証で使う audience（worker 自身の URL）。未設定なら `SERVICE_URL` を使います。 |
+| `ALLOWED_TASK_SERVICE_ACCOUNTS` | worker で必須 | 受け付ける caller SA（カンマ区切り）。**投入側**の SA を指定します（web/worker で実行 SA を分けるため、worker には「他人の SA」が並びます）。 |
+| `SERVICE_URL` | 任意 | サービスの公開 URL (Default: `http://localhost:8080`)。 |
+| `PORT` | 任意 | 待ち受けポート (Default: `8080`)。 |
 | `GEMINI_MODELS` | 必須 | 使用する Gemini モデル名。**カンマ区切りで複数指定でき、先頭が既定モデル**になります。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、未設定なら起動時にエラー**になります。 |
 | `GCP_PROJECT_ID` | 必須 | GCP Project ID。**Gemini は Vertex AI 経由でのみ呼びます**（API キー経路は持ちません）。ローカル実行では ADC が必要です。 |
 | `GCP_LOCATION_ID` | 任意 | Vertex AI のロケーション (Default: `global`)。 |
@@ -61,51 +67,40 @@
 | `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時に必要な場合 | GCS権限を持つサービスアカウントのJSONパス（ADC利用時）。 |
 
 > 環境変数が持つのは**デプロイ先が決める設定**だけです。入力元・出力先・生成モードといった
-> 実行ごとに変わる値はフラグで渡します。
+> 実行ごとに変わる値は、タスクのペイロード（JSON）で渡します。
 
-### 2. 生成・音声化コマンド
+### 2. 起動
 
 ```bash
-ap-voice generate [flags]
-
+go run .        # SERVER_ROLE が必須
 ```
 
-#### フラグ一覧（入力ソースはいずれか一つを指定）
+`SERVER_ROLE` が担う面だけを組み立てます。
 
-| フラグ | 短縮形 | 説明 |
+| ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
-| `--output` | `-o` | **出力先URI**。WAVを保存し、同名の `.txt` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
-| `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
-| `--model` | `-g` | 使用する Gemini モデル名。未指定なら `GEMINI_MODELS` の先頭を使います。 |
+| `web` | （次のコミットで投入フォームを追加） | `GET /health` |
+| `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `GET /health`, `POST /tasks/generate` |
+| `both` | 両方（ローカル開発用） | 上記すべて |
 
-> `--input` は必須フラグです。`--output` は必須フラグではありませんが、未指定の場合は実行時エラーになります。
+`POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
+`SERVER_ROLE=web` のプロセスでは**ルートごと登録されない**ため 404 です。
 
----
+#### タスクのペイロード
 
-## 🔊 実行例
+| フィールド | 説明 |
+| --- | --- |
+| `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
+| `output_uri` | **出力先URI**。WAVを保存し、同名の `.json` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
+| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。 |
+| `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。 |
 
-以下の例は `GEMINI_MODELS` と `GCP_PROJECT_ID` を環境変数で設定済みとしています（モデルを切り替えたいときは `-g` で渡してください）。
-
-### 例 1: Web記事を対話形式で音声化し、GCSへ保存
-
-```bash
-# Webから入力し、生成された音声をGCSへ直接アップロード
-ap-voice generate \
-    --input "https://example.com/tech-news" \
-    --output "gs://my-bucket/audio/tech-news.wav" \
-    --mode dialogue
-
-```
-
-### 例 2: GCS上の文書を読み込み、モノローグ化してローカルに保存
-
-```bash
-ap-voice generate \
-    --input "gs://my-source-bucket/docs/article.md" \
-    --output "article.wav" \
-    --mode solo
-
+```json
+{
+  "input_uri": "https://example.com/tech-news",
+  "output_uri": "gs://my-bucket/audio/tech-news.wav",
+  "mode": "dialogue"
+}
 ```
 
 ---
@@ -115,9 +110,9 @@ ap-voice generate \
 ```mermaid
 sequenceDiagram
     autonumber
-    participant User as User
-    participant CLI as ap-voice CLI (cmd)
-    participant Builder as builder.BuildContainer
+    participant Caller as 投入元
+    participant Tasks as Cloud Tasks
+    participant Worker as gcp-kit/worker Handler
     participant Notifier as domain.Notifier (Slack/Noop)
     participant Pipeline as pipeline.Pipeline
     participant GenRunner as runner.GenerateRunner
@@ -129,10 +124,11 @@ sequenceDiagram
     participant Store as go-remote-io (Local/GCS)
     participant Signer as remoteio.URLSigner
 
-    User->>CLI: ap-voice generate --input --output --mode
-    CLI->>Builder: BuildContainer(ctx, config)
-    Builder-->>CLI: Container(Pipeline, HTTP, RemoteIO, Notifier)
-    CLI->>Pipeline: Execute(ctx, req)
+    Caller->>Tasks: enqueue(domain.Request)
+    Tasks->>Worker: POST /tasks/generate (OIDC)
+    Note over Worker: 起動時に BuildContainer 済み
+
+    Worker->>Pipeline: Execute(ctx, req)
     Pipeline->>GenRunner: Run(ctx, req)
     GenRunner->>Reader: Open(inputURI)
     Reader-->>GenRunner: source content
@@ -147,7 +143,7 @@ sequenceDiagram
     Voice->>Store: write wav (local/gs://)
     Store-->>PubRunner: ok
     PubRunner->>Voice: UploadScript(outputURI, script)
-    Voice->>Store: write txt (local/gs://)
+    Voice->>Store: write json (local/gs://)
     Store-->>PubRunner: ok
     opt signer is configured
         PubRunner->>Signer: GenerateSignedURL(outputURI, GET, 1h)
@@ -156,19 +152,19 @@ sequenceDiagram
     PubRunner-->>Pipeline: publicURL / ""
     Pipeline->>Notifier: Notify(req, publicURL)
     Notifier-->>Pipeline: ok
-    Pipeline-->>CLI: ok
-    CLI-->>User: 完了（必要なら通知送信）
+    Pipeline-->>Worker: ok
+    Worker-->>Tasks: 2xx
 ```
 
 ## 🌳 プロジェクト構成ツリー図
 
 ```text
 ap-voice/
-├── main.go                  # エントリポイント（CLI 起動）
-├── cmd/                     # CLI コマンド定義（root / generate）
+├── main.go                  # エントリポイント（サーバー起動）
 ├── assets/                  # 埋め込みプロンプト管理（prompt_*.md）
 └── internal/
-    ├── config/              # 設定読み込みとデフォルト値管理
+    ├── config/              # 環境変数の読み込みと検証（SERVER_ROLE を含む）
+    ├── server/              # chi ルーター・グレースフルシャットダウン
     ├── domain/              # ドメインモデルとポート定義
     ├── app/                 # DI コンテナとリソース管理
     ├── builder/             # 外部依存とパイプライン組み立て
@@ -181,19 +177,20 @@ ap-voice/
 
 主要な direct dependency（`go.mod`）:
 
-* **[spf13/cobra](https://github.com/spf13/cobra)**: CLI コマンド/フラグ定義
-* **[shouni/clibase](https://github.com/shouni/clibase)**: CLI 実行基盤（共通初期化・実行ラッパー）
+* **[go-chi/chi](https://github.com/go-chi/chi)**: HTTP ルーティング
+* **[shouni/gcp-kit](https://github.com/shouni/gcp-kit)**: SERVER_ROLE の語彙・Cloud Tasks ハンドラ・OIDC 検証・Cloud Logging
 * **[shouni/go-gemini-client](https://github.com/shouni/go-gemini-client)**: Gemini / Vertex AI への生成リクエスト
 * **[shouni/go-voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンによる音声合成
 * **[shouni/go-web-reader](https://github.com/shouni/go-web-reader)**: `https://` / `gs://` 入力の読み込み
 * **[shouni/go-remote-io](https://github.com/shouni/go-remote-io)**: ローカル/GCS への書き込み抽象化
 * **[shouni/go-http-kit](https://github.com/shouni/go-http-kit)**: HTTP クライアント（タイムアウト/リトライ）
 * **[shouni/go-prompt-kit](https://github.com/shouni/go-prompt-kit)**: プロンプトテンプレートのロードとレンダリング
-* **[shouni/go-utils](https://github.com/shouni/go-utils)**: 環境変数読み込みなどのユーティリティ
+* **[caarlos0/env](https://github.com/caarlos0/env)**: 環境変数から設定構造体への読み込み
+* **[shouni/go-utils](https://github.com/shouni/go-utils)**: ログなどのユーティリティ
 
 実行時の外部依存:
 
-* **Google Gemini API または Vertex AI**: スクリプト生成
+* **Vertex AI**: スクリプト生成
 * **VOICEVOX Engine** (`VOICEVOX_API_URL`): 音声合成
 * **Google Cloud Storage**（任意）: `gs://` 入出力利用時
 

@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/shouni/gcp-kit/serverrole"
 )
 
 const (
+	// DefaultShutdownGrace はサーバー停止時の猶予時間のデフォルト値です。
+	DefaultShutdownGrace = 15 * time.Second
 	// DefaultHTTPTimeout は外部 HTTP 通信のタイムアウトのデフォルト値です。
 	DefaultHTTPTimeout = 60 * time.Second
 	// MinInputContentLength は生成に必要な入力テキストの最小長です。
@@ -19,6 +22,29 @@ const (
 	// 従来 "global" で動いているため、既定値はそちらに合わせます。
 	defaultLocationID = "global"
 )
+
+// ServerConfig は HTTP サーバーの設定です。
+type ServerConfig struct {
+	ServiceURL string `env:"SERVICE_URL" envDefault:"http://localhost:8080"`
+	Port       string `env:"PORT" envDefault:"8080"`
+	// Role はこのプロセスが担う役割です。明示が必須で、未設定は起動時エラーになります。
+	Role            serverrole.Role `env:"SERVER_ROLE"`
+	ShutdownTimeout time.Duration
+}
+
+// TasksConfig は Cloud Tasks キューの設定と、受信時の OIDC 検証の設定です。
+// Cloud Tasks に閉じた設定であり、GCP 一般の設定でも HTTP サーバーの設定でもないため、
+// 兄弟アプリと同じくここに集約します。
+type TasksConfig struct {
+	QueueID         string `env:"CLOUD_TASKS_QUEUE_ID"`
+	WorkerURL       string `env:"WORKER_URL"`
+	TaskAudienceURL string `env:"TASK_AUDIENCE_URL"`
+	// AllowedServiceAccounts は、worker が受け付ける caller SA の許可リスト（カンマ区切り）です。
+	// 受信側が許可すべきは自分自身ではなく投入側の SA で、web と worker で実行 SA を
+	// 分けているため、worker には「他人の SA」が並びます。
+	// 空だと検証器が fail-closed になるため、worker では必須です。
+	AllowedServiceAccounts []string `env:"ALLOWED_TASK_SERVICE_ACCOUNTS"`
+}
 
 // GCPConfig は Google Cloud Platform の設定です。
 //
@@ -70,6 +96,8 @@ type HTTPConfig struct {
 // 実行ごとに変わる値は domain.Request が持ちます。両者を 1 つの構造体へ混ぜると、
 // 実行ごとの値が環境変数から来るように見えてしまいます。
 type Config struct {
+	Server       ServerConfig
+	Tasks        TasksConfig
 	GCP          GCPConfig
 	AI           AIConfig
 	Voicevox     VoicevoxConfig
@@ -84,13 +112,33 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("環境変数の読み込みに失敗しました: %w", err)
 	}
 
-	cfg.normalize()
+	if err := cfg.normalize(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
 
 // normalize は読み込んだ値の表記ゆれを整えます。
-func (c *Config) normalize() {
+func (c *Config) normalize() error {
+	// 環境変数名はアプリ側の関心事なので、キットのエラーへここで文脈を足します。
+	role, err := serverrole.Parse(string(c.Server.Role))
+	if err != nil {
+		return fmt.Errorf("SERVER_ROLE: %w", err)
+	}
+	c.Server.Role = role
+
+	c.Server.ServiceURL = strings.TrimSpace(c.Server.ServiceURL)
+	c.Server.ShutdownTimeout = DefaultShutdownGrace
+
+	c.Tasks.QueueID = strings.TrimSpace(c.Tasks.QueueID)
+	c.Tasks.WorkerURL = strings.TrimSpace(c.Tasks.WorkerURL)
+	c.Tasks.TaskAudienceURL = strings.TrimSpace(c.Tasks.TaskAudienceURL)
+	if c.Tasks.TaskAudienceURL == "" {
+		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
+	}
+	c.Tasks.AllowedServiceAccounts = normalizeList(c.Tasks.AllowedServiceAccounts)
+
 	c.GCP.ProjectID = strings.TrimSpace(c.GCP.ProjectID)
 	c.GCP.LocationID = strings.TrimSpace(c.GCP.LocationID)
 	if c.GCP.LocationID == "" {
@@ -107,9 +155,13 @@ func (c *Config) normalize() {
 	if c.HTTP.Timeout <= 0 {
 		c.HTTP.Timeout = DefaultHTTPTimeout
 	}
+
+	return nil
 }
 
 // ValidateEssentialConfig はアプリケーション実行に不可欠な設定を検証します。
+// 検証範囲は SERVER_ROLE に従います。担当しない面の設定まで要求すると、
+// 使わない権限や認証情報を配ることになるためです。
 func (c *Config) ValidateEssentialConfig() error {
 	if len(c.AI.GeminiModels) == 0 {
 		return fmt.Errorf("GEMINI_MODELS が設定されていません（カンマ区切りで複数指定すると、先頭が既定モデルになります）")
@@ -117,6 +169,16 @@ func (c *Config) ValidateEssentialConfig() error {
 
 	if c.GCP.ProjectID == "" {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
+	}
+
+	if c.Server.Role.ServesWorker() {
+		if c.Tasks.TaskAudienceURL == "" {
+			return fmt.Errorf("TASK_AUDIENCE_URL が設定されていません。Cloud Tasks の OIDC 検証に必須です")
+		}
+		// 空だと検証器が fail-closed になり、全タスクが失敗し続けます。
+		if len(c.Tasks.AllowedServiceAccounts) == 0 {
+			return fmt.Errorf("許可する caller SA が 1 件も指定されていません。ALLOWED_TASK_SERVICE_ACCOUNTS を設定してください")
+		}
 	}
 
 	return nil

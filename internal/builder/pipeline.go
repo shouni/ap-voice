@@ -54,6 +54,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 		contentReader,
 		promptBuilder,
 		aiClient,
+		appCtx.Config.AI.GeminiModel,
 	), nil
 }
 

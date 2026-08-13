@@ -6,18 +6,35 @@ import (
 	"time"
 )
 
+// managedEnvKeys は loadFor が面倒を見る環境変数です。
+// 渡されなかったものも必ず空にします。実行環境に値が残っていると、
+// テストが手元でだけ通る（あるいは落ちる）ためです。
+var managedEnvKeys = []string{
+	"SERVER_ROLE", "SERVICE_URL", "PORT",
+	"CLOUD_TASKS_QUEUE_ID", "WORKER_URL", "TASK_AUDIENCE_URL", "ALLOWED_TASK_SERVICE_ACCOUNTS",
+	"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS",
+	"VOICEVOX_API_URL", "SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
+}
+
+// setEnv は managedEnvKeys を envs の内容で差し替えます。
+// SERVER_ROLE は指定が無ければ both で埋めます。役割の検証そのものを見るテスト以外は
+// 役割に関心が無く、全ケースに書くと本題が埋もれるためです。
+func setEnv(t *testing.T, envs map[string]string) {
+	t.Helper()
+
+	for _, key := range managedEnvKeys {
+		t.Setenv(key, envs[key])
+	}
+	if envs["SERVER_ROLE"] == "" {
+		t.Setenv("SERVER_ROLE", "both")
+	}
+}
+
 // loadFor は環境変数を差し替えたうえで LoadConfig を呼びます。
-// 差し替えたキーは、渡されなかったものも含めて必ず空にします。
-// 実行環境に値が残っていると、テストが手元でだけ通る（あるいは落ちる）ためです。
 func loadFor(t *testing.T, envs map[string]string) *Config {
 	t.Helper()
 
-	for _, key := range []string{
-		"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS",
-		"VOICEVOX_API_URL", "SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
-	} {
-		t.Setenv(key, envs[key])
-	}
+	setEnv(t, envs)
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -76,8 +93,14 @@ func TestValidateEssentialConfig_ProjectIDRequired(t *testing.T) {
 		}
 	})
 
+	// Cloud Tasks の設定を要求しない web 面で確かめます。役割ごとの要件は
+	// TestValidateEssentialConfig_WorkerOnlyRequirements が別に見ています。
 	t.Run("揃っていれば通る", func(t *testing.T) {
-		cfg := loadFor(t, map[string]string{"GEMINI_MODELS": "model-a", "GCP_PROJECT_ID": "proj"})
+		cfg := loadFor(t, map[string]string{
+			"SERVER_ROLE":    "web",
+			"GEMINI_MODELS":  "model-a",
+			"GCP_PROJECT_ID": "proj",
+		})
 		if err := cfg.ValidateEssentialConfig(); err != nil {
 			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
 		}
@@ -112,6 +135,101 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	}
 	if cfg.HTTP.Timeout != DefaultHTTPTimeout {
 		t.Errorf("HTTP.Timeout = %v, want %v", cfg.HTTP.Timeout, DefaultHTTPTimeout)
+	}
+}
+
+// SERVER_ROLE は明示が必須です。未設定を both とみなすと、環境変数が1つ欠けただけで
+// 公開している Web 面に Worker のルートが復活します。
+func TestLoadConfig_ServerRoleRequired(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		raw  string
+		ok   bool
+	}{
+		{name: "未設定は落ちる", raw: "", ok: false},
+		{name: "未知の値は落ちる", raw: "batch", ok: false},
+		{name: "web", raw: "web", ok: true},
+		{name: "worker", raw: "worker", ok: true},
+		{name: "both", raw: "both", ok: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, key := range managedEnvKeys {
+				t.Setenv(key, "")
+			}
+			t.Setenv("SERVER_ROLE", tt.raw)
+
+			_, err := LoadConfig()
+			if tt.ok && err != nil {
+				t.Fatalf("LoadConfig() = %v, want nil", err)
+			}
+			if !tt.ok {
+				if err == nil {
+					t.Fatal("不正な SERVER_ROLE が素通りした")
+				}
+				if !strings.Contains(err.Error(), "SERVER_ROLE") {
+					t.Errorf("エラーに環境変数名が無い: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Cloud Tasks の検証設定は Worker 面だけの要件です。Web 面に要求すると、
+// 担当しない面の設定まで配ることになります。
+func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
+	base := map[string]string{"GEMINI_MODELS": "model-a", "GCP_PROJECT_ID": "proj"}
+
+	t.Run("worker は許可リストが要る", func(t *testing.T) {
+		envs := map[string]string{"SERVER_ROLE": "worker"}
+		for k, v := range base {
+			envs[k] = v
+		}
+		cfg := loadFor(t, envs)
+
+		err := cfg.ValidateEssentialConfig()
+		if err == nil {
+			t.Fatal("許可リストの未設定が素通りした")
+		}
+		if !strings.Contains(err.Error(), "ALLOWED_TASK_SERVICE_ACCOUNTS") {
+			t.Errorf("エラーに指定方法が無い: %v", err)
+		}
+	})
+
+	t.Run("web は許可リストが要らない", func(t *testing.T) {
+		envs := map[string]string{"SERVER_ROLE": "web"}
+		for k, v := range base {
+			envs[k] = v
+		}
+		cfg := loadFor(t, envs)
+
+		if err := cfg.ValidateEssentialConfig(); err != nil {
+			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
+		}
+	})
+
+	t.Run("worker も揃っていれば通る", func(t *testing.T) {
+		envs := map[string]string{
+			"SERVER_ROLE":                   "worker",
+			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
+			"ALLOWED_TASK_SERVICE_ACCOUNTS": "web-runner@example.iam.gserviceaccount.com",
+		}
+		for k, v := range base {
+			envs[k] = v
+		}
+		cfg := loadFor(t, envs)
+
+		if err := cfg.ValidateEssentialConfig(); err != nil {
+			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
+		}
+	})
+}
+
+// TASK_AUDIENCE_URL の未指定は SERVICE_URL で埋めます。
+func TestLoadConfig_TaskAudienceFallsBackToServiceURL(t *testing.T) {
+	cfg := loadFor(t, map[string]string{"SERVICE_URL": "https://ap-voice.example.run.app"})
+
+	if cfg.Tasks.TaskAudienceURL != "https://ap-voice.example.run.app" {
+		t.Fatalf("TaskAudienceURL = %q, want the SERVICE_URL value", cfg.Tasks.TaskAudienceURL)
 	}
 }
 

@@ -13,6 +13,9 @@ import (
 	"github.com/shouni/go-gemini-client/gemini"
 )
 
+// defaultTestModel は GEMINI_MODELS の先頭に相当する既定モデルです。
+const defaultTestModel = "default-model"
+
 type mockContentReader struct {
 	openFunc func(ctx context.Context, uri string) (io.ReadCloser, error)
 }
@@ -109,6 +112,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 					return &gemini.Response{Text: `[{"speaker":"ずんだもん","style":"ノーマル","direction":"呼びかけ","text":"こんにちはなのだ"}]`}, nil
 				},
 			},
+			defaultTestModel,
 		)
 
 		got, err := runner.Run(ctx, req)
@@ -136,6 +140,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			&mockContentReader{},
 			&mockPromptBuilder{},
 			&mockAIClient{},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, domain.Request{})
@@ -156,6 +161,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			},
 			&mockPromptBuilder{},
 			&mockAIClient{},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -176,6 +182,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			},
 			&mockPromptBuilder{},
 			&mockAIClient{},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -200,6 +207,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			&mockAIClient{},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -228,6 +236,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 					return nil, expectedErr
 				},
 			},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -255,6 +264,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 					return &gemini.Response{Text: "not json"}, nil
 				},
 			},
+			defaultTestModel,
 		)
 
 		_, err := runner.Run(ctx, req)

@@ -62,11 +62,17 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		Notifier:   notifier,
 	}
 
-	p, err := buildPipeline(ctx, appCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build pipeline: %w", err)
+	// パイプラインを実行するのは Worker 面だけです。Web 面は組み立てないことで、
+	// 未使用の Gemini クライアントと VOICEVOX エンジンへの接続を持たずに済みます。
+	// VOICEVOX の初期化は /speakers を叩くため、公開側で組むと起動のたびに
+	// エンジンのコールドスタートを踏むことにもなります。
+	if cfg.Server.Role.ServesWorker() {
+		p, err := buildPipeline(ctx, appCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build pipeline: %w", err)
+		}
+		appCtx.Pipeline = p
 	}
-	appCtx.Pipeline = p
 
 	return appCtx, nil
 }
