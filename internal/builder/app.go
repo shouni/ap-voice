@@ -37,7 +37,8 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}
 
 	resources = append(resources, storage)
-	rio, err := buildRemoteIO(storage)
+
+	rio, err := remoteio.NewBundle(storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}

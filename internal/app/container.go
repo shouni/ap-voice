@@ -24,22 +24,11 @@ type Container struct {
 }
 
 // RemoteIO は外部ストレージ操作に関するコンポーネントをまとめます。
-type RemoteIO struct {
-	Factory remoteio.IOFactory
-	Writer  remoteio.Writer
-	Signer  remoteio.URLSigner
-}
-
-// Close は、RemoteIO が保持する Factory などの内部リソースを解放します。
-func (r *RemoteIO) Close() error {
-	if r == nil {
-		return nil
-	}
-	if r.Factory != nil {
-		return r.Factory.Close()
-	}
-	return nil
-}
+//
+// 実体は go-remote-io が持つ remoteio.Bundle です。同じ構造体と組み立て関数を
+// 各アプリが個別に持っていたものをライブラリへ引き取ったため、ここはアプリ内での
+// 呼び名を保つための別名だけになっています（rio.Writer などの参照はそのまま使えます）。
+type RemoteIO = remoteio.Bundle
 
 // Close は、Container が保持するすべての外部接続リソースを安全に解放します。
 func (c *Container) Close() error {
