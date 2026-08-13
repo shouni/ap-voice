@@ -88,18 +88,41 @@ go run .        # SERVER_ROLE が必須
 
 #### タスクのペイロード
 
+**台本生成と音声合成は別の入口です。** 台本は成果物であると同時に入力でもあり
+（WAV の隣に `.json` で保存されます）、読みや話者を直して**合成だけやり直したい**ことが
+普通に起こるためです。1つの入口しか無いと、そのたびに Gemini の生成からやり直すことになり、
+費用と待ち時間が無駄になるうえ、直したかった1行以外まで別物になってしまいます。
+
+| `command` | 何をするか | 必須フィールド |
+| --- | --- | --- |
+| `generate` | 入力ソースから台本を作り、そのまま音声まで作る | `input_uri`, `output_uri` |
+| `synthesize` | **渡された台本から音声だけ作る**（Gemini を呼ばない） | `script`, `output_uri` |
+
 | フィールド | 説明 |
 | --- | --- |
-| `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
+| `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
+| `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `output_uri` | **出力先URI**。WAVを保存し、同名の `.json` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
-| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。 |
-| `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。 |
+| `mode` | 形式: **`solo`**, **`dialogue`**, **`duet`**。`generate` のみ。 |
+| `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
+| `script` | 台本（`ScriptLine` の配列）。`synthesize` で必須。保存された `.json` をそのまま貼り戻せます。 |
 
 ```json
 {
+  "command": "generate",
   "input_uri": "https://example.com/tech-news",
   "output_uri": "gs://my-bucket/audio/tech-news.wav",
   "mode": "dialogue"
+}
+```
+
+```json
+{
+  "command": "synthesize",
+  "output_uri": "gs://my-bucket/audio/tech-news.wav",
+  "script": [
+    { "speaker": "ずんだもん", "style": "ノーマル", "text": "直した台本なのだ" }
+  ]
 }
 ```
 

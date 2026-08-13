@@ -31,16 +31,16 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		}
 	}()
 
+	if err = req.Validate(); err != nil {
+		return err
+	}
+
 	var lines []domain.ScriptLine
-	lines, err = p.generator.Run(ctx, req)
+	lines, err = p.resolveScript(ctx, req)
 	if err != nil {
-		err = fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
 		return err
 	}
-	if len(lines) == 0 {
-		err = fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
-		return err
-	}
+
 	var publicURL string
 	publicURL, err = p.publisher.Run(ctx, req.OutputURI, lines)
 	if err != nil {
@@ -51,4 +51,25 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	p.notifySuccess(ctx, req, publicURL)
 
 	return nil
+}
+
+// resolveScript は、Command に応じて合成対象の台本を用意します。
+//
+// generate は入力ソースから作り、synthesize は渡されたものをそのまま使います。
+// どちらの経路でも、以降の公開処理は同じ台本を受け取ります。
+func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+	if req.Command == domain.CommandSynthesize {
+		// Validate が空でないことを確かめているため、ここでの再検査は要りません。
+		return req.Script, nil
+	}
+
+	lines, err := p.generator.Run(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
+	}
+
+	return lines, nil
 }

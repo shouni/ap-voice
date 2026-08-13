@@ -94,7 +94,10 @@ func commonMetadata(req domain.Request) *notify.Body {
 // writeCommonMetadata は、各通知で共通して表示するメタデータを本文へ追記します。
 // 値が空の項目は notify.Body が行ごと省きます。
 func writeCommonMetadata(body *notify.Body, req domain.Request) *notify.Body {
+	// synthesize は入力URI・モード・モデルを持たないため、通知に処理名が無いと
+	// 「項目が欠けている」のか「台本から合成しただけ」なのか読み分けられません。
 	return body.
+		Code("処理", string(req.Command)).
 		Code("入力URI", req.InputURI).
 		Code("出力URI", req.OutputURI).
 		Code("モード", req.Mode).
