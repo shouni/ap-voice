@@ -77,7 +77,7 @@ main.go         logger setup -> config.LoadConfig -> ValidateEssentialConfig -> 
             -> internal/runner     GenerateRunner (script gen) and PublishRunner (voice + upload)
                  -> internal/adapters   wrappers over external libraries (Gemini, VOICEVOX, Slack, prompts)
        -> internal/domain      ports (Pipeline, Voice, Notifier) and models (Request, ScriptLine)
-assets/         embedded prompt templates loaded via go:embed
+assets/         embedded prompt templates and the speaker roster (go:embed)
 ```
 
 ### Key invariants
@@ -125,16 +125,24 @@ assets/         embedded prompt templates loaded via go:embed
   `go-prompt-kit` keys them by the part after `prompt_`, so **dropping in
   `assets/prompts/prompt_<mode>.md` adds a `mode` with no code change**. The mode string travels
   from `Request.Mode` straight to `PromptAdapter.Generate` and is never validated against a list.
-- **AI output is schema-constrained, and the speaker vocabulary is not owned here.**
-  `GenerateRunner` calls Gemini with `ResponseMIMEType: application/json` and an explicit
-  `ResponseSchema` (`internal/runner/schema.go`), then unmarshals straight into
-  `[]domain.ScriptLine`. `allowedSpeakers`/`allowedStyles` are **derived at init from
-  `go-voicevox/speaker`** (`SupportedSpeakerNames()` / `SupportedStyleNames()`) precisely so the
-  enums cannot drift from what the engine will accept — **adding a speaker or style is a change to
-  go-voicevox, not to this file**. Only `allowedDirections` is defined locally, because
-  `direction` is a video-production tag with no VOICEVOX counterpart. Which speaker/style pairing
-  suits which mode is left to the prompt text, not the schema. If you change `ScriptLine`'s
-  fields, update the schema in lockstep.
+- **`assets/speakers/speakers.json` is the speaker vocabulary**, and it is this app's file, not
+  go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
+  updates produce a readable diff); refresh it with the curl in `assets/speakers.go`. `builder`
+  turns it into a `speaker.Registry` before opening any connection, and the same registry feeds
+  both the Gemini schema and `voicevox.New`. **Style IDs in that file are never used** — go-voicevox
+  re-reads them from the live engine, since they shift between engine builds.
+- **AI output is schema-constrained.** `GenerateRunner` calls Gemini with
+  `ResponseMIMEType: application/json` and a `ResponseSchema` built once at construction from the
+  registry (`internal/runner/schema.go`), then unmarshals straight into `[]domain.ScriptLine`.
+  `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
+  has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
+  that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
+  therefore live in the prompt text. If you change `ScriptLine`'s fields, update the schema in
+  lockstep.
+- **There is no `direction` field.** It was an emotion tag for downstream video production that
+  nothing ever read — not the engine, not any sibling app. Styles now carry the emotion and
+  actually change the audio, so the tag was removed rather than left as a field the AI spends
+  tokens filling in.
 - **Config and per-run values are separate types.** `config.Config` holds only what the deployment
   target decides, read from the environment with `caarlos0/env` struct tags and grouped into
   sub-structs (`Server`, `Tasks`, `GCP`, `AI`, `Voicevox`, `Notification`, `HTTP`) the way the

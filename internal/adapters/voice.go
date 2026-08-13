@@ -11,6 +11,7 @@ import (
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-voicevox/speaker"
 	"github.com/shouni/go-voicevox/voicevox"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -43,12 +44,13 @@ type VoiceAdapter struct {
 // apiURL には VOICEVOX エンジンの URL を渡します。空文字の場合は go-voicevox が
 // http://localhost:50021 へ落とすため、ローカル実行とサイドカー構成のどちらでも
 // そのまま動きます。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, apiURL string, writer remoteio.Writer) (*VoiceAdapter, error) {
+func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, apiURL string, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
 		apiURL,
 		true,
+		speakers,
 		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
 		voicevox.WithSegmentRateLimit(defaultSegmentRateLimit),
 		voicevox.WithSegmentTimeout(defaultSegmentTimeout),
@@ -96,10 +98,9 @@ func toVoicevoxLines(lines []domain.ScriptLine) []voicevox.ScriptLine {
 	out := make([]voicevox.ScriptLine, len(lines))
 	for i, line := range lines {
 		out[i] = voicevox.ScriptLine{
-			Speaker:   line.Speaker,
-			Style:     line.Style,
-			Direction: line.Direction,
-			Text:      line.Text,
+			Speaker: line.Speaker,
+			Style:   line.Style,
+			Text:    line.Text,
 		}
 	}
 	return out

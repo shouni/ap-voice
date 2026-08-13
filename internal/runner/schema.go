@@ -6,26 +6,22 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 )
 
-// 許可される話者・スタイルは go-voicevox/speaker を単一の情報源とする（値の重複によるドリフトを防ぐ）。
-// direction は動画演出用の独自タグでVOICEVOX側に対応物がないため、ここで定義する。
-// 話者ごと・モードごとにどのスタイルを使うべきかという意味的な制約は、
-// スキーマではなくプロンプト文章側の指示に委ねる。
-var (
-	allowedSpeakers   = speaker.SupportedSpeakerNames()
-	allowedStyles     = speaker.SupportedStyleNames()
-	allowedDirections = []string{
-		"解説", "疑問", "驚き", "理解", "落ち着き", "納得", "断定", "呼びかけ",
-	}
-)
-
 // scriptTextMaxLength は、Gemini に対する目安の文字数上限です。
 // 実際の安全策は go-voicevox 側の SplitByCharLimit による強制分割です。
 const scriptTextMaxLength = 200
 
 // scriptResponseSchema は、ナレーションスクリプトを ScriptLine の配列として
 // 受け取るための gemini.Schema を構築します。
-func scriptResponseSchema() *gemini.Schema {
+//
+// 許可語彙は assets/speakers/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
+// speaker と style は独立した enum なので、**この形では「話者ごとに使えるスタイル」を
+// 表現できません**。実在しない組み合わせを選ばれても getStyleID がその話者の既定へ落とすため、
+// 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担い、
+// そちらは Registry.StylesFor から機械生成します。
+func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
 	maxLength := int64(scriptTextMaxLength)
+	allowedSpeakers := speakers.SpeakerNames()
+	allowedStyles := speakers.StyleNames()
 
 	return &gemini.Schema{
 		Type: gemini.TypeArray,
@@ -42,11 +38,6 @@ func scriptResponseSchema() *gemini.Schema {
 					Enum:        allowedStyles,
 					Description: "VOICEVOXのスタイル名。話者ごとに許可される組み合わせはプロンプトの指示に従うこと。",
 				},
-				"direction": {
-					Type:        gemini.TypeString,
-					Enum:        allowedDirections,
-					Description: "任意の演出用感情タグ。合成音声には含まれない。",
-				},
 				"text": {
 					Type:        gemini.TypeString,
 					MaxLength:   &maxLength,
@@ -54,7 +45,7 @@ func scriptResponseSchema() *gemini.Schema {
 				},
 			},
 			Required:         []string{"speaker", "style", "text"},
-			PropertyOrdering: []string{"speaker", "style", "direction", "text"},
+			PropertyOrdering: []string{"speaker", "style", "text"},
 		},
 	}
 }

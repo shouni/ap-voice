@@ -10,6 +10,9 @@ import (
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
+	"github.com/shouni/go-voicevox/speaker"
+
+	"github.com/shouni/ap-voice/assets"
 
 	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
@@ -55,8 +58,16 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("failed to initialize notifier: %w", err)
 	}
 
+	// 話者一覧は埋め込みリソースなので、外部接続より先に組みます。
+	// 壊れていれば起動時に落とし、合成を始めてから気付くことがないようにします。
+	speakers, err := speaker.NewRegistry(assets.SpeakersJSON)
+	if err != nil {
+		return nil, fmt.Errorf("話者一覧の読み込みに失敗しました: %w", err)
+	}
+
 	appCtx := &app.Container{
 		Config:     cfg,
+		Speakers:   speakers,
 		RemoteIO:   rio,
 		HTTPClient: httpClient,
 		Notifier:   notifier,

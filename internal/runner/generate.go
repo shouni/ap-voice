@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -42,6 +43,9 @@ type GenerateRunner struct {
 	// defaultModel は Request がモデルを指定しなかったときに使うモデル名です。
 	// GEMINI_MODELS の先頭で、起動時検証を通っているため必ず空ではありません。
 	defaultModel string
+	// schema は話者一覧から組んだレスポンススキーマです。実行のたびに組み直す理由が
+	// ないため、構築時に1度だけ作ります。
+	schema *gemini.Schema
 }
 
 // NewGenerateRunner は、依存関係を注入して GenerateRunner の新しいインスタンスを生成します。
@@ -50,12 +54,14 @@ func NewGenerateRunner(
 	promptBuilder PromptBuilder,
 	aiClient StructuredGenerator,
 	defaultModel string,
+	speakers *speaker.Registry,
 ) *GenerateRunner {
 	return &GenerateRunner{
 		reader:        reader,
 		promptBuilder: promptBuilder,
 		aiClient:      aiClient,
 		defaultModel:  defaultModel,
+		schema:        scriptResponseSchema(speakers),
 	}
 }
 
@@ -89,7 +95,7 @@ func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain
 
 	generatedResponse, err := gr.aiClient.GenerateWithAttachments(ctx, model, prompt, nil, gemini.GenerateOptions{
 		ResponseMIMEType: "application/json",
-		ResponseSchema:   scriptResponseSchema(),
+		ResponseSchema:   gr.schema,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("スクリプト生成に失敗しました: %w", err)

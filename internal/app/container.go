@@ -9,6 +9,7 @@ import (
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-voicevox/speaker"
 )
 
 // Container はアプリケーションの依存関係（DIコンテナ）を保持します。
@@ -16,6 +17,9 @@ type Container struct {
 	Config *config.Config
 	// I/O and Storage
 	RemoteIO *RemoteIO
+	// Speakers は使用する話者・スタイルの一覧です。assets/speakers/speakers.json を
+	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
+	Speakers *speaker.Registry
 	// External Adapters
 	HTTPClient httpkit.Requester
 	Notifier   domain.Notifier

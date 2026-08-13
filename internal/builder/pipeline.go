@@ -55,12 +55,13 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 		promptBuilder,
 		aiClient,
 		appCtx.Config.AI.GeminiModel,
+		appCtx.Speakers,
 	), nil
 }
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
 func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.PublishRunner, error) {
-	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox.APIURL, appCtx.RemoteIO.Writer)
+	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox.APIURL, appCtx.Speakers, appCtx.RemoteIO.Writer)
 	if err != nil {
 		return nil, err
 	}

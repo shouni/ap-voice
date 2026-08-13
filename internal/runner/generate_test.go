@@ -11,10 +11,31 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/go-voicevox/speaker"
 )
 
 // defaultTestModel は GEMINI_MODELS の先頭に相当する既定モデルです。
 const defaultTestModel = "default-model"
+
+// testSpeakersJSON は /speakers 応答の形をした架空の一覧です。
+// スキーマの enum を組むためだけに使うので、実在のキャラクターは要りません。
+const testSpeakersJSON = `[
+	{"name":"話者アルファ","styles":[
+		{"name":"標準","id":1,"type":"talk"},
+		{"name":"甘め","id":2,"type":"talk"}
+	]},
+	{"name":"話者ベータ","styles":[{"name":"標準","id":3,"type":"talk"}]}
+]`
+
+func testSpeakers(t *testing.T) *speaker.Registry {
+	t.Helper()
+
+	reg, err := speaker.NewRegistry([]byte(testSpeakersJSON))
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+	return reg
+}
 
 type mockContentReader struct {
 	openFunc func(ctx context.Context, uri string) (io.ReadCloser, error)
@@ -109,10 +130,11 @@ func TestGenerateRunnerRun(t *testing.T) {
 					if opts.ResponseSchema == nil {
 						t.Fatal("expected ResponseSchema to be set")
 					}
-					return &gemini.Response{Text: `[{"speaker":"ずんだもん","style":"ノーマル","direction":"呼びかけ","text":"こんにちはなのだ"}]`}, nil
+					return &gemini.Response{Text: `[{"speaker":"ずんだもん","style":"ノーマル","text":"こんにちはなのだ"}]`}, nil
 				},
 			},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		got, err := runner.Run(ctx, req)
@@ -120,7 +142,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			t.Fatalf("Run() failed: %v", err)
 		}
 		want := []domain.ScriptLine{
-			{Speaker: "ずんだもん", Style: "ノーマル", Direction: "呼びかけ", Text: "こんにちはなのだ"},
+			{Speaker: "ずんだもん", Style: "ノーマル", Text: "こんにちはなのだ"},
 		}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("unexpected output: %+v", got)
@@ -141,6 +163,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			&mockPromptBuilder{},
 			&mockAIClient{},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, domain.Request{})
@@ -162,6 +185,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			&mockPromptBuilder{},
 			&mockAIClient{},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -183,6 +207,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			&mockPromptBuilder{},
 			&mockAIClient{},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -208,6 +233,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 			},
 			&mockAIClient{},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -237,6 +263,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, req)
@@ -265,6 +292,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 				},
 			},
 			defaultTestModel,
+			testSpeakers(t),
 		)
 
 		_, err := runner.Run(ctx, req)
