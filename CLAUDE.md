@@ -4,64 +4,200 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**AP Voice** is a Go CLI that turns a document (web article or GCS object) into a narrated WAV audio file. It reads source text, has Gemini generate a structured narration script (JSON, speaker/style/text per line), then synthesizes that script into a WAV via a VOICEVOX engine, uploading the result (and the script) to local disk or GCS.
+**AP Voice** is a Go service (Cloud Run + Cloud Tasks) that turns a document (web article or GCS
+object) into a narrated WAV. It reads source text, has Gemini generate a structured narration
+script (JSON, speaker/style/text per line), synthesizes that script into a WAV via a VOICEVOX
+engine, and writes both the WAV and the script to local disk or GCS.
 
-Module name: `ap-voice` (Go 1.26). Single binary, single command: `ap-voice generate`.
+Module name: `ap-voice` (Go 1.26). One image, deployed as two Cloud Run services (`ap-voice`
+public / `ap-voice-worker` private) selected by `SERVER_ROLE`, the same shape as
+`ap-comp`/`ap-mv`/`ap-story`.
 
 ## Commands
 
 ```bash
-go build ./...          # build everything
-go run . generate -i <input> -o <output> [-m dialogue|solo|duet] [-g gemini-model]
-go test ./...            # run all tests
-go test ./internal/pipeline/... -run TestName -v   # run a single test
+go build ./...
 go vet ./...
+gofmt -l .                                          # CI fails on any output
+go test ./...
+go test ./internal/pipeline/ -run TestName -v       # a single test
+go run .                                            # start the server (SERVER_ROLE required)
 ```
 
-There is no Makefile/CI config in the repo — the commands above are the whole workflow.
+There is no Makefile. `.github/workflows/ci.yml` runs on pushes and PRs to `main`/`develop` in
+three jobs: build + `go vet` + `gofmt -l` + `go test -race -cover`, then `golangci-lint`
+(config in `.golangci.yml`), then `govulncheck`. `cloudbuild.yaml` builds the image with BuildKit
+caching and deploys it to **both** Cloud Run services; `Dockerfile` produces a `scratch` image
+holding only the static binary, certs and zoneinfo — the prompts, `speakers.json` and the kagome
+dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
 
-### Required environment for running `generate`
+## Required environment
 
-- `GEMINI_MODEL` — required unless `--model`/`-g` is passed. There is deliberately **no default model in the code**: model IDs age on Google's release schedule, not this repo's, so a default would keep an outdated model in use unnoticed. `Config.Validate` (called from the root `PreRunE`) fails the run when neither is set — do not reintroduce a fallback.
-- `GEMINI_API_KEY` or `GCP_PROJECT_ID` (one required — direct Gemini API key vs. Vertex AI via project ID)
-- `VOICEVOX_API_URL` — VOICEVOX engine endpoint (e.g. `http://localhost:50021`)
-- `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs
-- `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op
+- `SERVER_ROLE` — **required**, one of `web` / `worker` / `both` (`both` is for local
+  development). Parsed by `gcp-kit/serverrole` in `Config.normalize`; an empty or unknown value
+  fails startup rather than defaulting, because treating unset as `both` would restore the
+  worker routes on the public service the moment one env var went missing. It selects which
+  dependency graph `builder` assembles and which routes `server.setupRoutes` registers.
+- `GEMINI_MODELS` — required. Comma-separated; the first entry is the default model, used when a
+  request's `ai_model` is empty (`GenerateRunner.modelFor`). There is deliberately **no default
+  model in the code**: model IDs age on Google's release schedule, not this repo's, so a default
+  would keep an outdated model in use unnoticed. `ValidateEssentialConfig` fails startup when it
+  is empty — do not reintroduce a fallback. Plural matches the fleet convention, where
+  `ap-infra`'s `shared_models.tf` is the single source of the spelling.
+- `GCP_PROJECT_ID` — required. **Gemini is called via Vertex AI only**; there is no
+  `GEMINI_API_KEY` path. On Cloud Run the runtime SA's `roles/aiplatform.user` authenticates, so
+  shipping a key would hand out access to a secret nothing reads — and Cloud Run resolves secret
+  envs at startup, so an unused one cannot be dropped without a redeploy. Local runs need ADC
+  (`gcloud auth application-default login`).
+- `CLOUD_TASKS_QUEUE_ID` / `WORKER_URL` / `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` and the OAuth set
+  (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `SESSION_ENCRYPT_KEY`,
+  `ALLOWED_EMAILS`/`ALLOWED_DOMAINS`) — **required for `web`/`both`**, and not read by `worker`.
+  The caller SA is the one Cloud Tasks is told to mint an OIDC token *as*; the worker's
+  `ALLOWED_TASK_SERVICE_ACCOUNTS` is the receiving end of the same pair. `SESSION_ENCRYPT_KEY`
+  must be 16/24/32 bytes (AES) and `SESSION_SECRET` at least 16 — the first is checked in
+  `validateWebConfig`, the second by `gcp-kit/auth` when the handler is built.
+- `GCP_LOCATION_ID` — the **Cloud Tasks queue region** (`asia-northeast1`), *not* the Vertex AI
+  endpoint. Vertex is pinned to `global` in `adapters.defaultVertexLocationID`, the same split
+  ap-comp and ap-story make; feeding the queue region to Vertex points it at an endpoint that
+  does not exist.
+- `TASK_AUDIENCE_URL` / `ALLOWED_TASK_SERVICE_ACCOUNTS` — **required for `worker`/`both`**, not
+  read at all by `web`. The audience is the worker's own URL; the allowlist holds the *caller's*
+  SA (on a split deployment that is the **web** SA, not the worker's own). Both must be present
+  or `auth.TaskVerifier` is fail-closed, so `BuildHandlers` refuses to start rather than let
+  every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
+- `VOICEVOX_API_URL` — optional; unset falls back to `http://localhost:50021` (go-voicevox's
+  default, with a warning), which is what both local runs and a Cloud Run sidecar want.
+- `PIPELINE_TIMEOUT` / `TASK_DISPATCH_DEADLINE` — optional; default to `25m` and `30m`. These are
+  the top two rungs of the fleet's timeout ladder
+  (`PIPELINE_TIMEOUT` < dispatch deadline <= Cloud Run timeout). **The smallest wins**, so the
+  point of the app's own limit is to give up *before* Cloud Tasks does — otherwise the process is
+  SIGTERMed mid-job and the failure notification never fires, and with `max_attempts = 1` the job
+  is simply lost. `ValidateEssentialConfig` rejects a configuration that inverts them.
+  `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
+  for notifications** — reusing the timed-out one would silence the very notification the ladder
+  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`).
+- `SERVICE_URL` / `PORT` / `HTTP_TIMEOUT` — optional; default to `http://localhost:8080`, `8080`
+  and `60s`.
+- `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op.
+- `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs.
 
-`--input`/`-i` is a required flag; `--output`/`-o` has no default and errors at runtime if omitted. `--model`/`-g` is required too, but via `Config.Validate` rather than cobra, so that `GEMINI_MODEL` can supply it.
+Per-run values (command, input, output, mode, model, script) are **not** environment variables —
+they arrive as the JSON body of a Cloud Tasks request and are decoded into a `domain.Request`.
 
 ## Architecture
 
-This is a small, strictly-layered dependency-injection pipeline. Read `README.md`'s mermaid sequence diagram for the full call graph — the summary here is the mental model to keep while editing:
+A small, strictly-layered dependency-injection pipeline. `README.md` has the mermaid sequence
+diagram for the full call graph; the summary here is the mental model to keep while editing.
 
 ```
-cmd/            Cobra command definitions + flag parsing (root.go, generate.go)
+main.go         logger setup -> config.LoadConfig -> ValidateEssentialConfig -> server.Run
+  -> internal/server    chi router + graceful shutdown; routes are registered per role
   -> internal/builder   wires everything together (DI root, no business logic)
-       -> internal/app        Container struct: holds Config, RemoteIO, HTTPClient, Notifier, Pipeline
-       -> internal/pipeline   orchestrates generate -> publish -> notify
-            -> internal/runner     GenerateRunner (script gen) and PublishRunner (voice + upload) — the actual use cases
-                 -> internal/adapters   concrete implementations wrapping external libraries (Gemini, VOICEVOX, Slack, prompts)
-       -> internal/domain      interfaces/ports (Pipeline, Voice, Notifier) and models (Request, ScriptLine) — no implementation, no external deps
-assets/         embedded prompt templates (prompt_solo.md, prompt_dialogue.md, prompt_duet.md) loaded via go:embed
+       -> internal/app        Container: Config, RemoteIO, HTTPClient, Notifier, Pipeline
+       -> internal/pipeline   orchestrates resolve script -> publish -> notify
+            -> internal/runner     GenerateRunner (script gen) and PublishRunner (voice + upload)
+                 -> internal/adapters   wrappers over external libraries (Gemini, VOICEVOX, Slack, prompts)
+       -> internal/domain      ports (Pipeline, Voice, Notifier) and models (Request, ScriptLine)
+assets/         embedded prompt templates and the speaker roster (go:embed)
 ```
 
-Key invariants:
+### Key invariants
 
-- **`internal/domain` is dependency-free** — it defines ports (interfaces) and plain data models only. Adapters implement these ports; runners/pipeline depend only on the interfaces, never on concrete adapter types. Preserve this direction when adding features — new external integrations become a new adapter + port, not a change to `domain`.
-- **`internal/builder` is the only place that constructs concrete adapters.** `BuildContainer` builds GCS storage → RemoteIO → HTTP client → Notifier → Pipeline (generator + publisher), tracking every opened resource in a `[]io.Closer` so a partial failure during construction cleans up everything already opened. If you add a new external resource here, register it the same way.
-- **Pipeline.Execute is the only orchestration point**: generate script → error if empty → publish (WAV + script upload + optional signed URL) → notify success/failure. Notification always fires from a single `defer` in `Execute`, so failure paths don't need to remember to notify.
-- **PublishRunner writes two artifacts per run**: the WAV via `Voice.UploadWav`, then a companion file via `Voice.UploadScript` (VoiceAdapter writes this as `<output-basename>.json`, not `.txt` despite older docs/comments — check `internal/adapters/voice.go` if this matters for a change). A signed URL is generated only if the RemoteIO's `URLSigner` is non-nil (GCS); local output never gets a signed URL and that's treated as a soft failure (logged, not returned as an error).
-- **AI output is schema-constrained**: `GenerateRunner` calls Gemini with `ResponseMIMEType: application/json` and an explicit `ResponseSchema` (see `internal/runner/schema.go`), then unmarshals directly into `[]domain.ScriptLine`. The schema hardcodes `allowedSpeakers`/`allowedStyles`/`allowedDirections` enums (e.g. speakers are just `ずんだもん`/`めたん`) — these must stay in sync with whatever VOICEVOX speakers/styles are actually available, and any new speaker/style needs an update here, not just in the prompt templates. If you change `ScriptLine`'s fields, update the schema in lockstep.
-- **Config resolution order**: CLI flags (cobra, in `opts`) are the base; `initAppPreRunE` (`cmd/root.go`) fills any still-empty fields from environment variables via `config.LoadConfig()` + `FillDefaults`, then `Normalize()` trims whitespace. Flags always win over env vars.
-- **`shouni/clibase`** is this project's shared CLI bootstrap library (external module) — `cmd.Execute()` just declares the app name, persistent flags, pre-run hook, and subcommands; clibase handles the actual cobra `Execute()` call and shared init (logging etc.).
+- **`internal/domain` is dependency-free** — ports (interfaces) and plain data models only.
+  Adapters implement these ports; runners and pipeline depend only on the interfaces, never on
+  concrete adapter types. New external integrations become a new adapter + port, not a change to
+  `domain`.
+- **`internal/builder` is the only place that constructs concrete adapters.** `BuildContainer`
+  builds GCS storage → RemoteIO → HTTP client → Notifier → Pipeline, tracking every opened
+  resource in a `[]io.Closer` so a partial failure during construction cleans up what was already
+  opened. Register new external resources the same way. `app.RemoteIO` is a type alias for
+  `remoteio.Bundle` — go-remote-io owns the struct and its assembly (`remoteio.NewBundle`).
+- **Only the worker builds the pipeline.** The web role skips it, so the public service holds no
+  Gemini client and never opens a VOICEVOX connection — `voicevox.New` calls `/speakers` at
+  construction, so building it on the public side would make every cold start wait on the engine.
+- **The web role only enqueues.** `handlers.Handler` validates the form with the same
+  `Request.Validate` the worker runs and hands it to `domain.TaskQueue`; it never waits for
+  synthesis, which takes minutes. The form's mode list is read from the embedded prompts, so a
+  mode on screen is always a mode the worker can render. `Auth`/`Web` are a pair in
+  `AppHandlers.Validate` for the same reason `TaskAuth`/`Worker` are — a missing `Auth` would
+  publish the form unauthenticated.
+- **A new role never means touching the router.** `BuildHandlers` leaves the handlers a role does
+  not serve as nil and `setupRoutes` guards each route group on nil, so `SERVER_ROLE=web` simply
+  has no `/tasks/generate` — it 404s rather than existing unprotected. `AppHandlers.Validate`
+  rejects the half-built case (`TaskAuth` without `Worker`, or vice versa) at startup, because the
+  router would otherwise turn a DI mistake into a silent 404 indistinguishable from a config
+  mistake. `router_test.go` pins all three states.
+- **The worker handler is `gcp-kit/worker`, not hand-written.** `worker.NewHandler[domain.Request]`
+  takes anything with `Execute(ctx, T) error`, which `pipeline.Pipeline` already satisfied, so
+  JSON decoding, body-size limits and Cloud Tasks retry metadata come from the kit.
+  `domain.Request` doubles as the task payload; its `json` tags are the wire contract with
+  whatever enqueues it.
+- **`Pipeline.Execute` is the only orchestration point**: validate → resolve script → publish
+  (WAV + script upload + optional signed URL) → notify. Notification fires from a single `defer`,
+  so failure paths do not have to remember to notify.
+- **Script generation and synthesis are separate commands**, and only `resolveScript` differs:
+  `generate` reads the source and calls Gemini, `synthesize` takes `Request.Script` as-is and
+  never touches Gemini. The script is an *output and an input* — `PublishRunner` writes it as
+  `<output>.json` next to the WAV, and fixing one line's reading or speaker should not mean
+  paying for a regeneration that rewrites every other line. `Request.Command` has **no default**:
+  an empty command is an error, because silently treating it as `generate` would discard a
+  caller's `script` and bill them for generation. `Request.Validate` lives in `domain` so the web
+  form can reuse it, and runs before anything external is touched
+  (`TestPipelineExecute_InvalidRequest`).
+- **`PublishRunner` writes two artifacts per run**: the WAV via `Voice.UploadWav`, then the script
+  as `<output-basename>.json` via `Voice.UploadScript`. A signed URL is generated only when the
+  RemoteIO's `URLSigner` is non-nil (GCS); local output never gets one and that is a soft failure
+  (logged, not returned).
+- **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
+  `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
+  `mode` with no code change** (the directory already says they are prompts, so filenames carry
+  no prefix — same as the sibling apps). The mode string travels from `Request.Mode` straight to
+  `PromptAdapter.Generate` and is never validated against a list. The one exception is `promo`,
+  named in `adapters/prompt.go` because it is the only mode whose *input type* differs: it reads
+  ap-comp's `recipe.json` and decodes it into a `music.Recipe` before rendering.
+- **`assets/speakers.json` is the speaker vocabulary**, and it is this app's file, not
+  go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
+  updates produce a readable diff); refresh it with the curl in `assets/assets.go`. `builder`
+  turns it into a `speaker.Registry` before opening any connection, and the same registry feeds
+  both the Gemini schema and `voicevox.New`. **Style IDs in that file are never used** — go-voicevox
+  re-reads them from the live engine, since they shift between engine builds.
+- **AI output is schema-constrained.** `GenerateRunner` calls Gemini with
+  `ResponseMIMEType: application/json` and a `ResponseSchema` built once at construction from the
+  registry (`internal/runner/schema.go`), then unmarshals straight into `[]domain.ScriptLine`.
+  `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
+  has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
+  that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
+  therefore live in the prompt text. If you change `ScriptLine`'s fields, update the schema in
+  lockstep.
+- **There is no `direction` field.** It was an emotion tag for downstream video production that
+  nothing ever read — not the engine, not any sibling app. Styles now carry the emotion and
+  actually change the audio, so the tag was removed rather than left as a field the AI spends
+  tokens filling in.
+- **Config and per-run values are separate types.** `config.Config` holds only what the deployment
+  target decides, read from the environment with `caarlos0/env` struct tags and grouped into
+  sub-structs (`Server`, `Tasks`, `GCP`, `AI`, `Voicevox`, `Notification`, `HTTP`) the way the
+  sibling apps group theirs. `LoadConfig` → `normalize()` (parses `SERVER_ROLE`, trims, dedupes
+  lists, fills defaults) → `ValidateEssentialConfig()`, whose worker-only checks are skipped for
+  `web`.
 
-## Notable external dependencies (all first-party `github.com/shouni/*` libraries)
+## Notable external dependencies
+
+First-party (`github.com/shouni/*`):
 
 - `go-gemini-client` — Gemini/Vertex AI client (structured JSON generation)
-- `go-voicevox` — parallel VOICEVOX synthesis engine wrapper; tuned via `defaultMaxParallelSegments`/`defaultSegmentRateLimit`/`defaultSegmentTimeout` in `internal/adapters/voice.go`
+- `go-voicevox` — parallel VOICEVOX synthesis wrapper, **and the source of the supported speaker
+  and style vocabulary**; tuned via `defaultMaxParallelSegments`/`defaultSegmentRateLimit`/
+  `defaultSegmentTimeout` in `internal/adapters/voice.go`
 - `go-web-reader` — reads `https://` and `gs://` input sources transparently
-- `go-remote-io` — local/GCS write + signed URL abstraction (`remoteio.Writer`, `remoteio.URLSigner`, `remoteio.IOFactory`)
-- `go-prompt-kit` — loads/renders the embedded prompt templates in `assets/prompts/`
-- `clibase` — shared CLI bootstrap (see above)
+- `go-remote-io` — local/GCS write + signed URL abstraction (`remoteio.Bundle`, `remoteio.Writer`,
+  `remoteio.URLSigner`, `remoteio.IOFactory`)
+- `go-prompt-kit` — loads and renders the embedded prompt templates
+- `go-http-kit` — HTTP client with retries; note `builder` passes
+  `WithSkipNetworkValidation(true)`, which disables the SSRF guard for the whole client
+- `gcp-kit` — `serverrole` (role vocabulary), `worker` (Cloud Tasks target handler), `auth`
+  (Cloud Tasks OIDC verification), `cloudlog` (Cloud Logging format + trace correlation)
 
-When touching adapter code, the actual behavior often lives in these external modules rather than in this repo — check `go.mod` for pinned versions before assuming a signature.
+Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct).
+
+When touching adapter code the actual behavior often lives in these modules rather than in this
+repo — check `go.mod` for pinned versions before assuming a signature.

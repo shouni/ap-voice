@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AP Voice</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      max-width: 44rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.7;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: .25rem; }
+    p.lead { margin-top: 0; opacity: .75; font-size: .9rem; }
+    label { display: block; margin-top: 1.1rem; font-weight: 600; font-size: .9rem; }
+    input, select { width: 100%; padding: .5rem; margin-top: .25rem; font: inherit; box-sizing: border-box; }
+    small { display: block; margin-top: .2rem; opacity: .7; }
+    button { margin-top: 1.5rem; padding: .6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
+    .notice { padding: .75rem 1rem; margin-bottom: 1rem; border-left: 4px solid; }
+    .ok { border-color: #2e7d32; background: rgba(46,125,50,.08); }
+    .ng { border-color: #c62828; background: rgba(198,40,40,.08); }
+  </style>
+</head>
+<body>
+  <h1>AP Voice</h1>
+  <p class="lead">ドキュメントをナレーション音声に変換します。実行は非同期で、完了すると通知が届きます。</p>
+
+  {{ with .Message }}<div class="notice ok">{{ . }}</div>{{ end }}
+  {{ with .Error }}<div class="notice ng">{{ . }}</div>{{ end }}
+
+  <form method="post" action="/">
+    <label>
+      処理
+      <select name="command">
+        <option value="generate" {{ if eq .Form.Command "generate" }}selected{{ end }}>generate — 入力から台本を作って音声化</option>
+        <option value="synthesize" {{ if eq .Form.Command "synthesize" }}selected{{ end }}>synthesize — 保存済みの台本から音声だけ作る</option>
+      </select>
+      <small>synthesize は台本を渡す必要があるため、いまは API 経由のみです。</small>
+    </label>
+
+    <label>
+      入力ソース
+      <input type="text" name="input_uri" value="{{ .Form.InputURI }}"
+             placeholder="https://example.com/article  または  gs://bucket/doc.md">
+      <small>generate で必須です。Web URL と GCS を透過的に読みます。</small>
+    </label>
+
+    <label>
+      出力先
+      <input type="text" name="output_uri" value="{{ .Form.OutputURI }}"
+             placeholder="gs://bucket/audio/out.wav">
+      <small>WAV を保存し、同名の <code>.json</code> に台本も保存します。</small>
+    </label>
+
+    <label>
+      生成モード
+      <select name="mode">
+        {{ range .Modes }}<option value="{{ . }}" {{ if eq $.Form.Mode . }}selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <small>プロンプトの埋め込みから読んでいるので、生成側と食い違いません。</small>
+    </label>
+
+    <label>
+      モデル（任意）
+      <input type="text" name="ai_model" value="{{ .Form.AIModel }}" placeholder="空なら GEMINI_MODELS の先頭">
+    </label>
+
+    <button type="submit">実行する</button>
+  </form>
+</body>
+</html>

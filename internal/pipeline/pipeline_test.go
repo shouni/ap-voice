@@ -3,7 +3,9 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -66,6 +68,7 @@ func TestPipelineExecute(t *testing.T) {
 
 	ctx := context.Background()
 	req := domain.Request{
+		Command:   domain.CommandGenerate,
 		InputURI:  "gs://bucket/input.txt",
 		OutputURI: "gs://bucket/output.wav",
 		Mode:      "solo",
@@ -86,7 +89,7 @@ func TestPipelineExecute(t *testing.T) {
 			&MockGenerateRunner{
 				RunFunc: func(_ context.Context, got domain.Request) ([]domain.ScriptLine, error) {
 					generateCalled = true
-					if got != req {
+					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
 					return sampleLines, nil
@@ -107,7 +110,7 @@ func TestPipelineExecute(t *testing.T) {
 			&MockNotifier{
 				NotifyFunc: func(_ context.Context, got domain.Request, publicURL string) error {
 					notifyCalled = true
-					if got != req {
+					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
 					if publicURL != "https://example.com/audio.wav" {
@@ -116,6 +119,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			0,
 		)
 
 		if err := p.Execute(ctx, req); err != nil {
@@ -142,7 +146,7 @@ func TestPipelineExecute(t *testing.T) {
 			&MockNotifier{
 				NotifyFailureFunc: func(_ context.Context, got domain.Request, err error) error {
 					failureNotified = true
-					if got != req {
+					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
 					if !errors.Is(err, expectedErr) {
@@ -151,6 +155,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			0,
 		)
 
 		err := p.Execute(ctx, req)
@@ -180,6 +185,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			0,
 		)
 
 		if err := p.Execute(ctx, req); err == nil {
@@ -216,6 +222,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			0,
 		)
 
 		err := p.Execute(ctx, req)
@@ -226,6 +233,122 @@ func TestPipelineExecute(t *testing.T) {
 			t.Fatal("failure notifier was not called")
 		}
 	})
+}
+
+// synthesize は台本を生成しません。渡された台本がそのまま公開処理へ渡り、
+// Gemini を呼ぶ経路には一切入らないことを固定します。
+func TestPipelineExecute_Synthesize(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	script := []domain.ScriptLine{
+		{Speaker: "めたん", Style: "ノーマル", Text: "手で直した台本"},
+	}
+	req := domain.Request{
+		Command:   domain.CommandSynthesize,
+		OutputURI: "gs://bucket/output.wav",
+		Script:    script,
+	}
+
+	generateCalled := false
+	var published []domain.ScriptLine
+
+	p := NewPipeline(
+		&MockGenerateRunner{
+			RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+				generateCalled = true
+				return nil, errors.New("generator must not be called")
+			},
+		},
+		&MockPublishRunner{
+			RunFunc: func(_ context.Context, _ string, lines []domain.ScriptLine) (string, error) {
+				published = lines
+				return "", nil
+			},
+		},
+		&MockNotifier{},
+		0,
+	)
+
+	if err := p.Execute(ctx, req); err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+	if generateCalled {
+		t.Fatal("synthesize なのに台本生成が呼ばれた")
+	}
+	if !reflect.DeepEqual(published, script) {
+		t.Fatalf("渡した台本が公開処理へ届いていない: %+v", published)
+	}
+}
+
+// 揃っていない入力は何度実行しても同じように失敗するため、
+// 外部を1つも叩かずに弾き、失敗通知だけを出します。
+func TestPipelineExecute_InvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		req  domain.Request
+	}{
+		{
+			name: "command 未指定",
+			req:  domain.Request{OutputURI: "gs://bucket/o.wav", InputURI: "https://example.com"},
+		},
+		{
+			name: "未知の command",
+			req:  domain.Request{Command: "compose", OutputURI: "gs://bucket/o.wav"},
+		},
+		{
+			name: "generate なのに入力ソースが無い",
+			req:  domain.Request{Command: domain.CommandGenerate, OutputURI: "gs://bucket/o.wav"},
+		},
+		{
+			name: "synthesize なのに台本が無い",
+			req:  domain.Request{Command: domain.CommandSynthesize, OutputURI: "gs://bucket/o.wav"},
+		},
+		{
+			name: "出力先が無い",
+			req:  domain.Request{Command: domain.CommandGenerate, InputURI: "https://example.com"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			touched := false
+			failureNotified := false
+			p := NewPipeline(
+				&MockGenerateRunner{
+					RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+						touched = true
+						return nil, nil
+					},
+				},
+				&MockPublishRunner{
+					RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+						touched = true
+						return "", nil
+					},
+				},
+				&MockNotifier{
+					NotifyFailureFunc: func(_ context.Context, _ domain.Request, _ error) error {
+						failureNotified = true
+						return nil
+					},
+				},
+				0,
+			)
+
+			if err := p.Execute(context.Background(), tt.req); err == nil {
+				t.Fatal("不正なリクエストが素通りした")
+			}
+			if touched {
+				t.Fatal("検証前に外部処理が呼ばれた")
+			}
+			if !failureNotified {
+				t.Fatal("失敗通知が呼ばれていない")
+			}
+		})
+	}
 }
 
 func TestPipelineNotifications(t *testing.T) {
@@ -249,7 +372,7 @@ func TestPipelineNotifications(t *testing.T) {
 			notifier: &MockNotifier{
 				NotifySkippedFunc: func(_ context.Context, got domain.Request, gotReason error) error {
 					called = true
-					if got != req {
+					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
 					if !errors.Is(gotReason, reason) {
@@ -265,4 +388,50 @@ func TestPipelineNotifications(t *testing.T) {
 			t.Fatal("NotifySkipped was not called")
 		}
 	})
+}
+
+// 上限を超えたら打ち切り、**失敗通知はその外側で送ります。**
+//
+// 通知に打ち切り済みの ctx を渡すと通知自体が送れず、「Cloud Tasks より先に諦めて
+// 失敗を知らせる」という三段の目的が達成できません。ここはその退行を見ています。
+func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
+	t.Parallel()
+
+	notified := make(chan context.Context, 1)
+
+	p := NewPipeline(
+		&MockGenerateRunner{
+			RunFunc: func(ctx context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+				// 上限を超えるまで待ちます。実際の合成が長引いた状態の代わりです。
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+		},
+		&MockPublishRunner{},
+		&MockNotifier{
+			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, _ error) error {
+				notified <- ctx
+				return nil
+			},
+		},
+		20*time.Millisecond,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command:   domain.CommandGenerate,
+		InputURI:  "gs://bucket/in.txt",
+		OutputURI: "gs://bucket/out.wav",
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() = %v, want context.DeadlineExceeded", err)
+	}
+
+	select {
+	case gotCtx := <-notified:
+		if gotCtx.Err() != nil {
+			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", gotCtx.Err())
+		}
+	default:
+		t.Fatal("失敗通知が呼ばれていない")
+	}
 }
