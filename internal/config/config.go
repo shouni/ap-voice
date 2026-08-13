@@ -30,6 +30,13 @@ type Config struct {
 	// 誰も気付かないまま古いモデルを使い続けることになります。
 	AIModel string
 
+	// VoicevoxAPIURL は音声合成に使う VOICEVOX エンジンの URL です。
+	// 空なら go-voicevox が http://localhost:50021 へ落とし、警告を出します。
+	// モデル名と違って既定値を置いてよいのは、50021 が VOICEVOX の標準ポートで
+	// 外部の都合で古くなる値ではないためです。フラグは持たせず環境変数だけにして
+	// あります。実行ごとに変える値ではなく、デプロイ先が決める値だからです。
+	VoicevoxAPIURL string
+
 	HTTPTimeout  time.Duration
 	ProjectID    string
 	GeminiAPIKey string
@@ -44,6 +51,7 @@ func (c *Config) Normalize() {
 	c.OutputFile = strings.TrimSpace(c.OutputFile)
 	c.AIModel = strings.TrimSpace(c.AIModel)
 	c.SlackWebhookURL = strings.TrimSpace(c.SlackWebhookURL)
+	c.VoicevoxAPIURL = strings.TrimSpace(c.VoicevoxAPIURL)
 }
 
 // FillDefaults は、現在の設定で空のフィールドを envCfg の値で補完します。
@@ -59,6 +67,9 @@ func (c *Config) FillDefaults(envCfg *Config) {
 	}
 	if c.SlackWebhookURL == "" {
 		c.SlackWebhookURL = envCfg.SlackWebhookURL
+	}
+	if c.VoicevoxAPIURL == "" {
+		c.VoicevoxAPIURL = envCfg.VoicevoxAPIURL
 	}
 }
 
@@ -78,5 +89,6 @@ func LoadConfig() *Config {
 		ProjectID:       envutil.GetEnv("GCP_PROJECT_ID", ""),
 		GeminiAPIKey:    envutil.GetEnv("GEMINI_API_KEY", ""),
 		SlackWebhookURL: envutil.GetEnv("SLACK_WEBHOOK_URL", ""),
+		VoicevoxAPIURL:  envutil.GetEnv("VOICEVOX_API_URL", ""),
 	}
 }

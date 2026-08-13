@@ -39,11 +39,15 @@ type VoiceAdapter struct {
 }
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, writer remoteio.Writer) (*VoiceAdapter, error) {
+//
+// apiURL には VOICEVOX エンジンの URL を渡します。空文字の場合は go-voicevox が
+// http://localhost:50021 へ落とすため、ローカル実行とサイドカー構成のどちらでも
+// そのまま動きます。
+func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, apiURL string, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
-		"",
+		apiURL,
 		true,
 		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
 		voicevox.WithSegmentRateLimit(defaultSegmentRateLimit),

@@ -24,7 +24,13 @@ There is no Makefile/CI config in the repo — the commands above are the whole 
 
 - `GEMINI_MODEL` — required unless `--model`/`-g` is passed. There is deliberately **no default model in the code**: model IDs age on Google's release schedule, not this repo's, so a default would keep an outdated model in use unnoticed. `Config.Validate` (called from the root `PreRunE`) fails the run when neither is set — do not reintroduce a fallback.
 - `GEMINI_API_KEY` or `GCP_PROJECT_ID` (one required — direct Gemini API key vs. Vertex AI via project ID)
-- `VOICEVOX_API_URL` — VOICEVOX engine endpoint (e.g. `http://localhost:50021`)
+- `VOICEVOX_API_URL` — VOICEVOX engine endpoint. Optional: unset falls back to
+  `http://localhost:50021` (go-voicevox's default, with a warning), which is what both local
+  runs and a Cloud Run sidecar want. Env-only by design — there is no flag, because this is a
+  value the deployment target decides, not one that changes per run. It reaches the engine via
+  `config.Config.VoicevoxAPIURL` → `builder.buildPublishRunner` → `adapters.NewVoiceAdapter`;
+  before that chain existed the adapter passed `""` unconditionally and the env var was
+  documented but never read.
 - `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs
 - `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op
 

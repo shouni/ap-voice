@@ -56,7 +56,7 @@
 | `GEMINI_MODEL` | 必須 | 使用する Gemini モデル名。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、どちらも未指定なら実行時にエラー**になります。 |
 | `GEMINI_API_KEY` | いずれか必須 | Google AI Studio で取得した API キー。 |
 | `GCP_PROJECT_ID` | いずれか必須 | Vertex AI 経由で Gemini を利用する場合の GCP Project ID。 |
-| `VOICEVOX_API_URL` | VOICEVOX使用時 | エンジンのURL (例: `http://localhost:50021`)。 |
+| `VOICEVOX_API_URL` | 任意 | エンジンのURL (例: `http://localhost:50021`)。未設定なら `http://localhost:50021` を使います。フラグはありません（実行ごとではなくデプロイ先が決める値のため）。 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時に必要な場合 | GCS権限を持つサービスアカウントのJSONパス（ADC利用時）。 |
 
 ### 2. 生成・音声化コマンド
