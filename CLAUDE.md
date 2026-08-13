@@ -26,7 +26,10 @@ go run .                                            # start the server (SERVER_R
 
 There is no Makefile. `.github/workflows/ci.yml` runs on pushes and PRs to `main`/`develop` in
 three jobs: build + `go vet` + `gofmt -l` + `go test -race -cover`, then `golangci-lint`
-(config in `.golangci.yml`), then `govulncheck`.
+(config in `.golangci.yml`), then `govulncheck`. `cloudbuild.yaml` builds the image with BuildKit
+caching and deploys it to **both** Cloud Run services; `Dockerfile` produces a `scratch` image
+holding only the static binary, certs and zoneinfo — the prompts, `speakers.json` and the kagome
+dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
 
 ## Required environment
 
