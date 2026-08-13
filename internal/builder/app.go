@@ -43,19 +43,14 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}
 
-	timeout := cfg.HTTPTimeout
-	if timeout == 0 {
-		timeout = config.DefaultHTTPTimeout
-	}
-
 	httpClient := httpkit.New(
-		timeout,
+		cfg.HTTP.Timeout,
 		httpkit.WithMaxRetries(1),
 		httpkit.WithSkipNetworkValidation(true),
 	)
 
 	// 3. Notifier
-	notifier, err := buildNotifier(httpClient.WithoutRetry(), cfg.SlackWebhookURL)
+	notifier, err := buildNotifier(httpClient.WithoutRetry(), cfg.Notification.SlackWebhookURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notifier: %w", err)
 	}
@@ -84,11 +79,4 @@ func buildNotifier(httpClient httpkit.Requester, webhookURL string) (domain.Noti
 	}
 
 	return adapters.NewSlackAdapter(httpClient, webhookURL)
-}
-
-func requiresGCS(cfg *config.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	return remoteio.IsGCSURI(cfg.InputFile) || remoteio.IsGCSURI(cfg.OutputFile)
 }

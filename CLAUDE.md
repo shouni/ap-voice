@@ -22,8 +22,21 @@ There is no Makefile/CI config in the repo — the commands above are the whole 
 
 ### Required environment for running `generate`
 
-- `GEMINI_MODEL` — required unless `--model`/`-g` is passed. There is deliberately **no default model in the code**: model IDs age on Google's release schedule, not this repo's, so a default would keep an outdated model in use unnoticed. `Config.Validate` (called from the root `PreRunE`) fails the run when neither is set — do not reintroduce a fallback.
-- `GEMINI_API_KEY` or `GCP_PROJECT_ID` (one required — direct Gemini API key vs. Vertex AI via project ID)
+- `GEMINI_MODELS` — required. Comma-separated; the first entry is the default model, and
+  `--model`/`-g` overrides it per run. There is deliberately **no default model in the code**:
+  model IDs age on Google's release schedule, not this repo's, so a default would keep an
+  outdated model in use unnoticed. `Config.ValidateEssentialConfig` (called from the root
+  `PreRunE`) fails startup when it is empty — do not reintroduce a fallback. Plural matches the
+  fleet convention (`ap-comp`/`ap-mv`/`ap-story`), where `ap-infra`'s `shared_models.tf` is the
+  single source of the spelling.
+- `GCP_PROJECT_ID` — required. **Gemini is called via Vertex AI only**; there is no
+  `GEMINI_API_KEY` path. On Cloud Run the runtime SA's `roles/aiplatform.user` authenticates,
+  so shipping a key would hand out access to a secret nothing reads — and Cloud Run resolves
+  secret envs at startup, so an unused one cannot be dropped without a redeploy. Local runs
+  need ADC (`gcloud auth application-default login`).
+- `GCP_LOCATION_ID` — optional, defaults to `global` (ap-voice's Gemini calls have always used
+  `global`; the rest of the fleet passes `asia-northeast1`)
+- `HTTP_TIMEOUT` — optional, defaults to `60s`
 - `VOICEVOX_API_URL` — VOICEVOX engine endpoint. Optional: unset falls back to
   `http://localhost:50021` (go-voicevox's default, with a warning), which is what both local
   runs and a Cloud Run sidecar want. Env-only by design — there is no flag, because this is a
@@ -34,7 +47,7 @@ There is no Makefile/CI config in the repo — the commands above are the whole 
 - `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs
 - `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op
 
-`--input`/`-i` is a required flag; `--output`/`-o` has no default and errors at runtime if omitted. `--model`/`-g` is required too, but via `Config.Validate` rather than cobra, so that `GEMINI_MODEL` can supply it.
+`--input`/`-i` is a required flag; `--output`/`-o` has no default and errors at runtime if omitted. `--model`/`-g` is optional — `initAppPreRunE` fills it from `GEMINI_MODELS[0]` when unset, and `ValidateEssentialConfig` has already failed startup if that list is empty.
 
 ## Architecture
 
@@ -58,7 +71,15 @@ Key invariants:
 - **Pipeline.Execute is the only orchestration point**: generate script → error if empty → publish (WAV + script upload + optional signed URL) → notify success/failure. Notification always fires from a single `defer` in `Execute`, so failure paths don't need to remember to notify.
 - **PublishRunner writes two artifacts per run**: the WAV via `Voice.UploadWav`, then a companion file via `Voice.UploadScript` (VoiceAdapter writes this as `<output-basename>.json`, not `.txt` despite older docs/comments — check `internal/adapters/voice.go` if this matters for a change). A signed URL is generated only if the RemoteIO's `URLSigner` is non-nil (GCS); local output never gets a signed URL and that's treated as a soft failure (logged, not returned as an error).
 - **AI output is schema-constrained**: `GenerateRunner` calls Gemini with `ResponseMIMEType: application/json` and an explicit `ResponseSchema` (see `internal/runner/schema.go`), then unmarshals directly into `[]domain.ScriptLine`. The schema hardcodes `allowedSpeakers`/`allowedStyles`/`allowedDirections` enums (e.g. speakers are just `ずんだもん`/`めたん`) — these must stay in sync with whatever VOICEVOX speakers/styles are actually available, and any new speaker/style needs an update here, not just in the prompt templates. If you change `ScriptLine`'s fields, update the schema in lockstep.
-- **Config resolution order**: CLI flags (cobra, in `opts`) are the base; `initAppPreRunE` (`cmd/root.go`) fills any still-empty fields from environment variables via `config.LoadConfig()` + `FillDefaults`, then `Normalize()` trims whitespace. Flags always win over env vars.
+- **Config and per-run values are separate types.** `config.Config` holds only what the
+  deployment target decides (project, models, engine URL, timeouts, webhook) and is read from
+  the environment with `caarlos0/env` struct tags, grouped into sub-structs (`GCP`, `AI`,
+  `Voicevox`, `Notification`, `HTTP`) the same way `ap-comp`/`ap-mv`/`ap-story` group theirs.
+  Values that change per run — input, output, mode, model override — live in `cmd`'s unexported
+  `options` struct and reach the pipeline as a `domain.Request`. Putting both in one struct is
+  what the old flat `Config` + `FillDefaults` did, and it made per-run values look like they
+  came from the environment. `LoadConfig` → `normalize()` (trims, dedupes lists, fills
+  defaults) → `ValidateEssentialConfig()`; `--model`/`-g` beats `GEMINI_MODELS[0]`.
 - **`shouni/clibase`** is this project's shared CLI bootstrap library (external module) — `cmd.Execute()` just declares the app name, persistent flags, pre-run hook, and subcommands; clibase handles the actual cobra `Execute()` call and shared init (logging etc.).
 
 ## Notable external dependencies (all first-party `github.com/shouni/*` libraries)

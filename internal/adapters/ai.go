@@ -11,30 +11,20 @@ import (
 	"github.com/shouni/ap-voice/internal/config"
 )
 
-const (
-	// defaultLocationID はデフォルトのロケーションIDです。
-	defaultLocationID = "global"
-
-	// defaultInitialDelay リトライのデフォルトの遅延期間を指定します。
-	defaultInitialDelay = 30 * time.Second
-)
+// defaultInitialDelay リトライのデフォルトの遅延期間を指定します。
+const defaultInitialDelay = 30 * time.Second
 
 // NewAIAdapter は Gemini APIと通信するためのクライアントを初期化します。
 func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, error) {
-	clientConfig := gemini.Config{
-		InitialDelay: defaultInitialDelay,
+	// Vertex AI 経由でのみ認証します。API キー経路を持たない理由は config.GCPConfig を参照。
+	if cfg.GCP.ProjectID == "" {
+		return nil, fmt.Errorf("GCP_PROJECT_ID is not set")
 	}
 
-	// GeminiAPIKeyが設定されている場合は優先して使用し、
-	// 設定されていない場合はGCPのProjectIDを使用したVertex AI経由の認証を試みる。
-	switch {
-	case cfg.GeminiAPIKey != "":
-		clientConfig.APIKey = cfg.GeminiAPIKey
-	case cfg.ProjectID != "":
-		clientConfig.ProjectID = cfg.ProjectID
-		clientConfig.LocationID = defaultLocationID
-	default:
-		return nil, fmt.Errorf("GEMINI_API_KEY or GCP_PROJECT_ID is not set")
+	clientConfig := gemini.Config{
+		InitialDelay: defaultInitialDelay,
+		ProjectID:    cfg.GCP.ProjectID,
+		LocationID:   cfg.GCP.LocationID,
 	}
 
 	aiClient, err := gemini.NewClient(ctx, clientConfig)

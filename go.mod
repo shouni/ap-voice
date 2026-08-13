@@ -3,13 +3,13 @@ module github.com/shouni/ap-voice
 go 1.26
 
 require (
+	github.com/caarlos0/env/v11 v11.4.1
 	github.com/shouni/clibase v1.0.4
 	github.com/shouni/go-gemini-client v1.17.0
 	github.com/shouni/go-http-kit v1.8.0
 	github.com/shouni/go-notify v1.2.2
 	github.com/shouni/go-prompt-kit v1.4.1
 	github.com/shouni/go-remote-io v1.8.0
-	github.com/shouni/go-utils v1.5.0
 	github.com/shouni/go-voicevox v1.6.1
 	github.com/shouni/go-web-reader v1.2.0
 	github.com/spf13/cobra v1.10.2
@@ -70,6 +70,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shouni/audio v1.2.1 // indirect
+	github.com/shouni/go-utils v1.5.0 // indirect
 	github.com/shouni/go-web-exact/v2 v2.5.2 // indirect
 	github.com/shouni/netarmor v1.2.0 // indirect
 	github.com/slack-go/slack v0.27.0 // indirect

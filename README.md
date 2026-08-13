@@ -52,11 +52,16 @@
 
 | 変数名 | 必須/任意 | 説明 |
 | --- | --- | --- |
-| `GEMINI_MODEL` | 必須 | 使用する Gemini モデル名。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、どちらも未指定なら実行時にエラー**になります。 |
-| `GEMINI_API_KEY` | いずれか必須 | Google AI Studio で取得した API キー。 |
-| `GCP_PROJECT_ID` | いずれか必須 | Vertex AI 経由で Gemini を利用する場合の GCP Project ID。 |
+| `GEMINI_MODELS` | 必須 | 使用する Gemini モデル名。**カンマ区切りで複数指定でき、先頭が既定モデル**になります。`--model` / `-g` で上書きできます。**アプリ側に既定値は無く、未設定なら起動時にエラー**になります。 |
+| `GCP_PROJECT_ID` | 必須 | GCP Project ID。**Gemini は Vertex AI 経由でのみ呼びます**（API キー経路は持ちません）。ローカル実行では ADC が必要です。 |
+| `GCP_LOCATION_ID` | 任意 | Vertex AI のロケーション (Default: `global`)。 |
 | `VOICEVOX_API_URL` | 任意 | エンジンのURL (例: `http://localhost:50021`)。未設定なら `http://localhost:50021` を使います。フラグはありません（実行ごとではなくデプロイ先が決める値のため）。 |
+| `HTTP_TIMEOUT` | 任意 | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
+| `SLACK_WEBHOOK_URL` | 任意 | 完了・失敗の通知先。未設定なら通知は無効になります。 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | GCS使用時に必要な場合 | GCS権限を持つサービスアカウントのJSONパス（ADC利用時）。 |
+
+> 環境変数が持つのは**デプロイ先が決める設定**だけです。入力元・出力先・生成モードといった
+> 実行ごとに変わる値はフラグで渡します。
 
 ### 2. 生成・音声化コマンド
 
@@ -72,8 +77,7 @@ ap-voice generate [flags]
 | `--input` | `-i` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。 |
 | `--output` | `-o` | **出力先URI**。WAVを保存し、同名の `.txt` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
 | `--mode` | `-m` | 形式: **`solo`**, **`dialogue`**, **`duet`** (Default: `duet`)。 |
-| `--model` | `-g` | 使用する Gemini モデル名。**必須**（環境変数 `GEMINI_MODEL` でも指定可。既定値なし） |
-| `--http-timeout` |  | Webリクエストや合成のタイムアウト時間。 (Default: `60s`) |
+| `--model` | `-g` | 使用する Gemini モデル名。未指定なら `GEMINI_MODELS` の先頭を使います。 |
 
 > `--input` は必須フラグです。`--output` は必須フラグではありませんが、未指定の場合は実行時エラーになります。
 
@@ -81,7 +85,7 @@ ap-voice generate [flags]
 
 ## 🔊 実行例
 
-以下の例は `GEMINI_MODEL` を環境変数で設定済みとしています（未設定なら `-g` でモデル名を渡してください）。
+以下の例は `GEMINI_MODELS` と `GCP_PROJECT_ID` を環境変数で設定済みとしています（モデルを切り替えたいときは `-g` で渡してください）。
 
 ### 例 1: Web記事を対話形式で音声化し、GCSへ保存
 
