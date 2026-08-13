@@ -21,7 +21,7 @@ type TaskQueueAdapter struct {
 func NewTaskQueueAdapter(ctx context.Context, cfg tasks.Config) (*TaskQueueAdapter, error) {
 	enqueuer, err := tasks.NewEnqueuer[domain.Request](ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("Cloud Tasks の初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("タスクキューの初期化に失敗しました: %w", err)
 	}
 	return &TaskQueueAdapter{enqueuer: enqueuer}, nil
 }

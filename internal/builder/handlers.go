@@ -48,7 +48,7 @@ func (h *AppHandlers) Validate() error {
 	}
 	// Web と Auth も対です。Auth が無いとフォームが認証なしで公開されます。
 	if (h.Auth == nil) != (h.Web == nil) {
-		return errors.New("Auth と Web は同時に構成する必要があります")
+		return errors.New("認証ハンドラーと Web ハンドラーは同時に構成する必要があります")
 	}
 	return nil
 }
@@ -74,7 +74,7 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 			appCtx.Config.Tasks.AllowedServiceAccounts,
 		)
 		if !taskAuth.Configured() {
-			return nil, fmt.Errorf("cloud Tasks の OIDC 検証を構成できません: TASK_AUDIENCE_URL と ALLOWED_TASK_SERVICE_ACCOUNTS が必要です")
+			return nil, fmt.Errorf("タスク受信の OIDC 検証を構成できません: TASK_AUDIENCE_URL と ALLOWED_TASK_SERVICE_ACCOUNTS が必要です")
 		}
 		h.TaskAuth = taskAuth
 		h.Worker = worker.NewHandler[domain.Request](appCtx.Pipeline)
@@ -116,7 +116,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Modes:     modes,
 	})
 	if err != nil {
-		return fmt.Errorf("Web ハンドラーの初期化に失敗しました: %w", err)
+		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)
 	}
 
 	h.Auth = authHandler

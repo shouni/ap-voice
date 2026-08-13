@@ -270,7 +270,7 @@ func (c *Config) validateWebConfig() error {
 	}
 
 	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {
-		return fmt.Errorf("Google OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SECRET）が不足しています")
+		return fmt.Errorf("OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SECRET）が不足しています")
 	}
 	if len(c.Auth.AllowedEmails) == 0 && len(c.Auth.AllowedDomains) == 0 {
 		return fmt.Errorf("許可されたメールアドレスまたはドメインが一つも設定されていません（認可リストが空です）")
