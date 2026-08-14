@@ -1,8 +1,10 @@
 # ✍️ AP Voice
 
-[![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/shouni/ap-voice/actions/workflows/ci.yml/badge.svg)](https://github.com/shouni/ap-voice/actions/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](#)
+[![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
+[![Platform](https://img.shields.io/badge/Platform-Cloud%20Run-blue?logo=google-cloud)](https://cloud.google.com/run)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 💡 概要 (About)
 
