@@ -3,12 +3,14 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shouni/go-job-kit/jobstatus"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -22,7 +24,7 @@ type savingRepo struct {
 	calls int
 }
 
-func (r *savingRepo) Save(_ context.Context, _ string, script domain.Script) error {
+func (r *savingRepo) SaveScript(_ context.Context, _ string, script domain.Script) error {
 	r.saved = script
 	r.calls++
 	return nil
@@ -178,5 +180,68 @@ func TestAPIUpdateScriptRejectsBadJobID(t *testing.T) {
 	}
 	if repo.calls != 0 {
 		t.Error("不正なジョブIDで保存しています")
+	}
+}
+
+// recordingStore は、保存の順序を記録する jobstatus.StatusStore です。
+type recordingStore struct {
+	order *[]string
+}
+
+func (s recordingStore) Get(context.Context, string) (jobstatus.Status, error) {
+	return jobstatus.Status{}, errors.New("記録がありません")
+}
+
+func (s recordingStore) Save(context.Context, string, jobstatus.Status) error {
+	*s.order = append(*s.order, "status")
+	return nil
+}
+
+// recordingQueue は、投入の順序を記録する TaskQueue です。
+type recordingQueue struct {
+	order *[]string
+}
+
+func (q recordingQueue) Enqueue(context.Context, domain.Request) error {
+	*q.order = append(*q.order, "enqueue")
+	return nil
+}
+
+// TestAPIEnqueueRecordsQueuedBeforeEnqueueing は、状態を投入より先に書くことを
+// 検証します。
+//
+// **Worker は配信されたタスクより先に状態を読みます。** Cloud Tasks は数十ミリ秒で
+// 届くため、順序が逆だと Worker が書いた running を、あとから届いた queued が
+// 上書きしかねません。ap-story が同じ順序で実際に踏んでいます。
+func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	h := apiHandler(t, &savingRepo{})
+	h.status = jobstatus.NewRecorder[jobstatus.Status](recordingStore{order: &order})
+	h.queue = recordingQueue{order: &order}
+
+	req := httptest.NewRequest("POST", "/api/jobs",
+		strings.NewReader(`{"command":"generate","input_uri":"gs://in/x.txt","mode":"tech_solo"}`))
+	rec := httptest.NewRecorder()
+	h.APIEnqueue(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+	if len(order) != 2 || order[0] != "status" || order[1] != "enqueue" {
+		t.Errorf("順序 = %v, want [status enqueue]", order)
+	}
+
+	// 応答は御三家と同じ封筒（status + job_id）であること。
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != string(jobstatus.StateQueued) {
+		t.Errorf("status = %q, want %q", body["status"], jobstatus.StateQueued)
+	}
+	if body["job_id"] == "" {
+		t.Error("job_id が空です")
 	}
 }

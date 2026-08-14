@@ -8,12 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
+	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-utils/jobid"
 
@@ -29,6 +28,22 @@ type Repository struct {
 	writer remoteio.OutputWriter
 	bucket string
 	layout domain.StorageLayout
+	// status はジョブの進行状況です。**成果物と同じジョブディレクトリ**に置くので、
+	// 履歴の削除（プレフィックスの一括削除）で状態ファイルも一緒に片付きます。
+	status *jobstatus.Store[jobstatus.Status]
+}
+
+// Get は、ジョブの状態を読みます。jobstatus.StatusStore を満たします。
+func (r *Repository) Get(ctx context.Context, jobID string) (jobstatus.Status, error) {
+	return r.status.Get(ctx, jobID)
+}
+
+// Save は、ジョブの状態を書きます。jobstatus.StatusStore を満たします。
+//
+// **Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。**
+// 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
+func (r *Repository) Save(ctx context.Context, jobID string, status jobstatus.Status) error {
+	return r.status.Save(ctx, jobID, status)
 }
 
 // titleFetchParallelism は題名を読むときの同時実行数です。
@@ -46,15 +61,21 @@ func NewRepository(reader remoteio.InputReader, writer remoteio.OutputWriter, bu
 	if bucket == "" {
 		return nil, fmt.Errorf("バケットが指定されていません")
 	}
-	return &Repository{reader: reader, writer: writer, bucket: bucket, layout: domain.NewStorageLayout()}, nil
+	layout := domain.NewStorageLayout()
+	return &Repository{
+		reader: reader, writer: writer, bucket: bucket, layout: layout,
+		// UnderJobDir は baseURI/{jobID}/status.json を指します。
+		status: jobstatus.NewStore[jobstatus.Status](reader, writer,
+			jobstatus.UnderJobDir(strings.TrimSuffix(fmt.Sprintf("gs://%s/%s", bucket, layout.VoicePrefix()), "/"))),
+	}, nil
 }
 
-// Save は、編集された台本を保存済みのものへ書き戻します。
+// SaveScript は、編集された台本を保存済みのものへ書き戻します。
 //
 // **編集内容をタスクのペイロードに載せません。** Cloud Tasks は 1MB が上限で、
 // 長い台本はそこに当たりえます。先に保存してから JobID だけを渡せば、
 // Worker は既存の「保存済み台本を読む」経路をそのまま使えます。
-func (r *Repository) Save(ctx context.Context, jobID string, script domain.Script) error {
+func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain.Script) error {
 	if err := jobid.Validate(jobID); err != nil {
 		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
@@ -128,79 +149,55 @@ type Job struct {
 	HasAudio bool
 }
 
-// List は、新しい順にジョブを返します。
+// List は、指定ページのジョブを新しい順に返します。
 //
-// 並びは作成時刻の降順ですが、**ジョブ ID を辞書順に並べません。** ID は
-// 接頭辞付きの形式で、接頭辞の違いが時刻より先に効いてしまうためです
-// （go-utils/jobid の SortKey がそこを吸収します）。
-func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
+// **並べ替えと切り出しは go-job-kit の paging に任せます。** 御三家と同じ実装なので、
+// ページ番号の解釈やメタデータの形が揃います。題名の読み込みは 1 ページぶんだけを
+// 並行に行い、失敗した ID はジョブ ID のまま一覧へ残します（台本が壊れていても
+// 音声は残っていることがあり、一覧から消えると消す手段まで失われます）。
+func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, paging.PageMeta, error) {
 	prefix := r.uri(r.layout.VoicePrefix())
 
-	seen := make(map[string]*Job)
+	hasAudio := make(map[string]bool)
+	var jobIDs []string
 	err := r.reader.List(ctx, prefix, func(path string) error {
 		jobID, object, ok := r.splitJobPath(path)
 		if !ok {
 			return nil
 		}
-		job, exists := seen[jobID]
-		if !exists {
-			created, _ := jobid.CreatedAt(jobID)
-			job = &Job{ID: jobID, Title: jobID, CreatedAt: created}
-			seen[jobID] = job
+		if _, seen := hasAudio[jobID]; !seen {
+			hasAudio[jobID] = false
+			jobIDs = append(jobIDs, jobID)
 		}
 		if strings.HasSuffix(object, ".wav") {
-			job.HasAudio = true
+			hasAudio[jobID] = true
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
+		return nil, paging.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
 	}
 
-	jobs := make([]Job, 0, len(seen))
-	for _, job := range seen {
-		jobs = append(jobs, *job)
+	load := func(ctx context.Context, jobID string) (Job, error) {
+		job := Job{ID: jobID, Title: jobID, HasAudio: hasAudio[jobID]}
+		job.CreatedAt, _ = jobid.CreatedAt(jobID)
+		script, err := r.Load(ctx, jobID)
+		if err != nil {
+			// **一覧からは落としません。** 読めない台本のジョブこそ消したいものです。
+			slog.DebugContext(ctx, "台本を読めないジョブIDのまま一覧に載せます", "job_id", jobID, "error", err)
+			return job, nil
+		}
+		if title := strings.TrimSpace(script.Title); title != "" {
+			job.Title = title
+		}
+		return job, nil
 	}
 
-	// **並べて切ってから題名を読みます。** 逆順にすると、50 件を表示するために
-	// 全ジョブ分の台本を読むことになり、往復がジョブ数に比例して増え続けます。
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobid.SortKey(jobs[i].ID) > jobid.SortKey(jobs[j].ID)
-	})
-	if limit > 0 && len(jobs) > limit {
-		jobs = jobs[:limit]
-	}
-
-	r.fillTitles(ctx, jobs)
-	return jobs, nil
-}
-
-// fillTitles は各ジョブの台本を読んで題名を埋めます。
-//
-// **1 件ずつ順に読むと件数分の往復になる**ため並列に読みます。読めなかったものは
-// ジョブ ID のままにして一覧には載せます（台本が壊れていても音声は残っていることがあり、
-// 一覧から消えると消す手段まで失われます）。
-func (r *Repository) fillTitles(ctx context.Context, jobs []Job) {
-	// errgroup.WithContext は使いません。**どの読み出しも失敗を握りつぶす**ため、
-	// 1 件の失敗で残りを打ち切る意味がありません。
-	var g errgroup.Group
-	g.SetLimit(titleFetchParallelism)
-
-	for i := range jobs {
-		g.Go(func() error {
-			script, err := r.Load(ctx, jobs[i].ID)
-			if err != nil {
-				slog.DebugContext(ctx, "台本を読めないジョブIDのまま一覧に載せます", "job_id", jobs[i].ID, "error", err)
-				return nil
-			}
-			if title := strings.TrimSpace(script.Title); title != "" {
-				jobs[i].Title = title
-			}
-			return nil
-		})
-	}
-	// 個々の失敗は上で握りつぶしているため、ここでエラーは返りません。
-	_ = g.Wait()
+	// **ジョブ ID を辞書順に並べません。** 接頭辞付きの形式で、接頭辞の違いが
+	// 時刻より先に効いてしまうためです（jobid.SortKey がそこを吸収します）。
+	return paging.LoadPage(ctx, jobIDs, page, perPage, load,
+		paging.WithSortKey(jobid.SortKey),
+		paging.WithConcurrency(titleFetchParallelism))
 }
 
 // Delete は、1 つのジョブの成果物をまとめて消します。

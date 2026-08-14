@@ -99,7 +99,8 @@ go run .        # SERVER_ROLE が必須
 | --- | --- | --- |
 | `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
 | `GET` | `/api/modes` | 選べるモード（キー・表示名・説明）。 |
-| `GET` | `/api/jobs` | ジョブを新しい順に。 |
+| `GET` | `/api/jobs` | ジョブを新しい順に。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。 |
+| `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `POST` | `/api/jobs` | `generate` / `generate_and_synthesize` を投入。 |
 | `GET` | `/api/jobs/{jobID}/script` | 台本を取得。 |
 | `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
@@ -257,6 +258,7 @@ ap-voice/
 * **[shouni/go-prompt-kit](https://github.com/shouni/go-prompt-kit)**: プロンプトテンプレートのロードとレンダリング
 * **[caarlos0/env](https://github.com/caarlos0/env)**: 環境変数から設定構造体への読み込み
 * **[shouni/go-notify](https://github.com/shouni/go-notify)**: Slack 通知の組み立てと送信
+* **[shouni/go-job-kit](https://github.com/shouni/go-job-kit)**: ジョブ状態の記録 (`jobstatus`) と一覧のページング (`paging`)
 * **[shouni/go-utils](https://github.com/shouni/go-utils)**: ジョブ ID の発行・検証 (`jobid`)
 * **[gopkg.in/yaml.v3](https://gopkg.in/yaml.v3)**: プロンプト冒頭の front matter の解析
 

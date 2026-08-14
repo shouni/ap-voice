@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shouni/go-job-kit/paging"
+
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
@@ -102,13 +104,18 @@ func TestTemplatesRender(t *testing.T) {
 			template: "history.html",
 			view: historyView{
 				baseView: testBaseView("/history"),
+				Page:     paging.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
 				Jobs: []repository.Job{
 					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true},
 					// 台本が読めなかった場合はジョブ ID が題名に入ります。
 					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false},
 				},
 			},
-			want: []string{"一覧のタイトル", "voice-2"},
+			want: []string{
+				"一覧のタイトル", "voice-2",
+				// ページ送りは 2 ページ以上のときだけ出ます。
+				`href="/history?page=1"`, `href="/history?page=3"`, "全 120 件",
+			},
 		},
 		{
 			name:     "詳細（音声あり）",

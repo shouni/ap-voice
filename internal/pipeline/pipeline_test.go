@@ -137,6 +137,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockScriptStore{},
+			nil,
 			0,
 		)
 
@@ -174,6 +175,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockScriptStore{},
+			nil,
 			0,
 		)
 
@@ -205,6 +207,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockScriptStore{},
+			nil,
 			0,
 		)
 
@@ -243,6 +246,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockScriptStore{},
+			nil,
 			0,
 		)
 
@@ -289,6 +293,7 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 		},
 		&MockNotifier{},
 		&MockScriptStore{},
+		nil,
 		0,
 	)
 
@@ -358,6 +363,7 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 					},
 				},
 				&MockScriptStore{},
+				nil,
 				0,
 			)
 
@@ -417,6 +423,7 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 			},
 		},
 		&MockScriptStore{},
+		nil,
 		20*time.Millisecond,
 	)
 

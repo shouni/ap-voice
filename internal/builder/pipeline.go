@@ -23,7 +23,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 		return nil, fmt.Errorf("保存の段の初期化に失敗しました: %w", err)
 	}
 
-	p := pipeline.NewPipeline(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.Config.Pipeline.Timeout)
+	p := pipeline.NewPipeline(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.JobStatus, appCtx.Config.Pipeline.Timeout)
 
 	return p, nil
 }

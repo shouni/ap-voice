@@ -111,7 +111,7 @@ func TestListReadsOnlyTheScriptsItShows(t *testing.T) {
 	store, _ := newStore(t, 30)
 	repo := newRepo(t, store)
 
-	jobs, err := repo.List(context.Background(), 5)
+	jobs, _, err := repo.List(context.Background(), 1, 5)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestListKeepsJobsWithUnreadableScripts(t *testing.T) {
 	store.objects["gs://test/voice/"+ids[0]+"/audio.json"] = "これはJSONではありません"
 	repo := newRepo(t, store)
 
-	jobs, err := repo.List(context.Background(), 10)
+	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -169,7 +169,7 @@ func TestHasAudioDoesNotDependOnTheListLimit(t *testing.T) {
 
 	// ids[0] は最も古いので、新しい順 50 件には入りません。
 	oldest := ids[0]
-	jobs, err := repo.List(context.Background(), 50)
+	jobs, _, err := repo.List(context.Background(), 1, 50)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -246,7 +246,7 @@ func TestSaveWritesBackToTheStoredScript(t *testing.T) {
 		Title: "直した題名",
 		Lines: []domain.ScriptLine{{Speaker: "四国めたん", Style: "ノーマル", Text: "直した本文"}},
 	}
-	if err := repo.Save(context.Background(), id, edited); err != nil {
+	if err := repo.SaveScript(context.Background(), id, edited); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
@@ -266,7 +266,7 @@ func TestSaveRejectsBadJobID(t *testing.T) {
 	store, _ := newStore(t, 1)
 	repo := newRepo(t, store)
 
-	if err := repo.Save(context.Background(), "../../evil", domain.Script{Title: "x"}); err == nil {
+	if err := repo.SaveScript(context.Background(), "../../evil", domain.Script{Title: "x"}); err == nil {
 		t.Fatal("不正なジョブIDが素通りしました")
 	}
 	if store.written != 0 {

@@ -12,6 +12,8 @@ import (
 	"github.com/shouni/gcp-kit/auth"
 	"github.com/shouni/go-remote-io/remoteio"
 
+	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-utils/jobid"
 	"github.com/shouni/go-voicevox/speaker"
 
@@ -40,6 +42,10 @@ type Handler struct {
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer remoteio.URLSigner
+	// status は投入時に queued を記録します。**投入より先に書きます** —
+	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
+	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
+	status *jobstatus.Recorder[jobstatus.Status]
 	// renderer はカタログでプロンプト本文を見せるために使います。
 	// **生成時と同じ組み立て**を通すので、画面に出るものと Gemini へ渡るものが一致します。
 	renderer PromptRenderer
@@ -57,9 +63,10 @@ type PromptRenderer interface {
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
-	List(ctx context.Context, limit int) ([]repository.Job, error)
+	List(ctx context.Context, page, perPage int) ([]repository.Job, paging.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
-	Save(ctx context.Context, jobID string, script domain.Script) error
+	SaveScript(ctx context.Context, jobID string, script domain.Script) error
+	Get(ctx context.Context, jobID string) (jobstatus.Status, error)
 	HasAudio(ctx context.Context, jobID string) (bool, error)
 	Delete(ctx context.Context, jobID string) error
 }
@@ -79,6 +86,7 @@ type HandlerOptions struct {
 	Signer    remoteio.URLSigner
 	Speakers  *speaker.Registry
 	Renderer  PromptRenderer
+	JobStatus *jobstatus.Recorder[jobstatus.Status]
 }
 
 // NewHandler は Handler を生成します。
@@ -119,6 +127,7 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		signer:    opts.Signer,
 		speakers:  opts.Speakers,
 		renderer:  opts.Renderer,
+		status:    opts.JobStatus,
 	}, nil
 }
 
@@ -152,6 +161,21 @@ func (h *Handler) base(r *http.Request) baseView {
 		Path:         r.URL.Path,
 		DefaultModel: h.defaultModel(),
 	}
+}
+
+// recordQueued は、投入を記録します。**enqueue より先に呼びます。**
+//
+// Cloud Tasks は数十ミリ秒で届くため、順序が逆だと Worker が書いた running を
+// あとから queued で上書きしかねません。記録できなくても投入は続けます。
+func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
+	if h.status == nil {
+		return
+	}
+	h.status.Record(ctx, req.JobID, jobstatus.Status{
+		JobID:   req.JobID,
+		Command: string(req.Command),
+		State:   jobstatus.StateQueued,
+	})
 }
 
 // defaultModel は一覧の先頭を返します。空の一覧は NewHandler が弾いています。
@@ -215,6 +239,7 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
 		h.renderError(w, r, http.StatusBadGateway, req, err.Error())
 		return

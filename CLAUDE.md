@@ -152,6 +152,16 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
+- **Job state lives in `go-job-kit`**, as it does in the siblings: `jobstatus.Status` written by
+  `UnderJobDir` to `voice/<jobID>/status.json`, so deleting a job's prefix takes its state with
+  it. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
+  **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
+  and the worker reads state before it works, so the reverse order lets a stale record overwrite
+  a live one; ap-story hit exactly this. Failure is recorded on the un-cancelled notification
+  context for the same reason the notification is: a timed-out context records nothing.
+  `Repository` satisfies `jobstatus.StatusStore`, which is why the bucket and prefix are assembled
+  in one place. Listing uses `paging.LoadPage`, so page maths and `PageMeta`'s JSON match the
+  siblings and a page costs only its own rows.
 - **`/api/*` is the same surface for machines**, under the same middleware: `ProtectedMiddleware`
   tries an OIDC bearer first and falls back to session + CSRF, so one route serves a browser and
   an agent — the arrangement ap-comp, ap-mv and ap-story already use. `ALLOWED_M2M_SERVICE_ACCOUNTS`

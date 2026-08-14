@@ -5,21 +5,34 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
-// historyLimit は一覧に出す件数です。
-const historyLimit = 50
+// historyPerPage は 1 ページに出す件数です。
+const historyPerPage = 50
+
+// pageParam は ?page= を読みます。不正な値は 1 ページ目として扱います。
+// 一覧の閲覧でエラー画面を出しても、利用者にできることがありません。
+func pageParam(r *http.Request) int {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		return 1
+	}
+	return page
+}
 
 // historyView は履歴一覧に渡す値です。
 type historyView struct {
 	baseView
 	Jobs []repository.Job
+	Page paging.PageMeta
 }
 
 // detailView は詳細画面に渡す値です。
@@ -45,13 +58,13 @@ const maxScriptLines = 200
 
 // History は、これまでのジョブを新しい順に並べます。
 func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
-	jobs, err := h.repo.List(r.Context(), historyLimit)
+	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), historyPerPage)
 	if err != nil {
 		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
 		return
 	}
 
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs})
+	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs, Page: meta})
 }
 
 // Detail は、1 件のジョブの台本を表示します。ここから音声の確認と作成を行います。
@@ -82,7 +95,7 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Save(r.Context(), jobID, script); err != nil {
+	if err := h.repo.SaveScript(r.Context(), jobID, script); err != nil {
 		h.renderDetail(w, r, http.StatusBadGateway, "", "台本の保存に失敗しました")
 		return
 	}
@@ -92,6 +105,7 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
+	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
 		h.renderDetail(w, r, http.StatusBadGateway, "", err.Error())
 		return

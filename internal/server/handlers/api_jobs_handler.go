@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -31,9 +34,15 @@ type apiJob struct {
 }
 
 // apiAccepted は投入を受け付けたときの応答です。
+//
+// **御三家と同じ封筒**です（ap-mcp の client.TaskQueuedResponse が
+// status と job_id を読みます）。ここだけ形が違うと、共通クライアントに
+// ap-voice 用の分岐が要ります。
 type apiAccepted struct {
-	JobID   string `json:"job_id"`
-	Command string `json:"command"`
+	Status string `json:"status"`
+	JobID  string `json:"job_id"`
+	// Command は ap-voice 独自です。3 つのコマンドのどれを受け付けたかを返します。
+	Command string `json:"command,omitempty"`
 }
 
 // apiEnqueue は、ジョブ投入の要求です。
@@ -46,9 +55,23 @@ type apiEnqueue struct {
 	AIModel  string `json:"ai_model,omitempty"`
 }
 
-// APIJobs は、ジョブを新しい順に返します。
+// apiJobPage は、ページ付きの一覧応答です。
+//
+// **メタデータの形は go-job-kit の paging.PageMeta です。** 御三家の一覧と同じ
+// JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
+type apiJobPage struct {
+	Jobs []apiJob        `json:"jobs"`
+	Page paging.PageMeta `json:"page"`
+}
+
+// APIJobs は、ジョブを新しい順に返します。?page= と ?per_page= を受けます。
 func (h *Handler) APIJobs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := h.repo.List(r.Context(), historyLimit)
+	perPage := historyPerPage
+	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
+		perPage = n
+	}
+
+	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)
 	if err != nil {
 		writeErrorJSON(w, http.StatusBadGateway, "履歴の取得に失敗しました")
 		return
@@ -62,7 +85,7 @@ func (h *Handler) APIJobs(w http.ResponseWriter, r *http.Request) {
 			HasAudio:  job.HasAudio,
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 }
 
 // APIEnqueue は、入力ソースから新しいジョブを投入します。
@@ -98,12 +121,13 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
 		writeErrorJSON(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, apiAccepted{JobID: jobID, Command: string(command)})
+	writeJSON(w, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(command)})
 }
 
 // APIScript は、保存済みの台本を返します。
@@ -146,7 +170,7 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Save(r.Context(), jobID, cleaned); err != nil {
+	if err := h.repo.SaveScript(r.Context(), jobID, cleaned); err != nil {
 		writeErrorJSON(w, http.StatusBadGateway, "台本の保存に失敗しました")
 		return
 	}
@@ -169,11 +193,34 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
 		writeErrorJSON(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, apiAccepted{JobID: jobID, Command: string(domain.CommandSynthesize)})
+	writeJSON(w, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
+}
+
+// APIJobStatus は、ジョブの進行状況を返します。
+//
+// **投入した側が完了と失敗を知る唯一の手段です。** 成果物の有無だけでは、
+// まだ動いているのか失敗したのかを区別できません。書式は go-job-kit の
+// jobstatus.Status で、御三家と同じ形です。
+//
+// 記録が無い場合は 404 です。ap-mcp 側はこれを unknown として扱い、
+// 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
+func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.apiJobID(w, r)
+	if !ok {
+		return
+	}
+
+	status, err := h.repo.Get(r.Context(), jobID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, "ジョブ状態が見つかりません")
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 // APIDeleteJob は、1 つのジョブの成果物をまとめて消します。

@@ -130,6 +130,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Signer:    appCtx.RemoteIO.Signer,
 		Speakers:  appCtx.Speakers,
 		Renderer:  renderer,
+		JobStatus: appCtx.JobStatus,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)

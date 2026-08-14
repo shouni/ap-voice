@@ -91,6 +91,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 				r.Get("/", h.Web.APIJobs)
 				r.Post("/", h.Web.APIEnqueue)
 				r.Delete("/{jobID}", h.Web.APIDeleteJob)
+				r.Get("/{jobID}/status", h.Web.APIJobStatus)
 				r.Get("/{jobID}/script", h.Web.APIScript)
 				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
 				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
