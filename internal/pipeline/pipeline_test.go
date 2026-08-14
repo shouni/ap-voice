@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shouni/go-job-kit/jobstatus"
+
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
@@ -449,5 +451,142 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 		}
 	default:
 		t.Fatal("失敗通知が呼ばれていない")
+	}
+}
+
+// memoryStatusStore は、最後に書かれた状態を覚えておくフェイクです。
+type memoryStatusStore struct {
+	saved domain.JobStatus
+	found bool
+}
+
+func (s *memoryStatusStore) Get(context.Context, string) (domain.JobStatus, error) {
+	if !s.found {
+		return domain.JobStatus{}, errors.New("記録がありません")
+	}
+	return s.saved, nil
+}
+
+func (s *memoryStatusStore) Save(_ context.Context, _ string, status domain.JobStatus) error {
+	s.saved, s.found = status, true
+	return nil
+}
+
+// TestPipelineRecordsArtifactLocations は、完了した状態に成果物の在り処が
+// 載ることを検証します。
+//
+// **「できた」だけでは投入した側が成果物へ辿り着けません。** 音声は publish が
+// 作ったときだけ入り、generate は台本までなので入りません。ここを分けないと、
+// 台本しか無いジョブに音声の URI を書くことになります。
+func TestPipelineRecordsArtifactLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		command      domain.Command
+		wantAudioURI string
+	}{
+		{
+			name:         "generate は台本まで",
+			command:      domain.CommandGenerate,
+			wantAudioURI: "",
+		},
+		{
+			name:         "まとめて作ると音声も入る",
+			command:      domain.CommandGenerateAndSynthesize,
+			wantAudioURI: "gs://bucket/voice/job-1/audio.wav",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &memoryStatusStore{}
+			p := NewPipeline(
+				&MockScriptStep{
+					RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
+						return domain.Script{
+							Title: "題名",
+							Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Style: "ノーマル", Text: "本文"}},
+						}, nil
+					},
+				},
+				&MockPublishStep{},
+				&MockNotifier{},
+				&MockScriptStore{},
+				jobstatus.NewRecorder[domain.JobStatus](store),
+				0,
+			)
+
+			err := p.Execute(context.Background(), domain.Request{
+				Command:   tt.command,
+				JobID:     "job-1",
+				InputURI:  "gs://bucket/in.txt",
+				OutputURI: "gs://bucket/voice/job-1/audio.wav",
+			})
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+
+			if store.saved.State != jobstatus.StateSucceeded {
+				t.Fatalf("State = %q, want succeeded", store.saved.State)
+			}
+			if store.saved.AudioURI != tt.wantAudioURI {
+				t.Errorf("AudioURI = %q, want %q", store.saved.AudioURI, tt.wantAudioURI)
+			}
+			// 台本はどちらの経路でも保存されます。
+			if store.saved.ScriptURI != "gs://bucket/voice/job-1/audio.json" {
+				t.Errorf("ScriptURI = %q", store.saved.ScriptURI)
+			}
+			if store.saved.Title != "題名" {
+				t.Errorf("Title = %q", store.saved.Title)
+			}
+		})
+	}
+}
+
+// TestPipelineKeepsArtifactsOnFailure は、失敗しても前回の成果物の在り処が
+// 残ることを検証します。
+//
+// ワーカーは毎回タスクから状態を組み立て直すため、引き継ぎが無いと
+// 合成の失敗で台本の在り処まで消え、詳細画面からやり直せなくなります。
+func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStatusStore{
+		found: true,
+		saved: domain.JobStatus{
+			ScriptURI: "gs://bucket/voice/job-1/audio.json",
+			AudioURI:  "gs://bucket/voice/job-1/audio.wav",
+		},
+	}
+
+	p := NewPipeline(
+		&MockScriptStep{
+			RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
+				return domain.Script{}, errors.New("生成に失敗しました")
+			},
+		},
+		&MockPublishStep{},
+		&MockNotifier{},
+		&MockScriptStore{},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandGenerate, JobID: "job-1",
+		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if err == nil {
+		t.Fatal("失敗するはずが成功しています")
+	}
+
+	if store.saved.State != jobstatus.StateFailed {
+		t.Errorf("State = %q, want failed", store.saved.State)
+	}
+	if store.saved.ScriptURI == "" || store.saved.AudioURI == "" {
+		t.Errorf("失敗で成果物の在り処が消えています: %+v", store.saved)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-kit/jobstatus"
@@ -188,11 +189,11 @@ type recordingStore struct {
 	order *[]string
 }
 
-func (s recordingStore) Get(context.Context, string) (jobstatus.Status, error) {
-	return jobstatus.Status{}, errors.New("記録がありません")
+func (s recordingStore) Get(context.Context, string) (domain.JobStatus, error) {
+	return domain.JobStatus{}, errors.New("記録がありません")
 }
 
-func (s recordingStore) Save(context.Context, string, jobstatus.Status) error {
+func (s recordingStore) Save(context.Context, string, domain.JobStatus) error {
 	*s.order = append(*s.order, "status")
 	return nil
 }
@@ -218,7 +219,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 
 	var order []string
 	h := apiHandler(t, &savingRepo{})
-	h.status = jobstatus.NewRecorder[jobstatus.Status](recordingStore{order: &order})
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
 	h.queue = recordingQueue{order: &order}
 
 	req := httptest.NewRequest("POST", "/api/jobs",
@@ -244,4 +245,87 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
 	}
+}
+
+// audioRepo は音声の有無を差し替えられるフェイクです。
+type audioRepo struct {
+	ScriptRepository
+	hasAudio bool
+}
+
+func (r audioRepo) HasAudio(context.Context, string) (bool, error) { return r.hasAudio, nil }
+
+// stubSigner は署名付き URL を組み立てたことにするフェイクです。
+type stubSigner struct{ calls int }
+
+func (s *stubSigner) GenerateSignedURL(_ context.Context, path, _ string, _ time.Duration) (string, error) {
+	s.calls++
+	return "https://storage.googleapis.com/" + path + "?X-Goog-Signature=xxx", nil
+}
+
+// TestAPIAudioRefusesWhenThereIsNoAudio は、音声が無いジョブにリンクを出さないことを
+// 検証します。
+//
+// **署名は対象の存在を確かめません。** 作っていない音声の URL も署名できてしまうため、
+// 先に確かめないと「開くと 404 になるリンク」を配ることになります。
+// Slack 通知で同じことを一度やっています。
+func TestAPIAudioRefusesWhenThereIsNoAudio(t *testing.T) {
+	t.Parallel()
+
+	signer := &stubSigner{}
+	h := apiHandler(t, audioRepo{hasAudio: false})
+	h.signer = signer
+
+	rec := callAudio(t, h)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if signer.calls != 0 {
+		t.Error("音声が無いのに署名しています")
+	}
+}
+
+// TestAPIAudioReturnsBothLocations は、期限の無い保存先と再生できるリンクの
+// 両方を返すことを検証します。用途が違うため、片方では足りません。
+func TestAPIAudioReturnsBothLocations(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, audioRepo{hasAudio: true})
+	h.signer = &stubSigner{}
+
+	rec := callAudio(t, h)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var got apiAudio
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("応答のデコードに失敗しました: %v", err)
+	}
+	if !strings.HasPrefix(got.AudioURI, "gs://") {
+		t.Errorf("audio_uri = %q, want gs:// で始まること", got.AudioURI)
+	}
+	if !strings.Contains(got.SignedURL, "X-Goog-Signature") {
+		t.Errorf("signed_url に署名がありません: %q", got.SignedURL)
+	}
+	// **期限を伝えます。** いつまで使えるかが分からないと、呼び出し側は
+	// 切れたリンクを配ったことに気付けません。
+	if got.ExpiresInSeconds <= 0 {
+		t.Errorf("expires_in_seconds = %d", got.ExpiresInSeconds)
+	}
+}
+
+// callAudio は GET /api/jobs/{jobID}/audio を呼びます。
+func callAudio(t *testing.T, h *Handler) *httptest.ResponseRecorder {
+	t.Helper()
+
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
+	req := httptest.NewRequest("GET", "/api/jobs/"+jobID+"/audio", nil)
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("jobID", jobID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+
+	rec := httptest.NewRecorder()
+	h.APIAudio(rec, req)
+	return rec
 }

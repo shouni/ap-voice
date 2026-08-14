@@ -223,6 +223,56 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+// apiAudio は GET /api/jobs/{jobID}/audio の応答です。
+type apiAudio struct {
+	JobID string `json:"job_id"`
+	// AudioURI は保存先です。期限が無いので、記録や再取得の手掛かりになります。
+	AudioURI string `json:"audio_uri"`
+	// SignedURL は誰でも再生・取得できるリンクです。**期限があります。**
+	SignedURL string `json:"signed_url"`
+	// ExpiresInSeconds は SignedURL の有効期間です。
+	ExpiresInSeconds int `json:"expires_in_seconds"`
+}
+
+// APIAudio は、音声を取得できるリンクを発行します。
+//
+// **状態や一覧には署名付き URL を載せません。** 1 時間で切れるうえ発行に計算が要るため、
+// 30 秒ごとのポーリングで毎回作るのは無駄で、渡した頃には切れています。
+// 必要になった時点でこの口を叩く形にしています。
+//
+// 音声がまだ無いジョブは 404 です。署名は対象の存在を確かめないので、
+// 先に確かめないと「開くと 404 になるリンク」を配ることになります。
+func (h *Handler) APIAudio(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.apiJobID(w, r)
+	if !ok {
+		return
+	}
+
+	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadGateway, "音声の有無を確認できませんでした")
+		return
+	}
+	if !hasAudio {
+		writeErrorJSON(w, http.StatusNotFound, "このジョブにはまだ音声がありません")
+		return
+	}
+
+	audioURI := h.layout.AudioURI(h.bucket, jobID)
+	signed, err := h.signer.GenerateSignedURL(r.Context(), audioURI, http.MethodGet, signedURLExpiry)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadGateway, "音声のURL生成に失敗しました")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, apiAudio{
+		JobID:            jobID,
+		AudioURI:         audioURI,
+		SignedURL:        signed,
+		ExpiresInSeconds: int(signedURLExpiry.Seconds()),
+	})
+}
+
 // APIDeleteJob は、1 つのジョブの成果物をまとめて消します。
 func (h *Handler) APIDeleteJob(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.apiJobID(w, r)

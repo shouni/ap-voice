@@ -78,7 +78,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	appCtx := &app.Container{
 		Config: cfg,
 		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
-		JobStatus:  jobstatus.NewRecorder[jobstatus.Status](repo),
+		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](repo),
 		Speakers:   speakers,
 		Repository: repo,
 		RemoteIO:   rio,

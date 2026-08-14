@@ -45,7 +45,7 @@ type Handler struct {
 	// status は投入時に queued を記録します。**投入より先に書きます** —
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
-	status *jobstatus.Recorder[jobstatus.Status]
+	status *jobstatus.Recorder[domain.JobStatus]
 	// renderer はカタログでプロンプト本文を見せるために使います。
 	// **生成時と同じ組み立て**を通すので、画面に出るものと Gemini へ渡るものが一致します。
 	renderer PromptRenderer
@@ -66,7 +66,7 @@ type ScriptRepository interface {
 	List(ctx context.Context, page, perPage int) ([]repository.Job, paging.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
 	SaveScript(ctx context.Context, jobID string, script domain.Script) error
-	Get(ctx context.Context, jobID string) (jobstatus.Status, error)
+	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
 	HasAudio(ctx context.Context, jobID string) (bool, error)
 	Delete(ctx context.Context, jobID string) error
 }
@@ -86,7 +86,7 @@ type HandlerOptions struct {
 	Signer    remoteio.URLSigner
 	Speakers  *speaker.Registry
 	Renderer  PromptRenderer
-	JobStatus *jobstatus.Recorder[jobstatus.Status]
+	JobStatus *jobstatus.Recorder[domain.JobStatus]
 }
 
 // NewHandler は Handler を生成します。
@@ -171,10 +171,17 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	if h.status == nil {
 		return
 	}
-	h.status.Record(ctx, req.JobID, jobstatus.Status{
-		JobID:   req.JobID,
-		Command: string(req.Command),
-		State:   jobstatus.StateQueued,
+	h.status.Record(ctx, req.JobID, domain.JobStatus{
+		Status: jobstatus.Status{
+			JobID:   req.JobID,
+			Command: string(req.Command),
+			State:   jobstatus.StateQueued,
+		},
+	}, func(next, prev *domain.JobStatus) {
+		// 作り直しでは、前回の成果物の在り処を残します。
+		if prev != nil {
+			next.AudioURI, next.ScriptURI = prev.AudioURI, prev.ScriptURI
+		}
 	})
 }
 
