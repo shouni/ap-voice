@@ -54,7 +54,7 @@ type Request struct {
 	AIModel string `json:"ai_model,omitempty"`
 
 	// Script は synthesize の入力となる台本です。
-	// PublishRunner が書き出した .json をそのまま貼り戻せる形にしてあります。
+	// PublishStep が書き出した audio.json の lines をそのまま貼り戻せる形にしてあります。
 	Script []ScriptLine `json:"script,omitempty"`
 }
 

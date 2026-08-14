@@ -16,7 +16,7 @@ const scriptTitleMaxLength = 60
 // scriptResponseSchema は、ナレーションスクリプトを ScriptLine の配列として
 // 受け取るための gemini.Schema を構築します。
 //
-// 許可語彙は assets/speakers/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
+// 許可語彙は assets/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
 // speaker と style は独立した enum なので、**この形では「話者ごとに使えるスタイル」を
 // 表現できません**。実在しない組み合わせを選ばれても getStyleID がその話者の既定へ落とすため、
 // 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担い、

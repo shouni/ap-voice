@@ -81,32 +81,36 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | 投入フォームと Cloud Tasks への投入 | `GET /health`, `GET /`, `POST /`, `/auth/*` |
-| `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `GET /health`, `POST /tasks/generate` |
+| `web` | 投入フォーム・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `/history/*`, `/auth/*` |
+| `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
+
+`GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
+履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
+`POST /history/{jobID}/synthesize`（音声を作る）、`POST /history/{jobID}/delete`（削除）、
+`GET /history/{jobID}/audio`（署名付き URL へ 302）です。
 
 `POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
 `SERVER_ROLE=web` のプロセスでは**ルートごと登録されない**ため 404 です。
 
 #### タスクのペイロード
 
-**台本生成と音声合成は別の入口です。** 台本は WAV の隣に `.json` で保存される成果物であると
-同時に、貼り戻せる入力でもあります。1行の読みを直すたびに Gemini の生成からやり直すと、
-費用と待ち時間が無駄になるうえ、直したかった1行以外まで変わってしまいます。
+台本生成と音声合成は別の入口です（理由は[概要](#-概要-about)のとおり）。
 
 | `command` | 何をするか | 必須フィールド |
 | --- | --- | --- |
-| `generate` | 入力ソースから台本を作り、そのまま音声まで作る | `input_uri`, `output_uri` |
-| `synthesize` | **渡された台本から音声だけ作る**（Gemini を呼ばない） | `script`, `output_uri` |
+| `generate` | 入力ソースから台本を作る。**音声は作りません** | `input_uri`, `output_uri` |
+| `synthesize` | 台本から音声を作る（Gemini を呼ばない） | `output_uri` と、`script` または `job_id` |
 
 | フィールド | 説明 |
 | --- | --- |
 | `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
-| `output_uri` | **出力先URI**。WAVを保存し、同名の `.json` スクリプトも保存します（例: `out.wav`, `gs://bucket/out.wav`）。 |
+| `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
+| `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |
 | `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<mode>.md` を置けばモードが増えます**（現在は `solo` / `dialogue` / `duet` / `promo`）。表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。 |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
-| `script` | 台本（`ScriptLine` の配列）。`synthesize` で必須。保存された `.json` をそのまま貼り戻せます。 |
+| `script` | 台本の行（`ScriptLine` の配列）。`synthesize` で `job_id` を省くときに必須。保存された `audio.json` の `lines` がそのまま入ります。 |
 
 ```json
 {
@@ -120,7 +124,18 @@ go run .        # SERVER_ROLE が必須
 ```json
 {
   "command": "synthesize",
-  "output_uri": "gs://my-bucket/audio/tech-news.wav",
+  "job_id": "voice-20260814-020913-b1b8b2f9e8d7",
+  "output_uri": "gs://my-bucket/voice/voice-20260814-020913-b1b8b2f9e8d7/audio.wav"
+}
+```
+
+台本を直接載せることもできます。ただし**Web 面はこの形を使いません** — 長い台本は
+Cloud Tasks の 1MB 上限に当たりうるため、保存済みのものを `job_id` で指します。
+
+```json
+{
+  "command": "synthesize",
+  "output_uri": "gs://my-bucket/voice/.../audio.wav",
   "script": [
     { "speaker": "ずんだもん", "style": "ノーマル", "text": "直した台本なのだ" }
   ]
@@ -190,7 +205,7 @@ ap-voice/
 ├── main.go                  # エントリポイント（サーバー起動）
 ├── Dockerfile               # scratch イメージ（静的バイナリのみ）
 ├── cloudbuild.yaml          # ビルドして2サービスへデプロイ
-├── assets/                  # 埋め込み（prompts/*.md・speakers.json・templates/*.html）
+├── assets/                  # 埋め込み（prompts/*.md・speakers.json・templates/*.html・static/）
 └── internal/
     ├── config/              # 環境変数の読み込みとロール別検証
     ├── server/              # chi ルーター・グレースフルシャットダウン
@@ -216,7 +231,9 @@ ap-voice/
 * **[shouni/go-http-kit](https://github.com/shouni/go-http-kit)**: HTTP クライアント（タイムアウト/リトライ）
 * **[shouni/go-prompt-kit](https://github.com/shouni/go-prompt-kit)**: プロンプトテンプレートのロードとレンダリング
 * **[caarlos0/env](https://github.com/caarlos0/env)**: 環境変数から設定構造体への読み込み
-* **[shouni/go-utils](https://github.com/shouni/go-utils)**: ログなどのユーティリティ
+* **[shouni/go-notify](https://github.com/shouni/go-notify)**: Slack 通知の組み立てと送信
+* **[shouni/go-utils](https://github.com/shouni/go-utils)**: ジョブ ID の発行・検証 (`jobid`)
+* **[gopkg.in/yaml.v3](https://gopkg.in/yaml.v3)**: プロンプト冒頭の front matter の解析
 
 実行時の外部依存:
 
@@ -229,5 +246,7 @@ ap-voice/
 
 ### 📜 ライセンス (License)
 
-* 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん（対応話者は `go-voicevox/speaker` が定義します）
+* 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん、VOICEVOX:春日部つむぎ ほか
+  （**使える話者は `assets/speakers.json`** = エンジンの `/speakers` 応答が決めます。
+  ライブラリ側は一覧を持ちません）
 * このリポジトリは非公開です。コードは [MIT License](https://opensource.org/licenses/MIT) の条件で提供されます。

@@ -20,7 +20,7 @@ type Container struct {
 	Config *config.Config
 	// I/O and Storage
 	RemoteIO *RemoteIO
-	// Speakers は使用する話者・スタイルの一覧です。assets/speakers/speakers.json を
+	// Speakers は使用する話者・スタイルの一覧です。assets/speakers.json を
 	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
 	Speakers *speaker.Registry
 	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。

@@ -6,8 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AP Voice** is a Go service (Cloud Run + Cloud Tasks) that turns a document (web article or GCS
 object) into a narrated WAV. It reads source text, has Gemini generate a structured narration
-script (JSON, speaker/style/text per line), synthesizes that script into a WAV via a VOICEVOX
-engine, and writes both the WAV and the script to local disk or GCS.
+script (JSON: a title plus speaker/style/text per line), and synthesizes that script into a WAV
+via a VOICEVOX engine.
+
+**Those two halves are separate jobs.** `generate` stops at the script; the operator reads it in
+the web UI and then triggers `synthesize`, which is the only command that produces audio. The
+reason is that a script is an output *and* an input: fixing one line's reading should not cost a
+regeneration that rewrites every other line, nor minutes of synthesis on a draft that is about to
+change.
 
 Module name: `ap-voice` (Go 1.26). One image, deployed as two Cloud Run services (`ap-voice`
 public / `ap-voice-worker` private) selected by `SERVER_ROLE`, the same shape as
@@ -31,7 +37,10 @@ caching and deploys it to **both** Cloud Run services; `Dockerfile` produces a `
 holding only the static binary, certs and zoneinfo — the prompts, `speakers.json` and the kagome
 dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
 
-## Required environment
+## Environment
+
+`README.md` has the full table with defaults. Listed here are only the ones carrying a rule that
+is easy to break by editing.
 
 - `SERVER_ROLE` — **required**, one of `web` / `worker` / `both` (`both` is for local
   development). Parsed by `gcp-kit/serverrole` in `Config.normalize`; an empty or unknown value
@@ -39,7 +48,7 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   worker routes on the public service the moment one env var went missing. It selects which
   dependency graph `builder` assembles and which routes `server.setupRoutes` registers.
 - `GEMINI_MODELS` — required. Comma-separated; the first entry is the default model, used when a
-  request's `ai_model` is empty (`GenerateRunner.modelFor`). There is deliberately **no default
+  request's `ai_model` is empty (`ScriptStep.modelFor`). There is deliberately **no default
   model in the code**: model IDs age on Google's release schedule, not this repo's, so a default
   would keep an outdated model in use unnoticed. `ValidateEssentialConfig` fails startup when it
   is empty — do not reintroduce a fallback. Plural matches the fleet convention, where
@@ -65,8 +74,6 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   SA (on a split deployment that is the **web** SA, not the worker's own). Both must be present
   or `auth.TaskVerifier` is fail-closed, so `BuildHandlers` refuses to start rather than let
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
-- `VOICEVOX_API_URL` — optional; unset falls back to `http://localhost:50021` (go-voicevox's
-  default, with a warning), which is what both local runs and a Cloud Run sidecar want.
 - `VOICEVOX_MAX_PARALLEL_SEGMENTS` / `VOICEVOX_SEGMENT_RATE_LIMIT` / `VOICEVOX_SEGMENT_TIMEOUT` —
   optional; `8`, `500ms`, `120s`. **Throughput is set by the rate limit**, not the parallelism:
   `min(1/rate, parallel ÷ time-per-segment)`. Lowering the parallelism below that ratio makes
@@ -84,13 +91,10 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
   for notifications** — reusing the timed-out one would silence the very notification the ladder
   exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`).
-- `SERVICE_URL` / `PORT` / `HTTP_TIMEOUT` — optional; default to `http://localhost:8080`, `8080`
-  and `60s`.
-- `SLACK_WEBHOOK_URL` — optional; if unset, notifications are a no-op.
-- `GOOGLE_APPLICATION_CREDENTIALS` — only if reading/writing `gs://` URIs.
 
-Per-run values (command, input, output, mode, model, script) are **not** environment variables —
-they arrive as the JSON body of a Cloud Tasks request and are decoded into a `domain.Request`.
+Per-run values (command, job ID, input, output, mode, model, script) are **not** environment
+variables — they are a `domain.Request`, built by the web form or posted as the JSON body of a
+Cloud Tasks request.
 
 ## Architecture
 
@@ -100,13 +104,16 @@ diagram for the full call graph; the summary here is the mental model to keep wh
 ```
 main.go         logger setup -> config.LoadConfig -> ValidateEssentialConfig -> server.Run
   -> internal/server    chi router + graceful shutdown; routes are registered per role
+       -> .../handlers        web face: form, history, detail, synthesize, delete, audio
   -> internal/builder   wires everything together (DI root, no business logic)
-       -> internal/app        Container: Config, RemoteIO, HTTPClient, Notifier, Pipeline
+       -> internal/app        Container: Config, RemoteIO, HTTPClient, Notifier, Pipeline, Speakers
        -> internal/pipeline   orchestrates resolve script -> publish -> notify
-            -> internal/runner     GenerateRunner (script gen) and PublishRunner (voice + upload)
+            ScriptStep (Gemini) and PublishStep (synthesis + upload)
                  -> internal/adapters   wrappers over external libraries (Gemini, VOICEVOX, Slack, prompts)
-       -> internal/domain      ports (Pipeline, Voice, Notifier) and models (Request, ScriptLine)
-assets/         embedded prompt templates and the speaker roster (go:embed)
+       -> internal/repository  reads back what was written (history list, stored script, delete)
+       -> internal/domain      ports (Pipeline, Voice, Notifier, ScriptStore, TaskQueue),
+                               models (Request, Script, ScriptLine) and StorageLayout
+assets/         embedded prompts, speakers.json, HTML templates and static files (go:embed)
 ```
 
 ### Key invariants
@@ -123,12 +130,24 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
 - **Only the worker builds the pipeline.** The web role skips it, so the public service holds no
   Gemini client and never opens a VOICEVOX connection — `voicevox.New` calls `/speakers` at
   construction, so building it on the public side would make every cold start wait on the engine.
-- **The web role only enqueues.** `handlers.Handler` validates the form with the same
-  `Request.Validate` the worker runs and hands it to `domain.TaskQueue`; it never waits for
-  synthesis, which takes minutes. The form's mode list is read from the embedded prompts, so a
-  mode on screen is always a mode the worker can render. `Auth`/`Web` are a pair in
-  `AppHandlers.Validate` for the same reason `TaskAuth`/`Worker` are — a missing `Auth` would
-  publish the form unauthenticated.
+- **The web role never runs a job — it enqueues and it reads.** `handlers.Handler` validates the
+  form with the same `Request.Validate` the worker runs and hands it to `domain.TaskQueue`; it
+  never waits for synthesis, which takes minutes. It does read GCS directly for the history
+  screens (`internal/repository`), which is why the web SA needs `objectUser` and not just
+  enqueue rights. The form's mode list is read from the embedded prompts, so a mode on screen is
+  always a mode the worker can render. `Auth`/`Web` are a pair in `AppHandlers.Validate` for the
+  same reason `TaskAuth`/`Worker` are — a missing `Auth` would publish the form unauthenticated.
+- **Both `Middleware` and `CSRFContextMiddleware` are required on the authenticated group.** The
+  first checks the token, the second mints it; registering only the first means no form ever
+  carries a valid token and every POST is rejected. Every `method="post"` needs the
+  `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
+  perfectly normal page until someone submits it.
+- **`internal/repository` serves the history screens** — `List` (with titles filled concurrently,
+  falling back to the job ID when a script will not parse, so a broken job can still be deleted),
+  `Load`, and `Delete`, which removes the whole job prefix rather than a fixed list of names.
+- **Templates are only evaluated at request time.** A renamed view field still compiles, so
+  `internal/server/handlers/templates_test.go` renders every screen with the real view structs
+  (a `map` would turn a missing key into `<no value>` and pass).
 - **A new role never means touching the router.** `BuildHandlers` leaves the handlers a role does
   not serve as nil and `setupRoutes` guards each route group on nil, so `SERVER_ROLE=web` simply
   has no `/tasks/generate` — it 404s rather than existing unprotected. `AppHandlers.Validate`
@@ -143,19 +162,30 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
 - **`Pipeline.Execute` is the only orchestration point**: validate → resolve script → publish
   (WAV + script upload + optional signed URL) → notify. Notification fires from a single `defer`,
   so failure paths do not have to remember to notify.
-- **Script generation and synthesis are separate commands**, and only `resolveScript` differs:
-  `generate` reads the source and calls Gemini, `synthesize` takes `Request.Script` as-is and
-  never touches Gemini. The script is an *output and an input* — `PublishRunner` writes it as
-  `<output>.json` next to the WAV, and fixing one line's reading or speaker should not mean
-  paying for a regeneration that rewrites every other line. `Request.Command` has **no default**:
-  an empty command is an error, because silently treating it as `generate` would discard a
-  caller's `script` and bill them for generation. `Request.Validate` lives in `domain` so the web
-  form can reuse it, and runs before anything external is touched
+- **Script generation and synthesis are separate commands**, and `Pipeline.Execute` branches on
+  `Command` twice — once in `resolveScript`, once in `publish`:
+  - `generate` — reads the source, calls Gemini, and stops at `PublishStep.PublishScript`, which
+    writes the script only. **It produces no audio and returns no signed URL**, deliberately:
+    signing does not check that the object exists, so signing a WAV that was never made hands out
+    a 404 link in the Slack notification.
+  - `synthesize` — never touches Gemini. It uses `Request.Script` when present and otherwise
+    loads the stored script by `JobID` (`domain.ScriptStore`). The web face always takes the
+    second path: **the script is not carried in the task payload**, because a long one can reach
+    Cloud Tasks' 1MB limit. `PublishStep.Run` writes the WAV *and* rewrites the script, so an
+    edited script cannot drift from the audio that was actually spoken.
+
+  `Request.Command` has **no default**: an empty command is an error, because silently treating it
+  as `generate` would discard a caller's `script` and bill them for generation. `Request.Validate`
+  lives in `domain` so the web form can reuse it, and runs before anything external is touched
   (`TestPipelineExecute_InvalidRequest`).
-- **`PublishRunner` writes two artifacts per run**: the WAV via `Voice.UploadWav`, then the script
-  as `<output-basename>.json` via `Voice.UploadScript`. A signed URL is generated only when the
-  RemoteIO's `URLSigner` is non-nil (GCS); local output never gets one and that is a soft failure
-  (logged, not returned).
+- **`domain.StorageLayout` owns every object name**, and artifacts live under one prefix per job
+  (`voice/<jobID>/audio.wav`, `.../audio.json`). Callers never choose paths — the web form has no
+  output field, and `Handler.Enqueue` derives the URI from the job ID. That is what lets
+  `repository` list and delete a job without knowing what it contains. `ScriptPath` must stay the
+  audio name with a swapped extension: `VoiceAdapter` writes the script by replacing the output's
+  extension, so renaming one side alone would save to a path nothing reads.
+- **A signed URL is only ever a bonus.** It is generated when the RemoteIO's `URLSigner` is
+  non-nil (GCS); local output never gets one and that is a soft failure (logged, not returned).
 - **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
   `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
   `mode` with no code change** (the directory already says they are prompts, so filenames carry
@@ -176,9 +206,11 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
   turns it into a `speaker.Registry` before opening any connection, and the same registry feeds
   both the Gemini schema and `voicevox.New`. **Style IDs in that file are never used** — go-voicevox
   re-reads them from the live engine, since they shift between engine builds.
-- **AI output is schema-constrained.** `GenerateRunner` calls Gemini with
+- **AI output is schema-constrained.** `ScriptStep` calls Gemini with
   `ResponseMIMEType: application/json` and a `ResponseSchema` built once at construction from the
-  registry (`internal/runner/schema.go`), then unmarshals straight into `[]domain.ScriptLine`.
+  registry (`internal/pipeline/schema.go`), then unmarshals straight into a `domain.Script` —
+  an object (`{title, lines}`), not a bare array, so the history list has something to show
+  besides job IDs. The title comes from the same call; there is no second request for it.
   `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
   has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
   that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
@@ -200,19 +232,25 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
 First-party (`github.com/shouni/*`):
 
 - `go-gemini-client` — Gemini/Vertex AI client (structured JSON generation)
-- `go-voicevox` — parallel VOICEVOX synthesis wrapper, **and the source of the supported speaker
-  and style vocabulary**; tuned via `defaultMaxParallelSegments`/`defaultSegmentRateLimit`/
-  `defaultSegmentTimeout` in `internal/adapters/voice.go`
+- `go-voicevox` — parallel VOICEVOX synthesis wrapper. It parses `/speakers` but ships no roster;
+  the vocabulary is this repo's `assets/speakers.json` (see above). Throughput comes from
+  `config.Voicevox`, not from constants here.
 - `go-web-reader` — reads `https://` and `gs://` input sources transparently
-- `go-remote-io` — local/GCS write + signed URL abstraction (`remoteio.Bundle`, `remoteio.Writer`,
-  `remoteio.URLSigner`, `remoteio.IOFactory`)
+- `go-remote-io` — local/GCS read/write + signed URL abstraction (`remoteio.Bundle`,
+  `remoteio.Writer`, `remoteio.URLSigner`, `remoteio.IOFactory`)
 - `go-prompt-kit` — loads and renders the embedded prompt templates
 - `go-http-kit` — HTTP client with retries; note `builder` passes
   `WithSkipNetworkValidation(true)`, which disables the SSRF guard for the whole client
+- `go-notify` — Slack message assembly (`notify.Pipeline`, `notify.Body`); `adapters/slack.go`
+  only decides *what* to say
+- `go-utils/jobid` — issues and validates job IDs. **Never sort job IDs lexically** — the prefix
+  outranks the timestamp; use `jobid.SortKey`.
 - `gcp-kit` — `serverrole` (role vocabulary), `worker` (Cloud Tasks target handler), `auth`
-  (Cloud Tasks OIDC verification), `cloudlog` (Cloud Logging format + trace correlation)
+  (OAuth login, CSRF, Cloud Tasks OIDC verification), `tasks` (enqueue), `cloudlog`
+  (Cloud Logging format + trace correlation)
 
-Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct).
+Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct),
+`gopkg.in/yaml.v3` (prompt front matter).
 
 When touching adapter code the actual behavior often lives in these modules rather than in this
 repo — check `go.mod` for pinned versions before assuming a signature.
