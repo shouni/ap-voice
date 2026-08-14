@@ -37,6 +37,48 @@ type ModeMetadata struct {
 	Direction string `yaml:"direction"`
 	// UseWhen は、どういう入力・題材のときに選ぶかです。
 	UseWhen string `yaml:"use_when"`
+	// Input は、そのモードが受け取る入力の種類です。空なら InputText 扱いです。
+	//
+	// **ジャンルとは別の軸です。** ファイル名の接頭辞（tech_ / news_ / comedy_ …）は
+	// ジャンルを表しますが、入力の型はそれと直交します — comedy_manzai と tech_solo は
+	// ジャンルが違っても同じ素のテキストを受け取ります。ディレクトリで分けると
+	// 軸を 1 本しか表せないため、ここに書きます。
+	Input string `yaml:"input"`
+}
+
+// 入力の種類。**画面のタブと、プロンプトへ渡すデータの型が、これで決まります。**
+const (
+	// InputText は素のテキスト（Web 記事・文書）を受け取るモードです。
+	InputText = "text"
+	// InputRecipe は ap-comp の recipe.json を受け取るモードです。
+	// 素のテキストを渡すと、生成へ進む前にデコードで落ちます。
+	InputRecipe = "recipe"
+)
+
+// InputKind は、そのモードが受け取る入力の種類を返します。
+// front matter に input が無いモードは素のテキスト扱いです。
+func (m Mode) InputKind() string {
+	if m.Input == "" {
+		return InputText
+	}
+	return m.Input
+}
+
+// NeedsRecipe は、そのモードが recipe.json を要求するかを返します。
+func (m Mode) NeedsRecipe() bool { return m.InputKind() == InputRecipe }
+
+// FilterModes は、指定した入力種別のモードだけを返します。
+//
+// **画面のタブごとの選択肢はこれで作ります。** 素のテキストのタブに
+// recipe.json のモードを出すと、選べるのに必ず失敗する組み合わせになります。
+func FilterModes(modes []Mode, kind string) []Mode {
+	out := make([]Mode, 0, len(modes))
+	for _, m := range modes {
+		if m.InputKind() == kind {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // Mode は、フォームに出す 1 モードです。

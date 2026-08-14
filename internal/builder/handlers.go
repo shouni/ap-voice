@@ -121,17 +121,18 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 	}
 
 	webHandler, err := handlers.NewHandler(handlers.HandlerOptions{
-		Queue:     appCtx.TaskQueue,
-		Templates: tmpl,
-		Modes:     modes,
-		Models:    appCtx.Config.AI.GeminiModels,
-		Bucket:    appCtx.Config.Storage.GCSBucket,
-		Repo:      appCtx.Repository,
-		Signer:    appCtx.RemoteIO.Signer,
-		Speakers:  appCtx.Speakers,
-		Renderer:  renderer,
-		Reading:   adapters.NewReadingAdapter(),
-		JobStatus: appCtx.JobStatus,
+		Queue:       appCtx.TaskQueue,
+		Templates:   tmpl,
+		Modes:       modes,
+		Models:      appCtx.Config.AI.GeminiModels,
+		Bucket:      appCtx.Config.Storage.GCSBucket,
+		MusicBucket: appCtx.Config.Storage.MusicBucket,
+		Repo:        appCtx.Repository,
+		Signer:      appCtx.RemoteIO.Signer,
+		Speakers:    appCtx.Speakers,
+		Renderer:    renderer,
+		Reading:     adapters.NewReadingAdapter(),
+		JobStatus:   appCtx.JobStatus,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)

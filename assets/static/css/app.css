@@ -101,3 +101,57 @@ body {
     max-height: 30rem;
     overflow-y: auto;
 }
+
+/* タブ。**ap-comp の .app-tabs をそのまま持ってきています。**
+   下線が動く形も含めて揃えるのは、同じ操作が同じ見た目であることが、
+   アプリを跨いで使うときの手がかりになるためです。CSS 変数は同名で
+   両方に定義済みなので、色の指定はここに書きません。 */
+.app-tabs {
+    border-bottom: 2px solid var(--app-border-color);
+    background-color: transparent;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.app-tabs .nav-link {
+    color: var(--app-muted-text) !important;
+    border: none !important;
+    background-color: transparent !important;
+    font-weight: 500;
+    padding: 0.75rem 1.25rem;
+    position: relative;
+    transition: all 0.2s ease;
+    border-radius: 6px 6px 0 0;
+    opacity: 0.8;
+    min-width: 100px;
+    text-align: center;
+}
+
+.app-tabs .nav-link:hover {
+    color: var(--app-primary-blue) !important;
+    background-color: rgba(13, 110, 253, 0.05) !important;
+    opacity: 1;
+}
+
+.app-tabs .nav-link.active {
+    color: var(--app-primary-blue) !important;
+    font-weight: 800;
+    opacity: 1;
+}
+
+.app-tabs .nav-link::after {
+    content: "";
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background-color: var(--app-primary-blue);
+    border-radius: 2px 2px 0 0;
+    transform: scaleX(0);
+    transition: transform 0.2s ease;
+}
+
+.app-tabs .nav-link.active::after {
+    transform: scaleX(1);
+}

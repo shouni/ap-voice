@@ -4,7 +4,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"html/template"
 	"net/http"
 	"time"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/shouni/go-job-kit/jobstatus"
 	"github.com/shouni/go-job-kit/paging"
-	"github.com/shouni/go-utils/jobid"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -38,6 +36,9 @@ type Handler struct {
 	// bucket と layout で出力先を決めます。**利用者には入力させません。**
 	bucket string
 	layout domain.StorageLayout
+	// musicBucket は、楽曲紹介モードの入力を ap-comp のジョブ ID から解決するために使います。
+	// **ap-mv と同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+	musicBucket string
 	// repo は履歴の一覧と台本の読み出しです。
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
@@ -90,12 +91,15 @@ type HandlerOptions struct {
 	Modes     []assets.Mode
 	Models    []string
 	Bucket    string
-	Repo      ScriptRepository
-	Signer    remoteio.URLSigner
-	Speakers  *speaker.Registry
-	Renderer  PromptRenderer
-	Reading   ReadingConverter
-	JobStatus *jobstatus.Recorder[domain.JobStatus]
+	// MusicBucket は楽曲紹介モードの入力解決に使います。未設定でも起動はします
+	// （そのタブがジョブ ID を受け付けなくなるだけで、他のモードは動きます）。
+	MusicBucket string
+	Repo        ScriptRepository
+	Signer      remoteio.URLSigner
+	Speakers    *speaker.Registry
+	Renderer    PromptRenderer
+	Reading     ReadingConverter
+	JobStatus   *jobstatus.Recorder[domain.JobStatus]
 }
 
 // NewHandler は Handler を生成します。
@@ -129,18 +133,19 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	}
 
 	return &Handler{
-		queue:     opts.Queue,
-		templates: opts.Templates,
-		modes:     append([]assets.Mode(nil), opts.Modes...),
-		models:    append([]string(nil), opts.Models...),
-		bucket:    opts.Bucket,
-		layout:    domain.NewStorageLayout(),
-		repo:      opts.Repo,
-		signer:    opts.Signer,
-		speakers:  opts.Speakers,
-		renderer:  opts.Renderer,
-		reading:   opts.Reading,
-		status:    opts.JobStatus,
+		queue:       opts.Queue,
+		templates:   opts.Templates,
+		modes:       append([]assets.Mode(nil), opts.Modes...),
+		models:      append([]string(nil), opts.Models...),
+		bucket:      opts.Bucket,
+		musicBucket: opts.MusicBucket,
+		layout:      domain.NewStorageLayout(),
+		repo:        opts.Repo,
+		signer:      opts.Signer,
+		speakers:    opts.Speakers,
+		renderer:    opts.Renderer,
+		reading:     opts.Reading,
+		status:      opts.JobStatus,
 	}, nil
 }
 
@@ -152,16 +157,6 @@ type baseView struct {
 	// DefaultModel は GEMINI_MODELS の先頭です。モデル ID は Google の都合で
 	// 変わるため、画面に文言で書かず設定から出します。
 	DefaultModel string
-}
-
-// formView はフォーム画面に渡す値です。
-type formView struct {
-	baseView
-	Modes   []assets.Mode
-	Models  []string
-	Message string
-	Error   string
-	Form    domain.Request
 }
 
 // base は全画面共通の値を組み立てます。
@@ -204,101 +199,6 @@ func (h *Handler) defaultModel() string {
 		return ""
 	}
 	return h.models[0]
-}
-
-// Home は投入フォームを表示します。
-func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
-	h.render(w, http.StatusOK, formView{
-		baseView: h.base(r),
-		Modes:    h.modes,
-		Models:   h.models,
-		Form:     domain.Request{Command: domain.CommandGenerate},
-	})
-}
-
-// Enqueue はフォームの内容を検証し、Worker 面へ実行を引き渡します。
-//
-// ここでは合成を待ちません。分単位かかるため、リクエストの中で完了させられないためです。
-// 結果は Slack 通知と出力先で受け取ります。
-func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, "フォームの解析に失敗しました")
-		return
-	}
-
-	// **フォームが選べる command は限られます。** synthesize は台本が要り、この画面には
-	// それを渡す口がありません。Validate も弾きますが、受け付ける値をここで명示して
-	// おくと、画面から来るものと API から来るものの境界がはっきりします。
-	command := domain.Command(r.FormValue("command"))
-	if command != domain.CommandGenerate && command != domain.CommandGenerateAndSynthesize {
-		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, "この画面から実行できない処理です")
-		return
-	}
-
-	// **出力先はフォームから受け取りません。** ジョブ ID から導くことで、1 ジョブの
-	// 成果物が必ず 1 つのプレフィックスにまとまり、あとから一覧・削除できます。
-	jobID, err := jobid.New(jobIDPrefix)
-	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, domain.Request{}, "ジョブIDの発行に失敗しました")
-		return
-	}
-
-	req := domain.Request{
-		Command:   command,
-		JobID:     jobID,
-		InputURI:  r.FormValue("input_uri"),
-		OutputURI: h.layout.AudioURI(h.bucket, jobID),
-		Mode:      r.FormValue("mode"),
-		AIModel:   r.FormValue("ai_model"),
-	}
-
-	// worker 側でも Execute の冒頭で検証しますが、投入前に弾けば
-	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます。
-	if err := req.Validate(); err != nil {
-		h.renderError(w, r, http.StatusBadRequest, req, err.Error())
-		return
-	}
-
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderError(w, r, http.StatusBadGateway, req, err.Error())
-		return
-	}
-
-	h.render(w, http.StatusAccepted, formView{
-		baseView: h.base(r),
-		Modes:    h.modes,
-		Models:   h.models,
-		Message:  fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
-		// **投入した内容をそのまま残します。** 同じソースからモードを変えて
-		// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
-		// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
-		Form: req,
-	})
-}
-
-// acceptedMessage は、受け付けた処理に応じた案内文を返します。
-// **どちらを押したかが分かる文面**にします。まとめて作った場合は音声まで待つため、
-// 「履歴に並びます」だけでは、次に何を待てばよいのか分かりません。
-func acceptedMessage(command domain.Command, jobID string) string {
-	if command == domain.CommandGenerateAndSynthesize {
-		return fmt.Sprintf("台本と音声の作成を受け付けました（%s）。完了すると通知が届きます。", jobID)
-	}
-	return fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", jobID)
-}
-
-func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, form domain.Request, msg string) {
-	h.render(w, status, formView{
-		baseView: h.base(r),
-		Modes:    h.modes,
-		Models:   h.models,
-		Error:    msg,
-		Form:     form,
-	})
-}
-
-func (h *Handler) render(w http.ResponseWriter, status int, view formView) {
-	h.renderTemplate(w, status, "home.html", view)
 }
 
 // renderTemplate は指定のテンプレートを描画します。

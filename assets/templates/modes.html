@@ -6,6 +6,7 @@
   <title>生成モード | AP Voice</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
@@ -17,16 +18,18 @@
     投入フォームでは 1 つずつしか読めないので、ここで見比べます。
     表示名と説明は <code>assets/prompts/&lt;キー&gt;.md</code> の front matter から出ています。
     キーを押すと、そのモードが実際に渡すプロンプト本文を見られます。
+    <strong>入力の型が作成画面のタブを決めます</strong> — 型が違うモードは同じタブに並びません。
   </p>
 
   <div class="table-responsive mb-4">
     <table class="table table-sm table-hover align-middle">
       <thead>
         <tr>
-          <th style="width: 16%">キー</th>
-          <th style="width: 18%">表示名</th>
-          <th style="width: 33%">何を作るか</th>
-          <th style="width: 33%">向いている場面</th>
+          <th style="width: 15%">キー</th>
+          <th style="width: 16%">表示名</th>
+          <th style="width: 12%">入力</th>
+          <th style="width: 29%">何を作るか</th>
+          <th style="width: 28%">向いている場面</th>
         </tr>
       </thead>
       <tbody>
@@ -34,6 +37,7 @@
           <tr>
             <td><a href="/modes/{{ .Key }}" title="プロンプト本文を見る"><code>{{ .Key }}</code></a></td>
             <td>{{ .DisplayName }}</td>
+            <td>{{ template "input_badge" . }}</td>
             <td>{{ .Direction }}</td>
             <td class="text-muted">{{ .UseWhen }}</td>
           </tr>
@@ -48,3 +52,12 @@
         crossorigin="anonymous"></script>
 </body>
 </html>{{ end }}
+
+{{/* 入力の型のバッジ。カタログと詳細で同じ見た目にします。 */}}
+{{ define "input_badge" }}
+  {{ if .NeedsRecipe }}
+    <span class="badge text-bg-warning"><i class="bi bi-music-note-beamed me-1"></i>楽曲レシピ</span>
+  {{ else }}
+    <span class="badge text-bg-secondary"><i class="bi bi-file-text me-1"></i>テキスト</span>
+  {{ end }}
+{{ end }}
