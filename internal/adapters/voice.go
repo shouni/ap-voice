@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
 	"github.com/shouni/go-voicevox/voicevox"
 
+	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
@@ -25,14 +25,6 @@ const (
 	voicevoxWavCacheControl = "public, max-age=1800"
 )
 
-const (
-	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
-	defaultMaxParallelSegments = 8
-	// defaultSegmentRateLimit はAPIのレートリミット仕様に準拠
-	defaultSegmentRateLimit = 500 * time.Millisecond
-	defaultSegmentTimeout   = 120 * time.Second
-)
-
 // VoiceAdapter は、音声合成する役割を担います。
 type VoiceAdapter struct {
 	engine voicevox.Engine
@@ -41,19 +33,18 @@ type VoiceAdapter struct {
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
 //
-// apiURL には VOICEVOX エンジンの URL を渡します。空文字の場合は go-voicevox が
-// http://localhost:50021 へ落とすため、ローカル実行とサイドカー構成のどちらでも
-// そのまま動きます。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, apiURL string, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
+// 流量の設定は cfg が持ちます。エンジンの大きさで変わる値なので、ここに定数を
+// 置かず env から受けます（config.VoicevoxConfig 参照）。
+func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg config.VoicevoxConfig, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
-		apiURL,
+		cfg.APIURL,
 		true,
 		speakers,
-		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
-		voicevox.WithSegmentRateLimit(defaultSegmentRateLimit),
-		voicevox.WithSegmentTimeout(defaultSegmentTimeout),
+		voicevox.WithMaxParallelSegments(cfg.MaxParallelSegments),
+		voicevox.WithSegmentRateLimit(cfg.SegmentRateLimit),
+		voicevox.WithSegmentTimeout(cfg.SegmentTimeout),
 	)
 
 	if err != nil {

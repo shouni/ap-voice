@@ -1,4 +1,4 @@
-package runner
+package pipeline
 
 import (
 	"github.com/shouni/go-gemini-client/gemini"

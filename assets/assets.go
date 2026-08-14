@@ -40,6 +40,11 @@ var SpeakersJSON []byte
 //go:embed templates/*.html
 var Templates embed.FS
 
+// StaticFiles は Web 面の静的ファイル（CSS）です。
+//
+//go:embed static
+var StaticFiles embed.FS
+
 // LoadPrompts は埋め込まれたプロンプトファイルを読み込みます。
 func LoadPrompts() (map[string]string, error) {
 	return resource.Load(PromptFiles, promptDir, "")

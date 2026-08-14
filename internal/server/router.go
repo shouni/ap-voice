@@ -2,6 +2,7 @@
 package server
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shouni/gcp-kit/cloudlog"
 
+	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
 )
 
@@ -43,6 +45,8 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	setupStaticRoutes(r)
+
 	if h == nil {
 		slog.Warn("AppHandlers is nil, skipping application routes registration")
 		return
@@ -67,6 +71,14 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Use(h.Auth.Middleware)
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
+
+		// 台本ができたら履歴に並び、詳細から音声を作ります。
+		r.Route("/history", func(r chi.Router) {
+			r.Get("/", h.Web.History)
+			r.Get("/{jobID}", h.Web.Detail)
+			r.Post("/{jobID}/synthesize", h.Web.Synthesize)
+			r.Get("/{jobID}/audio", h.Web.Audio)
+		})
 	})
 
 	// Cloud Tasks 専用ルート (Worker 用)。
@@ -83,4 +95,22 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Use(h.TaskAuth.Middleware)
 		r.Method(http.MethodPost, "/tasks/generate", h.Worker)
 	})
+}
+
+// setupStaticRoutes は、埋め込み済みの静的ファイル（CSS）を /static/* で配信します。
+//
+// 認証の外側に置きます。スタイルシートにログインを求める理由が無く、
+// 未認証で表示されるログイン画面からも参照されるためです。
+func setupStaticRoutes(r chi.Router) {
+	staticFS, err := fs.Sub(assets.StaticFiles, "static")
+	if err != nil {
+		slog.Error("static assets are unavailable", "error", err)
+		return
+	}
+
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
+		fileServer.ServeHTTP(w, r)
+	}))
 }

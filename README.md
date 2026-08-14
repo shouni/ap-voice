@@ -8,9 +8,10 @@
 
 **AP Voice** は、ドキュメントをナレーション音声に変換する Cloud Run + Cloud Tasks 上のサービスです。
 
-Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイルを指定した台本（JSON）**を生成させ、
-その台本を **VOICEVOX エンジンで並列合成**して WAV にまとめ、GCS またはローカルへ書き出します。
-台本は WAV の隣に `.json` として保存され、**そのまま貼り戻して合成だけやり直せます**。
+Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイルを指定した台本**（JSON）を生成させます。
+**台本と音声は別の工程**です。台本ができたら履歴に並ぶので、内容を確認してから
+**VOICEVOX エンジンで並列合成**します。読みや話者を直したければ、生成をやり直さずに
+合成だけ何度でもかけ直せます。
 
 1つのイメージを `SERVER_ROLE` で **Web 面（公開）と Worker 面（非公開）の2サービス**として
 デプロイします。入出力はどちらも Web URL / GCS (`gs://`) / ローカルを透過的に扱います。
@@ -57,6 +58,9 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | --- | --- |
 | `SERVICE_URL` / `PORT` | 公開 URL と待ち受けポート (Default: `http://localhost:8080` / `8080`)。 |
 | `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
+| `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**エンジンがメモリ不足になったらここを vCPU 数まで下げます。** |
+| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**スループットを決めているのはこの値です。** |
+| `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
 | `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
 | `PIPELINE_TIMEOUT` | ジョブ1件の実行上限 (Default: `25m`)。**Cloud Tasks より先にアプリが諦める**ための値で、超えると失敗を通知して終わります。 |
@@ -130,50 +134,53 @@ go run .        # SERVER_ROLE が必須
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Caller as 投入元
+    actor User as 利用者
+    participant Web as Web 面 (公開)
     participant Tasks as Cloud Tasks
-    participant Worker as gcp-kit/worker Handler
-    participant Notifier as domain.Notifier (Slack/Noop)
-    participant Pipeline as pipeline.Pipeline
-    participant GenRunner as runner.GenerateRunner
-    participant Reader as go-web-reader
-    participant Prompt as PromptAdapter
-    participant Gemini as go-gemini-client (Gemini/Vertex AI)
-    participant PubRunner as runner.PublishRunner
-    participant Voice as go-voicevox
-    participant Store as go-remote-io (Local/GCS)
-    participant Signer as remoteio.URLSigner
+    participant Worker as Worker 面 (非公開)
+    participant Gemini as Vertex AI
+    participant Engine as VOICEVOX (サイドカー)
+    participant Store as GCS
+    participant Slack as Slack
 
-    Caller->>Tasks: enqueue(domain.Request)
+    Note over User, Slack: 1. 台本を作る (command=generate)
+    User->>Web: POST / （入力ソース・モード・モデル）
+    Web->>Web: ジョブIDを発行し、出力先を導出
+    Web->>Tasks: enqueue(Request)
+    Web-->>User: 202 受付
     Tasks->>Worker: POST /tasks/generate (OIDC)
-    Note over Worker: 起動時に BuildContainer 済み
+    Worker->>Store: 入力を読む (gs:// のとき)
+    Worker->>Gemini: 台本を生成 (スキーマ強制)
+    Gemini-->>Worker: []ScriptLine
+    Worker->>Store: audio.json を書く
+    Note right of Worker: **音声はまだ作りません**
+    Worker->>Slack: 完了通知（詳細画面のリンク付き）
 
-    Worker->>Pipeline: Execute(ctx, req)
-    Pipeline->>GenRunner: Run(ctx, req)
-    GenRunner->>Reader: Open(inputURI)
-    Reader-->>GenRunner: source content
-    GenRunner->>Prompt: Generate(mode, content)
-    Prompt-->>GenRunner: prompt text
-    GenRunner->>Gemini: GenerateContent(model, prompt)
-    Gemini-->>GenRunner: script text
-    GenRunner-->>Pipeline: script text
+    Note over User, Slack: 2. 台本を確認する
+    User->>Web: GET /history
+    Web->>Store: ジョブを一覧
+    User->>Web: GET /history/{jobID}
+    Web->>Store: audio.json を読む
+    Web-->>User: 台本を表示
 
-    Pipeline->>PubRunner: Run(ctx, outputURI, script)
-    PubRunner->>Voice: UploadWav(outputURI, script)
-    Voice->>Store: write wav (local/gs://)
-    Store-->>PubRunner: ok
-    PubRunner->>Voice: UploadScript(outputURI, script)
-    Voice->>Store: write json (local/gs://)
-    Store-->>PubRunner: ok
-    opt signer is configured
-        PubRunner->>Signer: GenerateSignedURL(outputURI, GET, 1h)
-        Signer-->>PubRunner: publicURL
+    Note over User, Slack: 3. 音声を作る (command=synthesize)
+    User->>Web: POST /history/{jobID}/synthesize
+    Web->>Tasks: enqueue(Request{JobID})
+    Note right of Web: 台本は載せません（1MB 上限）
+    Tasks->>Worker: POST /tasks/generate (OIDC)
+    Worker->>Store: audio.json を読む
+    loop セグメントごと（並列・レート制限あり）
+        Worker->>Engine: POST /audio_query → /synthesis
+        Engine-->>Worker: WAV
     end
-    PubRunner-->>Pipeline: publicURL / ""
-    Pipeline->>Notifier: Notify(req, publicURL)
-    Notifier-->>Pipeline: ok
-    Pipeline-->>Worker: ok
-    Worker-->>Tasks: 2xx
+    Worker->>Worker: WAV を結合
+    Worker->>Store: audio.wav と audio.json を書く
+    Worker->>Slack: 完了通知（詳細画面のリンク付き）
+
+    Note over User, Slack: 4. 再生する
+    User->>Web: GET /history/{jobID}/audio
+    Web-->>User: 302 → 署名付き URL
+    User->>Store: 署名付き URL で直接取得
 ```
 
 ## 🌳 プロジェクト構成ツリー図
@@ -187,12 +194,12 @@ ap-voice/
 └── internal/
     ├── config/              # 環境変数の読み込みとロール別検証
     ├── server/              # chi ルーター・グレースフルシャットダウン
-    │   └── handlers/        #   Web 面（投入フォームと実行受付）
-    ├── domain/              # ドメインモデルとポート定義
+    │   └── handlers/        #   Web 面（投入フォーム・履歴・詳細・再生）
+    ├── domain/              # ドメインモデルとポート定義・成果物のパス規約
     ├── app/                 # DI コンテナとリソース管理
     ├── builder/             # 外部依存とハンドラーの組み立て
-    ├── pipeline/            # command による分岐と publish/notify のオーケストレーション
-    ├── runner/              # 台本生成・公開処理のユースケース実装
+    ├── repository/          # GCS 上の成果物の読み出し（履歴・台本）
+    ├── pipeline/            # command による分岐と各段（step_*.go）
     └── adapters/            # Gemini / VOICEVOX / Cloud Tasks / Slack / プロンプト
 ```
 

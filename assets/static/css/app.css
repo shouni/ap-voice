@@ -1,0 +1,48 @@
+/* フリート共通の見た目（ap-comp の app.css と同じ配色）。
+   Bootstrap を CDN から読んだうえで、テーマ色だけをここで上書きします。 */
+:root {
+    --zunda-green: #76bc21;
+    --zunda-dark: #64a01c;
+    --app-primary-blue: #0d6efd;
+    --app-border-color: #dee2e6;
+    --app-muted-text: #536471;
+}
+
+body {
+    background-color: #fcfdfb;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content {
+    flex: 1;
+}
+
+.navbar {
+    background-color: var(--zunda-green);
+}
+
+.navbar-brand,
+.nav-link {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.btn-primary {
+    background-color: var(--zunda-green);
+    border-color: var(--zunda-green);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: var(--zunda-dark);
+    border-color: var(--zunda-dark);
+}
+
+.form-text {
+    color: var(--app-muted-text);
+}
+
+.card {
+    border-color: var(--app-border-color);
+}

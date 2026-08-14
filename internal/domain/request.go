@@ -9,17 +9,17 @@ import (
 // Command は、1件のリクエストにどこまでやらせるかを表します。
 //
 // 台本生成と音声合成を別の入口にしているのは、台本が「成果物であると同時に入力でもある」
-// ためです。PublishRunner は WAV の隣へ台本を .json で書き出しており、読みや話者を直して
-// 合成だけやり直したいことは普通に起こります。1つの入口しか無いと、そのたびに Gemini の
-// 生成からやり直すことになり、費用も待ち時間も無駄になるうえ、出力が前回と変わってしまって
-// 「直したかった1行」以外まで別物になります。
+// ためです。読みや話者を直して合成だけやり直したいことは普通に起こり、1つの入口しか
+// 無いと、そのたびに Gemini の生成からやり直すことになります。費用も待ち時間も無駄に
+// なるうえ、出力が前回と変わってしまって「直したかった1行」以外まで別物になります。
 type Command string
 
 const (
-	// CommandGenerate は、入力ソースから台本を生成し、そのまま音声まで作ります。
+	// CommandGenerate は、入力ソースから台本を生成して保存します。**音声は作りません。**
+	// 台本を確認・修正してから合成へ進めるようにするためです。
 	CommandGenerate Command = "generate"
-	// CommandSynthesize は、渡された台本から音声だけを作ります。
-	// 台本を生成し直さないため、Gemini は呼ばれません。
+	// CommandSynthesize は、台本から音声を作ります。台本は Script で直接渡すか、
+	// JobID で保存済みのものを指します。Gemini は呼ばれません。
 	CommandSynthesize Command = "synthesize"
 )
 
@@ -31,10 +31,18 @@ var ErrUnknownCommand = errors.New("未知の command です")
 type Request struct {
 	// Command は実行する処理です。省略できません。
 	//
+	// generate は台本まで、synthesize は音声までを担当します。分けているのは、
+	// 台本が成果物であると同時に入力でもあるためです。読みや話者を直してから
+	// 合成できるようにすると、直したい 1 行のために生成をやり直さずに済みます。
+	//
 	// 空を generate とみなさないのは、Script を渡したのに command を書き忘れた場合に、
 	// 渡した台本が黙って捨てられ、Gemini の生成が走ってしまうためです。
 	// 課金と出力の両方が変わる取り違えを、既定値で吸収する価値はありません。
 	Command Command `json:"command"`
+
+	// JobID は 1 回の実行を識別します。成果物の置き場もこの ID から決まります。
+	// 発行するのは投入側（Web 面）で、Worker 面はログと通知で使うだけです。
+	JobID string `json:"job_id,omitempty"`
 
 	// InputURI は generate の入力ソース（Web URL / gs://）です。
 	InputURI string `json:"input_uri,omitempty"`
@@ -64,8 +72,9 @@ func (r Request) Validate() error {
 			return errors.New("入力ソース(input_uri)が指定されていません")
 		}
 	case CommandSynthesize:
-		if len(r.Script) == 0 {
-			return errors.New("台本(script)が空です。synthesize は台本を生成しないため、呼び出し側が渡す必要があります")
+		// 台本は直接渡すか、保存済みのものを JobID で指すかのどちらかです。
+		if len(r.Script) == 0 && strings.TrimSpace(r.JobID) == "" {
+			return errors.New("台本が特定できません。script を直接渡すか、保存済み台本の job_id を指定してください")
 		}
 	case "":
 		return fmt.Errorf("%w: command が指定されていません（%q または %q）",

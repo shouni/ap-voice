@@ -10,26 +10,46 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-var _ GenerateRunner = (*MockGenerateRunner)(nil)
-var _ PublishRunner = (*MockPublishRunner)(nil)
+var _ scriptGenerator = (*MockScriptStep)(nil)
+var _ publisher = (*MockPublishStep)(nil)
 var _ domain.Notifier = (*MockNotifier)(nil)
 
-type MockGenerateRunner struct {
+type MockScriptStep struct {
 	RunFunc func(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error)
 }
 
-func (m *MockGenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
 	if m.RunFunc == nil {
 		return nil, nil
 	}
 	return m.RunFunc(ctx, req)
 }
 
-type MockPublishRunner struct {
-	RunFunc func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
+type MockPublishStep struct {
+	RunFunc           func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
+	PublishScriptFunc func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
 }
 
-func (m *MockPublishRunner) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+func (m *MockPublishStep) PublishScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+	if m.PublishScriptFunc == nil {
+		return "", nil
+	}
+	return m.PublishScriptFunc(ctx, outputURI, lines)
+}
+
+// MockScriptStore は保存済み台本の読み出しを差し替えます。
+type MockScriptStore struct {
+	LoadFunc func(ctx context.Context, jobID string) ([]domain.ScriptLine, error)
+}
+
+func (m *MockScriptStore) Load(ctx context.Context, jobID string) ([]domain.ScriptLine, error) {
+	if m.LoadFunc == nil {
+		return nil, nil
+	}
+	return m.LoadFunc(ctx, jobID)
+}
+
+func (m *MockPublishStep) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 	if m.RunFunc == nil {
 		return "", nil
 	}
@@ -86,7 +106,7 @@ func TestPipelineExecute(t *testing.T) {
 		notifyCalled := false
 
 		p := NewPipeline(
-			&MockGenerateRunner{
+			&MockScriptStep{
 				RunFunc: func(_ context.Context, got domain.Request) ([]domain.ScriptLine, error) {
 					generateCalled = true
 					if !reflect.DeepEqual(got, req) {
@@ -95,8 +115,9 @@ func TestPipelineExecute(t *testing.T) {
 					return sampleLines, nil
 				},
 			},
-			&MockPublishRunner{
-				RunFunc: func(_ context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+			&MockPublishStep{
+				// generate は台本だけを保存します。Run（音声合成）は呼ばれてはいけません。
+				PublishScriptFunc: func(_ context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
 					publishCalled = true
 					if outputURI != req.OutputURI {
 						t.Fatalf("unexpected outputURI: %s", outputURI)
@@ -104,7 +125,11 @@ func TestPipelineExecute(t *testing.T) {
 					if len(lines) != 1 || lines[0].Text != "generated script" {
 						t.Fatalf("unexpected lines: %+v", lines)
 					}
-					return "https://example.com/audio.wav", nil
+					return "https://example.com/script.json", nil
+				},
+				RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+					t.Fatal("generate なのに音声合成が呼ばれた")
+					return "", nil
 				},
 			},
 			&MockNotifier{
@@ -113,12 +138,13 @@ func TestPipelineExecute(t *testing.T) {
 					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
-					if publicURL != "https://example.com/audio.wav" {
+					if publicURL != "https://example.com/script.json" {
 						t.Fatalf("unexpected publicURL: %s", publicURL)
 					}
 					return nil
 				},
 			},
+			&MockScriptStore{},
 			0,
 		)
 
@@ -137,12 +163,12 @@ func TestPipelineExecute(t *testing.T) {
 		failureNotified := false
 
 		p := NewPipeline(
-			&MockGenerateRunner{
+			&MockScriptStep{
 				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return nil, expectedErr
 				},
 			},
-			&MockPublishRunner{},
+			&MockPublishStep{},
 			&MockNotifier{
 				NotifyFailureFunc: func(_ context.Context, got domain.Request, err error) error {
 					failureNotified = true
@@ -155,6 +181,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			&MockScriptStore{},
 			0,
 		)
 
@@ -173,18 +200,19 @@ func TestPipelineExecute(t *testing.T) {
 		failureNotified := false
 
 		p := NewPipeline(
-			&MockGenerateRunner{
+			&MockScriptStep{
 				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return nil, nil
 				},
 			},
-			&MockPublishRunner{},
+			&MockPublishStep{},
 			&MockNotifier{
 				NotifyFailureFunc: func(_ context.Context, _ domain.Request, _ error) error {
 					failureNotified = true
 					return nil
 				},
 			},
+			&MockScriptStore{},
 			0,
 		)
 
@@ -203,13 +231,13 @@ func TestPipelineExecute(t *testing.T) {
 		failureNotified := false
 
 		p := NewPipeline(
-			&MockGenerateRunner{
+			&MockScriptStep{
 				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 					return sampleLines, nil
 				},
 			},
-			&MockPublishRunner{
-				RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+			&MockPublishStep{
+				PublishScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
 					return "", expectedErr
 				},
 			},
@@ -222,6 +250,7 @@ func TestPipelineExecute(t *testing.T) {
 					return nil
 				},
 			},
+			&MockScriptStore{},
 			0,
 		)
 
@@ -254,19 +283,20 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 	var published []domain.ScriptLine
 
 	p := NewPipeline(
-		&MockGenerateRunner{
+		&MockScriptStep{
 			RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 				generateCalled = true
 				return nil, errors.New("generator must not be called")
 			},
 		},
-		&MockPublishRunner{
+		&MockPublishStep{
 			RunFunc: func(_ context.Context, _ string, lines []domain.ScriptLine) (string, error) {
 				published = lines
 				return "", nil
 			},
 		},
 		&MockNotifier{},
+		&MockScriptStore{},
 		0,
 	)
 
@@ -317,13 +347,13 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 			touched := false
 			failureNotified := false
 			p := NewPipeline(
-				&MockGenerateRunner{
+				&MockScriptStep{
 					RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 						touched = true
 						return nil, nil
 					},
 				},
-				&MockPublishRunner{
+				&MockPublishStep{
 					RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
 						touched = true
 						return "", nil
@@ -335,6 +365,7 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 						return nil
 					},
 				},
+				&MockScriptStore{},
 				0,
 			)
 
@@ -400,20 +431,21 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	notified := make(chan context.Context, 1)
 
 	p := NewPipeline(
-		&MockGenerateRunner{
+		&MockScriptStep{
 			RunFunc: func(ctx context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
 				// 上限を超えるまで待ちます。実際の合成が長引いた状態の代わりです。
 				<-ctx.Done()
 				return nil, ctx.Err()
 			},
 		},
-		&MockPublishRunner{},
+		&MockPublishStep{},
 		&MockNotifier{
 			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, _ error) error {
 				notified <- ctx
 				return nil
 			},
 		},
+		&MockScriptStore{},
 		20*time.Millisecond,
 	)
 

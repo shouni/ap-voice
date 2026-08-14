@@ -56,7 +56,7 @@ func testRequest() domain.Request {
 func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := NewSlackAdapter(nil, "")
+	adapter, err := NewSlackAdapter(nil, "", "https://ap-voice.example.run.app")
 	if err != nil {
 		t.Fatalf("NewSlackAdapter failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 func TestNewSlackAdapterRequiresHTTPClientWhenWebhookSet(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewSlackAdapter(nil, "https://hooks.slack.example/webhook"); err == nil {
+	if _, err := NewSlackAdapter(nil, "https://hooks.slack.example/webhook", "https://ap-voice.example.run.app"); err == nil {
 		t.Fatal("HTTPクライアントが nil なのにエラーになりません")
 	}
 }

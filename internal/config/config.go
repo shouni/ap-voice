@@ -21,6 +21,12 @@ const (
 	// 合成はセグメント数に比例して伸びるため長めに取りますが、上限が無いと
 	// エンジンが応答しなくなった際に Cloud Run のインスタンスを占有し続けます。
 	DefaultPipelineTimeout = 25 * time.Minute
+	// DefaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数の既定です。
+	DefaultMaxParallelSegments = 8
+	// DefaultSegmentRateLimit はセグメントの投入間隔の既定です（秒2件）。
+	DefaultSegmentRateLimit = 500 * time.Millisecond
+	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
+	DefaultSegmentTimeout = 120 * time.Second
 	// DefaultDispatchDeadline は Cloud Tasks がワーカーの応答を待つ上限です。
 	// **Cloud Tasks の HTTP ターゲットは 30 分が上限**で、そこから先へは伸ばせません。
 	DefaultDispatchDeadline = 30 * time.Minute
@@ -90,11 +96,38 @@ type AIConfig struct {
 }
 
 // VoicevoxConfig は音声合成エンジンの設定です。
+//
+// 流量の3つは**デプロイ先のエンジンの大きさで変わる値**なので env に置きます。
+// エンジンが 4 vCPU / 3 GiB のサイドカーだという事実はこのリポジトリではなく
+// ap-infra が持っており、そこに合わせて絞るにはコードのビルドを挟みたくありません。
+//
+// スループットを決めているのは SegmentRateLimit です。
+//
+//	スループット = min(1/SegmentRateLimit, MaxParallelSegments ÷ 1セグメントの所要時間)
 type VoicevoxConfig struct {
 	// APIURL が空なら go-voicevox が http://localhost:50021 へ落とします。
 	// ローカル実行と Cloud Run のサイドカー構成のどちらもその値でよいため、
 	// モデル名と違って未設定を許します。
 	APIURL string `env:"VOICEVOX_API_URL"`
+
+	// MaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数です。
+	//
+	// 下げるとレート制限に届かなくなります（1セグメント4秒なら 8÷4 = 秒2件で釣り合う）。
+	// 増やしてもエンジンの vCPU 以上には速くならず、待ち行列が伸びるだけです。
+	// **効いてくるとすればエンジン側のメモリ**で、同時に抱える合成の数だけ
+	// バッファが積まれます。OOM が出たらここをエンジンの vCPU 数まで下げます。
+	MaxParallelSegments int `env:"VOICEVOX_MAX_PARALLEL_SEGMENTS"`
+
+	// SegmentRateLimit はセグメントの投入間隔です。
+	//
+	// **VOICEVOX に API のレート制限はありません。** 自前で立てたエンジンで、
+	// サイドカー構成では同一インスタンス内にいます。外部仕様への準拠ではなく、
+	// エンジンを叩きすぎないための自主的な絞りです。
+	SegmentRateLimit time.Duration `env:"VOICEVOX_SEGMENT_RATE_LIMIT"`
+
+	// SegmentTimeout はセグメント 1 件あたりの上限です。
+	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
+	SegmentTimeout time.Duration `env:"VOICEVOX_SEGMENT_TIMEOUT"`
 }
 
 // PipelineConfig はジョブ 1 件の実行に関する設定です。
@@ -106,6 +139,14 @@ type PipelineConfig struct {
 	// 打ち切り、プロセスは SIGTERM で落ちて通知の機会を失います。キューは
 	// max_attempts = 1 なので再試行も来ません。
 	Timeout time.Duration `env:"PIPELINE_TIMEOUT"`
+}
+
+// StorageConfig はストレージの設定です。
+type StorageConfig struct {
+	// GCSBucket は成果物の置き場です。**出力先は利用者に入力させません。**
+	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
+	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
+	GCSBucket string `env:"GCS_VOICE_BUCKET"`
 }
 
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。
@@ -138,6 +179,7 @@ type Config struct {
 	Server       ServerConfig
 	Tasks        TasksConfig
 	Pipeline     PipelineConfig
+	Storage      StorageConfig
 	Auth         AuthConfig
 	GCP          GCPConfig
 	AI           AIConfig
@@ -200,7 +242,17 @@ func (c *Config) normalize() error {
 	c.AI.GeminiModels = normalizeList(c.AI.GeminiModels)
 	c.AI.GeminiModel = firstModel(c.AI.GeminiModels)
 
+	c.Storage.GCSBucket = strings.TrimSpace(c.Storage.GCSBucket)
 	c.Voicevox.APIURL = strings.TrimSpace(c.Voicevox.APIURL)
+	if c.Voicevox.MaxParallelSegments <= 0 {
+		c.Voicevox.MaxParallelSegments = DefaultMaxParallelSegments
+	}
+	if c.Voicevox.SegmentRateLimit <= 0 {
+		c.Voicevox.SegmentRateLimit = DefaultSegmentRateLimit
+	}
+	if c.Voicevox.SegmentTimeout <= 0 {
+		c.Voicevox.SegmentTimeout = DefaultSegmentTimeout
+	}
 	c.Notification.SlackWebhookURL = strings.TrimSpace(c.Notification.SlackWebhookURL)
 
 	if c.HTTP.Timeout <= 0 {
@@ -220,6 +272,12 @@ func (c *Config) ValidateEssentialConfig() error {
 
 	if c.GCP.ProjectID == "" {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
+	}
+
+	// **両ロールで要ります。** web は履歴の一覧と出力先の組み立てに、worker は
+	// synthesize が保存済み台本を読むために使います。
+	if c.Storage.GCSBucket == "" {
+		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")
 	}
 
 	// 三段のうち上二段の関係はどちらのロールでも検査します。web は投入時に

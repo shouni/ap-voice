@@ -15,12 +15,18 @@ var managedEnvKeys = []string{
 	"TASK_CALLER_SERVICE_ACCOUNT_EMAIL", "ALLOWED_TASK_SERVICE_ACCOUNTS",
 	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "SESSION_ENCRYPT_KEY",
 	"ALLOWED_EMAILS", "ALLOWED_DOMAINS",
-	"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS",
-	"VOICEVOX_API_URL", "SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
+	"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS", "GCS_VOICE_BUCKET",
+	"VOICEVOX_API_URL", "VOICEVOX_MAX_PARALLEL_SEGMENTS",
+	"VOICEVOX_SEGMENT_RATE_LIMIT", "VOICEVOX_SEGMENT_TIMEOUT",
+	"SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
 }
 
 // essentialEnv は、どのロールでも要る最低限です。
-var essentialEnv = map[string]string{"GEMINI_MODELS": "model-a", "GCP_PROJECT_ID": "proj"}
+var essentialEnv = map[string]string{
+	"GEMINI_MODELS":    "model-a",
+	"GCP_PROJECT_ID":   "proj",
+	"GCS_VOICE_BUCKET": "ap-voice",
+}
 
 // webEnv は Web 面が起動できる一式を返します。overrides で個別に潰せます。
 func webEnv(overrides map[string]string) map[string]string {
@@ -199,7 +205,7 @@ func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 // Cloud Tasks の検証設定は Worker 面だけの要件です。Web 面に要求すると、
 // 担当しない面の設定まで配ることになります。
 func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
-	base := map[string]string{"GEMINI_MODELS": "model-a", "GCP_PROJECT_ID": "proj"}
+	base := essentialEnv
 
 	t.Run("worker は許可リストが要る", func(t *testing.T) {
 		envs := map[string]string{"SERVER_ROLE": "worker"}
@@ -316,6 +322,67 @@ func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 
 		if err := cfg.ValidateEssentialConfig(); err != nil {
 			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
+		}
+	})
+}
+
+// 出力先バケットは両ロールで要ります。web は履歴の一覧と出力先の組み立てに、
+// worker は synthesize が保存済み台本を読むために使います。
+func TestValidateEssentialConfig_BucketRequiredForBothRoles(t *testing.T) {
+	for _, role := range []string{"web", "worker", "both"} {
+		t.Run(role, func(t *testing.T) {
+			envs := webEnv(map[string]string{
+				"SERVER_ROLE":                   role,
+				"GCS_VOICE_BUCKET":              "",
+				"TASK_AUDIENCE_URL":             "https://worker.example.run.app",
+				"ALLOWED_TASK_SERVICE_ACCOUNTS": "caller@example.iam.gserviceaccount.com",
+			})
+			cfg := loadFor(t, envs)
+
+			err := cfg.ValidateEssentialConfig()
+			if err == nil {
+				t.Fatal("バケット未設定が素通りした")
+			}
+			if !strings.Contains(err.Error(), "GCS_VOICE_BUCKET") {
+				t.Errorf("エラーに指定方法が無い: %v", err)
+			}
+		})
+	}
+}
+
+// 合成の流量はエンジンの大きさで変わるため env で調整できます。
+// 未設定なら既定値が入り、コードを触らずに絞れることを固定します。
+func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
+	t.Run("未設定なら既定値", func(t *testing.T) {
+		cfg := loadFor(t, nil)
+
+		if cfg.Voicevox.MaxParallelSegments != DefaultMaxParallelSegments {
+			t.Errorf("MaxParallelSegments = %d, want %d", cfg.Voicevox.MaxParallelSegments, DefaultMaxParallelSegments)
+		}
+		if cfg.Voicevox.SegmentRateLimit != DefaultSegmentRateLimit {
+			t.Errorf("SegmentRateLimit = %v, want %v", cfg.Voicevox.SegmentRateLimit, DefaultSegmentRateLimit)
+		}
+		if cfg.Voicevox.SegmentTimeout != DefaultSegmentTimeout {
+			t.Errorf("SegmentTimeout = %v, want %v", cfg.Voicevox.SegmentTimeout, DefaultSegmentTimeout)
+		}
+	})
+
+	// OOM が出たときにエンジンの vCPU 数まで絞る、という操作が env だけで済むこと。
+	t.Run("絞れる", func(t *testing.T) {
+		cfg := loadFor(t, map[string]string{
+			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "4",
+			"VOICEVOX_SEGMENT_RATE_LIMIT":    "1s",
+			"VOICEVOX_SEGMENT_TIMEOUT":       "90s",
+		})
+
+		if cfg.Voicevox.MaxParallelSegments != 4 {
+			t.Errorf("MaxParallelSegments = %d, want 4", cfg.Voicevox.MaxParallelSegments)
+		}
+		if cfg.Voicevox.SegmentRateLimit != time.Second {
+			t.Errorf("SegmentRateLimit = %v, want 1s", cfg.Voicevox.SegmentRateLimit)
+		}
+		if cfg.Voicevox.SegmentTimeout != 90*time.Second {
+			t.Errorf("SegmentTimeout = %v, want 90s", cfg.Voicevox.SegmentTimeout)
 		}
 	})
 }

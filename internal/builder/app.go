@@ -19,6 +19,7 @@ import (
 	"github.com/shouni/ap-voice/internal/app"
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/repository"
 )
 
 // BuildContainer は外部サービスとの接続を確立し、依存関係を組み立てた app.Container を返します。
@@ -54,7 +55,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	)
 
 	// 3. Notifier
-	notifier, err := buildNotifier(httpClient.WithoutRetry(), cfg.Notification.SlackWebhookURL)
+	notifier, err := buildNotifier(httpClient.WithoutRetry(), cfg.Notification.SlackWebhookURL, cfg.Server.ServiceURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notifier: %w", err)
 	}
@@ -66,9 +67,17 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("話者一覧の読み込みに失敗しました: %w", err)
 	}
 
+	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
+	// worker は synthesize が保存済み台本を読むために。
+	repo, err := repository.NewRepository(rio.Reader, cfg.Storage.GCSBucket)
+	if err != nil {
+		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
+	}
+
 	appCtx := &app.Container{
 		Config:     cfg,
 		Speakers:   speakers,
+		Repository: repo,
 		RemoteIO:   rio,
 		HTTPClient: httpClient,
 		Notifier:   notifier,
@@ -111,10 +120,10 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 // buildNotifier は、通知機能を初期化します。
 // webhookURL が未設定の場合、アダプター側が通知を行わない実装を返します。
-func buildNotifier(httpClient httpkit.Requester, webhookURL string) (domain.Notifier, error) {
+func buildNotifier(httpClient httpkit.Requester, webhookURL, serviceURL string) (domain.Notifier, error) {
 	if webhookURL == "" {
 		slog.Info("Slack Webhook URL が未設定のため、通知は無効化されます。")
 	}
 
-	return adapters.NewSlackAdapter(httpClient, webhookURL)
+	return adapters.NewSlackAdapter(httpClient, webhookURL, serviceURL)
 }

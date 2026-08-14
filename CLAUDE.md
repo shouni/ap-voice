@@ -67,6 +67,14 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_API_URL` — optional; unset falls back to `http://localhost:50021` (go-voicevox's
   default, with a warning), which is what both local runs and a Cloud Run sidecar want.
+- `VOICEVOX_MAX_PARALLEL_SEGMENTS` / `VOICEVOX_SEGMENT_RATE_LIMIT` / `VOICEVOX_SEGMENT_TIMEOUT` —
+  optional; `8`, `500ms`, `120s`. **Throughput is set by the rate limit**, not the parallelism:
+  `min(1/rate, parallel ÷ time-per-segment)`. Lowering the parallelism below that ratio makes
+  runs *slower*, and raising it past the engine's vCPU count only lengthens the queue — what it
+  actually costs is engine memory, since each in-flight synthesis holds buffers. They are env
+  vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
+  throttling to fit it should not need a rebuild. Note this is **unrelated** to Cloud Run's
+  `max_instance_request_concurrency = 1`, which counts *jobs* per instance, not segments per job.
 - `PIPELINE_TIMEOUT` / `TASK_DISPATCH_DEADLINE` — optional; default to `25m` and `30m`. These are
   the top two rungs of the fleet's timeout ladder
   (`PIPELINE_TIMEOUT` < dispatch deadline <= Cloud Run timeout). **The smallest wins**, so the
