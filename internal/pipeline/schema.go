@@ -19,8 +19,8 @@ const scriptTitleMaxLength = 60
 // 許可語彙は assets/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
 // speaker と style は独立した enum なので、**この形では「話者ごとに使えるスタイル」を
 // 表現できません**。実在しない組み合わせを選ばれても getStyleID がその話者の既定へ落とすため、
-// 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担い、
-// そちらは Registry.StylesFor から機械生成します。
+// 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担います
+// （現在はどのモードも "ノーマル" 固定なので、この enum は実質そこまで絞られています）。
 func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
 	maxLength := int64(scriptTextMaxLength)
 	titleMaxLength := int64(scriptTitleMaxLength)

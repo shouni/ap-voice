@@ -214,8 +214,14 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
   has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
   that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
-  therefore live in the prompt text. If you change `ScriptLine`'s fields, update the schema in
-  lockstep.
+  therefore live in the prompt text, and **every prompt currently pins `style` to `"ノーマル"`**,
+  so the enum's width does not matter in practice. If you change `ScriptLine`'s fields, update the
+  schema in lockstep.
+- **The prompts carry all the expressive work.** With one fixed style, nothing about the audio
+  varies except the words, so each prompt says so and asks for short sentences, restatement and
+  questions instead. They also spell out what a TTS script needs and a written one does not:
+  katakana for acronyms, no symbols or bullet lists, unambiguous numbers. If you loosen the style
+  rule, drop the compensating instructions with it — otherwise the two pull against each other.
 - **There is no `direction` field.** It was an emotion tag for downstream video production that
   nothing ever read — not the engine, not any sibling app. Styles now carry the emotion and
   actually change the audio, so the tag was removed rather than left as a field the AI spends

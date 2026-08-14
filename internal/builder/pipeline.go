@@ -30,7 +30,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildScriptStep は、台本を生成する段を返します。
 func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
-	promptBuilder, err := adapters.NewPromptAdapter(appCtx.Speakers)
+	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
 		return nil, fmt.Errorf("プロンプトビルダーの作成に失敗しました: %w", err)
 	}
