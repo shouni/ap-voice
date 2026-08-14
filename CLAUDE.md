@@ -152,9 +152,13 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **`internal/repository` serves the history screens** — `List` (with titles filled concurrently,
-  falling back to the job ID when a script will not parse, so a broken job can still be deleted),
-  `Load`, and `Delete`, which removes the whole job prefix rather than a fixed list of names.
+- **`internal/repository` serves the history screens** — `List`, `Load`, `HasAudio`, and
+  `Delete`, which removes the whole job prefix rather than a fixed list of names. `List` sorts
+  and truncates **before** filling in titles, so a page of 50 costs 50 object reads no matter how
+  many jobs exist; doing it the other way round made every page view scale with the bucket.
+  A script that will not parse leaves the job listed under its ID, so a broken job can still be
+  deleted. `HasAudio` asks storage whether the object exists rather than searching a listing —
+  the listing is capped, so any job past the cap reported no audio and lost its player.
 - **Templates are only evaluated at request time.** A renamed view field still compiles, so
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).

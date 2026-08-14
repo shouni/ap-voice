@@ -77,6 +77,19 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 	return script, nil
 }
 
+// HasAudio は、そのジョブの音声が既にあるかを返します。
+//
+// **一覧を引いて探しません。** 以前は List の結果から該当ジョブを線形探索していましたが、
+// これには 2 つの問題がありました。1 つは、真偽値 1 つを知るために全ジョブの台本を
+// 読んでいたこと。もう 1 つは、**上限（50 件）から外れた古いジョブが必ず false になる**
+// ことで、音声があるのに詳細画面から再生欄が消えていました。
+func (r *Repository) HasAudio(ctx context.Context, jobID string) (bool, error) {
+	if err := jobid.Validate(jobID); err != nil {
+		return false, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+	}
+	return r.reader.Exists(ctx, r.uri(r.layout.AudioPath(jobID)))
+}
+
 // Job は履歴一覧の 1 件です。
 type Job struct {
 	ID string
@@ -124,14 +137,16 @@ func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
 		jobs = append(jobs, *job)
 	}
 
-	r.fillTitles(ctx, jobs)
+	// **並べて切ってから題名を読みます。** 逆順にすると、50 件を表示するために
+	// 全ジョブ分の台本を読むことになり、往復がジョブ数に比例して増え続けます。
 	sort.Slice(jobs, func(i, j int) bool {
 		return jobid.SortKey(jobs[i].ID) > jobid.SortKey(jobs[j].ID)
 	})
-
 	if limit > 0 && len(jobs) > limit {
 		jobs = jobs[:limit]
 	}
+
+	r.fillTitles(ctx, jobs)
 	return jobs, nil
 }
 
@@ -141,14 +156,16 @@ func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
 // ジョブ ID のままにして一覧には載せます（台本が壊れていても音声は残っていることがあり、
 // 一覧から消えると消す手段まで失われます）。
 func (r *Repository) fillTitles(ctx context.Context, jobs []Job) {
-	g, gCtx := errgroup.WithContext(ctx)
+	// errgroup.WithContext は使いません。**どの読み出しも失敗を握りつぶす**ため、
+	// 1 件の失敗で残りを打ち切る意味がありません。
+	var g errgroup.Group
 	g.SetLimit(titleFetchParallelism)
 
 	for i := range jobs {
 		g.Go(func() error {
-			script, err := r.Load(gCtx, jobs[i].ID)
+			script, err := r.Load(ctx, jobs[i].ID)
 			if err != nil {
-				slog.DebugContext(gCtx, "台本を読めないジョブIDのまま一覧に載せます", "job_id", jobs[i].ID, "error", err)
+				slog.DebugContext(ctx, "台本を読めないジョブIDのまま一覧に載せます", "job_id", jobs[i].ID, "error", err)
 				return nil
 			}
 			if title := strings.TrimSpace(script.Title); title != "" {

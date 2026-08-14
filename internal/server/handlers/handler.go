@@ -45,6 +45,7 @@ type Handler struct {
 type ScriptRepository interface {
 	List(ctx context.Context, limit int) ([]repository.Job, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
+	HasAudio(ctx context.Context, jobID string) (bool, error)
 	Delete(ctx context.Context, jobID string) error
 }
 

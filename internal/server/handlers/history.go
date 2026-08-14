@@ -129,17 +129,10 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 
-	jobs, err := h.repo.List(r.Context(), historyLimit)
+	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 	if err != nil {
-		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
+		http.Error(w, "音声の有無を確認できませんでした", http.StatusBadGateway)
 		return
-	}
-	hasAudio := false
-	for _, job := range jobs {
-		if job.ID == jobID {
-			hasAudio = job.HasAudio
-			break
-		}
 	}
 
 	h.renderTemplate(w, status, "detail.html", detailView{
