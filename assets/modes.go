@@ -5,12 +5,23 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/shouni/go-prompt-kit/prompts"
 	"github.com/shouni/go-prompt-kit/resource"
 	"gopkg.in/yaml.v3"
 )
 
 // frontMatterDelim は front matter の区切りです。
 const frontMatterDelim = "---"
+
+// isPartial は、そのファイルが**モードではなく部品**かどうかを返します。
+//
+// 接頭辞は go-prompt-kit の既定（prompts.DefaultPartialPrefix = "_"）に合わせます。
+// ビルダー側は同じ規則で Build の対象から外すため、**判定を二重に書かない**ために
+// ライブラリの定数を参照します。モード名はジャンル接頭辞（tech_ / news_ …）を
+// 持つので、"_" 始まりと衝突しません。
+func isPartial(key string) bool {
+	return strings.HasPrefix(key, prompts.DefaultPartialPrefix)
+}
 
 // ModeMetadata は、プロンプト冒頭の front matter に書くモードの説明です。
 // ap-comp と同じ方式で、**説明の置き場をプロンプト自身にします。**
@@ -50,6 +61,10 @@ func (m Mode) DisplayName() string {
 //
 // front matter は説明であってプロンプトではないので、ここで落とします。
 // 残したまま渡すと YAML が指示文の先頭に紛れ込みます。
+//
+// **部品（_ 始まり）も含めて返します。** モード本文が {{template "_writing" .}} で
+// 参照するため、ビルダーには全部渡す必要があります。選択肢に出さないのは
+// LoadModes の役目です。
 func LoadPrompts() (map[string]string, error) {
 	raw, err := resource.Load(PromptFiles, promptDir, "")
 	if err != nil {
@@ -76,6 +91,9 @@ func LoadModes() ([]Mode, error) {
 
 	modes := make([]Mode, 0, len(raw))
 	for key, content := range raw {
+		if isPartial(key) {
+			continue
+		}
 		front, _ := splitFrontMatter(content)
 
 		var meta ModeMetadata

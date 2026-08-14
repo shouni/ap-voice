@@ -108,7 +108,7 @@ go run .        # SERVER_ROLE が必須
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
 | `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |
-| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<mode>.md` を置けばモードが増えます**（現在は `solo` / `dialogue` / `duet` / `promo`）。表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。 |
+| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<ジャンル>_<形式>.md` を置けばモードが増えます。** 表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。<br>技術: `tech_solo`（ひとり語り）/ `tech_dialogue`（対話）/ `tech_duet`（交互）/ `tech_howto`（手順）<br>その他: `news_anchor`（ニュース）/ `story_reading`（朗読）/ `music_promo`（楽曲紹介） |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
 | `script` | 台本の行（`ScriptLine` の配列）。`synthesize` で `job_id` を省くときに必須。保存された `audio.json` の `lines` がそのまま入ります。 |
 
@@ -117,7 +117,7 @@ go run .        # SERVER_ROLE が必須
   "command": "generate",
   "input_uri": "https://example.com/tech-news",
   "output_uri": "gs://my-bucket/audio/tech-news.wav",
-  "mode": "dialogue"
+  "mode": "tech_dialogue"
 }
 ```
 

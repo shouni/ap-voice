@@ -208,17 +208,25 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
   `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
   `mode` with no code change** (the directory already says they are prompts, so filenames carry
-  no prefix — same as the sibling apps). Each file opens with a YAML front matter block
+  a genre prefix so the list groups itself: `tech_*`, `news_*`, `story_*`, `music_*`).
+  Each file opens with a YAML front matter block
   (`label` / `direction` / `use_when`) that supplies the form's option text and the description
   under the select — the same arrangement as ap-comp, so **the explanation lives next to the
   prompt it explains** rather than in a list the form owns. `assets/modes.go` splits it:
   `LoadModes` reads the metadata, and **`LoadPrompts` returns the body only** — leaving the front
   matter in would slip YAML into the top of the instruction text, and the run would still
   succeed, so nothing would flag it. A prompt with no front matter still appears, labelled by its
-  key. The mode string travels from `Request.Mode` straight to
-  `PromptAdapter.Generate` and is never validated against a list. The one exception is `promo`,
-  named in `adapters/prompt.go` because it is the only mode whose *input type* differs: it reads
-  ap-comp's `recipe.json` and decodes it into a `music.Recipe` before rendering.
+  key. **Files beginning with `_` are partials, not modes** — `_writing` (the rules every
+  spoken script obeys), `_length` and `_input` — so the seven prompts state only what is
+  particular to them. `go-prompt-kit` already excludes that prefix from `Build`, and `LoadModes`
+  filters on `prompts.DefaultPartialPrefix` so the same rule is not written twice; `LoadPrompts`
+  keeps them, since the bodies reference them.
+  The mode string travels from `Request.Mode` straight to
+  `PromptAdapter.Generate` and is never validated against a list. The one exception is
+  `music_promo`, named in `adapters/prompt.go` because it is the only mode whose *input type*
+  differs: it reads ap-comp's `recipe.json` and decodes it into a `music.Recipe` before
+  rendering. **That constant is the only place a mode name appears in code**, so renaming a
+  prompt file means touching it.
 - **`assets/speakers.json` is the speaker vocabulary**, and it is this app's file, not
   go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
   updates produce a readable diff); refresh it with the curl in `assets/assets.go`. `builder`
