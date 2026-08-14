@@ -59,7 +59,6 @@ func (m *MockPublishStep) Run(ctx context.Context, outputURI string, script doma
 type MockNotifier struct {
 	NotifyFunc        func(ctx context.Context, req domain.Request, publicURL string) error
 	NotifyFailureFunc func(ctx context.Context, req domain.Request, err error) error
-	NotifySkippedFunc func(ctx context.Context, req domain.Request, reason error) error
 }
 
 func (m *MockNotifier) Notify(ctx context.Context, req domain.Request, publicURL string) error {
@@ -74,13 +73,6 @@ func (m *MockNotifier) NotifyFailure(ctx context.Context, req domain.Request, er
 		return nil
 	}
 	return m.NotifyFailureFunc(ctx, req, err)
-}
-
-func (m *MockNotifier) NotifySkipped(ctx context.Context, req domain.Request, reason error) error {
-	if m.NotifySkippedFunc == nil {
-		return nil
-	}
-	return m.NotifySkippedFunc(ctx, req, reason)
 }
 
 func TestPipelineExecute(t *testing.T) {
@@ -394,31 +386,6 @@ func TestPipelineNotifications(t *testing.T) {
 		p.notifySuccess(ctx, req, "")
 	})
 
-	t.Run("notifySkipped: 正しくNotifySkippedが呼ばれること", func(t *testing.T) {
-		t.Parallel()
-
-		called := false
-		reason := errors.New("skip reason")
-		p := &Pipeline{
-			notifier: &MockNotifier{
-				NotifySkippedFunc: func(_ context.Context, got domain.Request, gotReason error) error {
-					called = true
-					if !reflect.DeepEqual(got, req) {
-						t.Fatalf("unexpected request: %+v", got)
-					}
-					if !errors.Is(gotReason, reason) {
-						t.Fatalf("unexpected reason: %v", gotReason)
-					}
-					return nil
-				},
-			},
-		}
-
-		p.notifySkipped(ctx, req, reason)
-		if !called {
-			t.Fatal("NotifySkipped was not called")
-		}
-	})
 }
 
 // 上限を超えたら打ち切り、**失敗通知はその外側で送ります。**

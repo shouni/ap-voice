@@ -21,7 +21,6 @@ import (
 var slackTitles = notify.Titles{
 	Success: "✅ 処理が完了しました。",
 	Failure: "❌ 処理に失敗しました。",
-	Skipped: "ℹ️ 処理をスキップしました。",
 }
 
 // timeoutTitles は、PIPELINE_TIMEOUT で打ち切ったときの見出しです。
@@ -32,7 +31,6 @@ var slackTitles = notify.Titles{
 var timeoutTitles = notify.Titles{
 	Success: slackTitles.Success,
 	Failure: "⏳ 時間切れで打ち切りました。",
-	Skipped: slackTitles.Skipped,
 }
 
 // timeoutGuidance は、打ち切り時に本文へ足す案内です。
@@ -125,20 +123,6 @@ func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, er
 // そちらで抜けるためです。利用者から見ればどちらも「途中で止まった」です。
 func isTimeout(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
-}
-
-// NotifySkipped は Slack へスキップ通知を送信します。
-func (s *SlackAdapter) NotifySkipped(ctx context.Context, req domain.Request, reason error) error {
-	if !s.pipeline.Enabled() {
-		return nil
-	}
-
-	if sendErr := s.pipeline.Skipped(ctx, s.commonMetadata(req), reason); sendErr != nil {
-		return fmt.Errorf("slackへのスキップ通知投稿に失敗しました: %w", sendErr)
-	}
-
-	slog.Info("パイプラインスキップ通知を Slack に投稿しました。", "output_uri", req.OutputURI)
-	return nil
 }
 
 // commonMetadata は、各通知で共通して表示するメタデータだけを持つ本文を返します。

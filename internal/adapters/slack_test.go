@@ -78,9 +78,6 @@ func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 	if err := adapter.NotifyFailure(ctx, req, errors.New("boom")); err != nil {
 		t.Errorf("NotifyFailure = %v, want nil", err)
 	}
-	if err := adapter.NotifySkipped(ctx, req, errors.New("差分なし")); err != nil {
-		t.Errorf("NotifySkipped = %v, want nil", err)
-	}
 }
 
 // TestNewSlackAdapterRequiresHTTPClientWhenWebhookSet は、Webhook URL があるのに
@@ -169,24 +166,6 @@ func TestNotifyFailureAppendsCause(t *testing.T) {
 	}
 }
 
-// TestNotifySkippedAppendsReason は、スキップ通知が理由を追記することを検証します。
-func TestNotifySkippedAppendsReason(t *testing.T) {
-	t.Parallel()
-
-	adapter, rec := newTestAdapter()
-	if err := adapter.NotifySkipped(context.Background(), testRequest(), errors.New("入力に差分がありません")); err != nil {
-		t.Fatalf("NotifySkipped failed: %v", err)
-	}
-
-	msg := rec.last(t)
-	if msg.Title != slackTitles.Skipped {
-		t.Errorf("Title = %q, want %q", msg.Title, slackTitles.Skipped)
-	}
-	if !strings.Contains(msg.Body, "**理由:**\n入力に差分がありません") {
-		t.Errorf("Body = %q, want reason", msg.Body)
-	}
-}
-
 // TestNotifyFailureWithNilCause は、原因が nil でも通知が壊れないことを検証します。
 // 旧実装は fmt.Sprintf("%v", nil) の結果である <nil> をそのまま送っており、
 // Slack 側でリンク構文と誤認される文字列になっていました。
@@ -200,28 +179,6 @@ func TestNotifyFailureWithNilCause(t *testing.T) {
 
 	if body := rec.last(t).Body; !strings.Contains(body, "**エラー内容:**\n"+notify.NotAvailable) {
 		t.Errorf("Body = %q, want N/A fallback", body)
-	}
-}
-
-// TestNotifySkippedWithNilReason は、理由が nil でも通知が壊れないことを検証します。
-// 旧実装は reason.Error() を直接呼んでいたため、nil でパニックしていました。
-//
-// 理由が無い場合は「理由」節ごと省かれます。スキップは見出しだけで意味が通り、
-// 「理由: N/A」を足しても情報が増えないためです。
-func TestNotifySkippedWithNilReason(t *testing.T) {
-	t.Parallel()
-
-	adapter, rec := newTestAdapter()
-	if err := adapter.NotifySkipped(context.Background(), testRequest(), nil); err != nil {
-		t.Fatalf("NotifySkipped failed: %v", err)
-	}
-
-	body := rec.last(t).Body
-	if strings.Contains(body, "理由") {
-		t.Errorf("Body = %q, 理由が無いのに理由の節が出ています", body)
-	}
-	if !strings.Contains(body, "**入力URI:** [gs://in/article.txt](") {
-		t.Errorf("Body = %q, want common metadata", body)
 	}
 }
 
@@ -246,13 +203,6 @@ func TestNotifySetsLevel(t *testing.T) {
 				return a.NotifyFailure(context.Background(), testRequest(), errors.New("boom"))
 			},
 			want: notify.LevelFailure,
-		},
-		{
-			name: "スキップ",
-			call: func(a *SlackAdapter) error {
-				return a.NotifySkipped(context.Background(), testRequest(), nil)
-			},
-			want: notify.LevelSkipped,
 		},
 	}
 

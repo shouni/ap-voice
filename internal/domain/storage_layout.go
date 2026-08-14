@@ -1,6 +1,13 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"path"
+	"strings"
+)
+
+// scriptExt は台本 JSON の拡張子です。音声と同じ名前で拡張子だけ違えます。
+const scriptExt = ".json"
 
 // StorageLayout は、成果物のオブジェクト名を1箇所に集めます。
 //
@@ -33,11 +40,18 @@ func (l StorageLayout) AudioPath(jobID string) string {
 //
 // 台本は**成果物であると同時に入力**です。generate はこれだけを書き、
 // synthesize はこれを読んで音声を作ります。
-//
-// **音声と同じ名前で拡張子だけ違えます。** VoiceAdapter が出力先の拡張子を .json に
-// 替えて台本を書くため、別名にすると保存先と読み出し先がずれます。
 func (l StorageLayout) ScriptPath(jobID string) string {
-	return l.VoiceJobPrefix(jobID) + "audio.json"
+	return l.ScriptURIFor(l.AudioPath(jobID))
+}
+
+// ScriptURIFor は、音声の出力先から台本の出力先を導きます。
+//
+// **導出の規則をここ 1 箇所に置きます。** 台本の書き込み側は音声の URI しか
+// 受け取らないため、拡張子を .json に替える計算がかつてアダプター側にもありました。
+// 同じ規則が 2 箇所にあると、片方だけ変えたときに「保存はできるが誰も読まない場所」
+// という気付きにくい壊れ方をします。
+func (l StorageLayout) ScriptURIFor(audioURI string) string {
+	return strings.TrimSuffix(audioURI, path.Ext(audioURI)) + scriptExt
 }
 
 // AudioURI は、WAV の完全な出力先 URI を返します。

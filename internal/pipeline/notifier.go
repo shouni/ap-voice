@@ -26,13 +26,3 @@ func (p *Pipeline) notifyFailure(ctx context.Context, req domain.Request, runErr
 		slog.Error("失敗通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", runErr)
 	}
 }
-
-// notifySkipped は、処理スキップの通知を送信します。
-func (p *Pipeline) notifySkipped(ctx context.Context, req domain.Request, reason error) {
-	if p.notifier == nil {
-		return
-	}
-	if err := p.notifier.NotifySkipped(ctx, req, reason); err != nil {
-		slog.Error("スキップ通知の実行中にエラーが発生しましたが、処理を続行します。", "error", err, "cause", reason)
-	}
-}

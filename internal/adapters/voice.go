@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
@@ -29,6 +27,7 @@ const (
 type VoiceAdapter struct {
 	engine voicevox.Engine
 	writer remoteio.Writer
+	layout domain.StorageLayout
 }
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
@@ -51,6 +50,7 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg conf
 	}
 
 	return &VoiceAdapter{
+		layout: domain.NewStorageLayout(),
 		engine: engine,
 		writer: writer,
 	}, nil
@@ -70,10 +70,12 @@ func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI string, lines []
 	)
 }
 
-// UploadScript は指定されたURIの拡張子を.jsonに変更してスクリプトをアップロードします。
+// UploadScript は、音声の出力先から導いた場所へ台本を保存します。
+//
+// 導出は domain.StorageLayout が持ちます。ここで拡張子を組み替えると、
+// 読み出し側（repository）と規則が二重になります。
 func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, script domain.Script) error {
-	ext := filepath.Ext(outputURI)
-	jsonPath := strings.TrimSuffix(outputURI, ext) + ".json"
+	jsonPath := a.layout.ScriptURIFor(outputURI)
 
 	body, err := json.MarshalIndent(script, "", "  ")
 	if err != nil {

@@ -175,7 +175,10 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   whatever enqueues it.
 - **`Pipeline.Execute` is the only orchestration point**: validate → resolve script → publish
   (WAV + script upload + optional signed URL) → notify. Notification fires from a single `defer`,
-  so failure paths do not have to remember to notify.
+  so failure paths do not have to remember to notify. **There are two outcomes, not three** — the
+  sibling apps notify a "skipped" case for input that has not changed, and ap-voice carried the
+  whole path (port method, pipeline helper, Slack title) with nothing able to trigger it. Note
+  `deadcode` reports such a path as live, because its tests count as callers.
 - **Script generation and synthesis are separate commands**, and `Pipeline.Execute` branches on
   `Command` twice — once in `resolveScript`, once in `publish`:
   - `generate` — reads the source, calls Gemini, and stops at `PublishStep.PublishScript`, which
@@ -195,9 +198,11 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **`domain.StorageLayout` owns every object name**, and artifacts live under one prefix per job
   (`voice/<jobID>/audio.wav`, `.../audio.json`). Callers never choose paths — the web form has no
   output field, and `Handler.Enqueue` derives the URI from the job ID. That is what lets
-  `repository` list and delete a job without knowing what it contains. `ScriptPath` must stay the
-  audio name with a swapped extension: `VoiceAdapter` writes the script by replacing the output's
-  extension, so renaming one side alone would save to a path nothing reads.
+  `repository` list and delete a job without knowing what it contains. The script's location is
+  the audio name with a swapped extension, and **`ScriptURIFor` is the only place that rule
+  lives** — the writer derives it from the audio URI, the reader from the job ID, and both go
+  through it. They used to compute it separately, which would have saved to a path nothing reads
+  if either changed (`TestScriptPathAndScriptURIForAgree`).
 - **A signed URL is only ever a bonus.** It is generated when the RemoteIO's `URLSigner` is
   non-nil (GCS); local output never gets one and that is a soft failure (logged, not returned).
 - **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
