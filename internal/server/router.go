@@ -87,6 +87,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/speakers", h.Web.APISpeakers)
 			r.Get("/modes", h.Web.APIModes)
+			r.Post("/preview-reading", h.Web.APIPreviewReading)
 			r.Route("/jobs", func(r chi.Router) {
 				r.Get("/", h.Web.APIJobs)
 				r.Post("/", h.Web.APIEnqueue)

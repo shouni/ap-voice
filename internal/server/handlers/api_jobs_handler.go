@@ -223,6 +223,64 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+// apiReadingRequest は POST /api/preview-reading の要求です。
+type apiReadingRequest struct {
+	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
+	Lines []domain.ScriptLine `json:"lines"`
+}
+
+// apiReadingLine は 1 行分の読みです。
+type apiReadingLine struct {
+	Text string `json:"text"`
+	// Reading は合成時に実際に読まれるカタカナです。
+	Reading string `json:"reading"`
+	// Changed は、変換で表記が変わったかどうかです。**確かめる価値がある行の目印**で、
+	// カタカナだけの行は変換しても変わらないため false になります。
+	Changed bool `json:"changed"`
+}
+
+// apiReadingResponse は POST /api/preview-reading の応答です。
+type apiReadingResponse struct {
+	Lines []apiReadingLine `json:"lines"`
+}
+
+// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。**合成はしません。**
+//
+// **読みは自明ではありません。**「田中」「同姓同名」のような語がどう読まれるかは、
+// 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
+// 気付くことになるため、その前に確かめられるようにします。
+//
+// 意図と違う読みになる語は、その部分をカタカナで書けば直せます。
+func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
+	var body apiReadingRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
+		return
+	}
+	if len(body.Lines) == 0 {
+		writeErrorJSON(w, http.StatusBadRequest, "lines が空です")
+		return
+	}
+	if len(body.Lines) > maxScriptLines {
+		writeErrorJSON(w, http.StatusBadRequest,
+			fmt.Sprintf("行が多すぎます（%d 行、上限 %d 行）", len(body.Lines), maxScriptLines))
+		return
+	}
+
+	out := make([]apiReadingLine, 0, len(body.Lines))
+	for _, line := range body.Lines {
+		reading, err := h.reading.ConvertToReading(line.Text)
+		if err != nil {
+			writeErrorJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out = append(out, apiReadingLine{
+			Text: line.Text, Reading: reading, Changed: reading != line.Text,
+		})
+	}
+	writeJSON(w, http.StatusOK, apiReadingResponse{Lines: out})
+}
+
 // apiAudio は GET /api/jobs/{jobID}/audio の応答です。
 type apiAudio struct {
 	JobID string `json:"job_id"`

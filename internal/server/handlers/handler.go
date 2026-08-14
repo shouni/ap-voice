@@ -46,6 +46,8 @@ type Handler struct {
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
 	status *jobstatus.Recorder[domain.JobStatus]
+	// reading は、合成前に読みを確かめるために使います。
+	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
 	// **生成時と同じ組み立て**を通すので、画面に出るものと Gemini へ渡るものが一致します。
 	renderer PromptRenderer
@@ -53,6 +55,12 @@ type Handler struct {
 	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
 	// 落ちて指示が無視されます。
 	speakers *speaker.Registry
+}
+
+// ReadingConverter は、テキストが合成時にどう読まれるかを返します。
+// go-voicevox が合成の直前に通すのと同じ変換です。
+type ReadingConverter interface {
+	ConvertToReading(text string) (string, error)
 }
 
 // PromptRenderer は、モードのプロンプト本文を組み立てます。
@@ -86,6 +94,7 @@ type HandlerOptions struct {
 	Signer    remoteio.URLSigner
 	Speakers  *speaker.Registry
 	Renderer  PromptRenderer
+	Reading   ReadingConverter
 	JobStatus *jobstatus.Recorder[domain.JobStatus]
 }
 
@@ -115,6 +124,9 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	if opts.Renderer == nil {
 		return nil, errors.New("プロンプトの組み立てが指定されていません")
 	}
+	if opts.Reading == nil {
+		return nil, errors.New("読み変換が指定されていません")
+	}
 
 	return &Handler{
 		queue:     opts.Queue,
@@ -127,6 +139,7 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		signer:    opts.Signer,
 		speakers:  opts.Speakers,
 		renderer:  opts.Renderer,
+		reading:   opts.Reading,
 		status:    opts.JobStatus,
 	}, nil
 }
