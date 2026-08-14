@@ -174,6 +174,15 @@ type AuthConfig struct {
 	SessionEncryptKey  string   `env:"SESSION_ENCRYPT_KEY"`
 	AllowedEmails      []string `env:"ALLOWED_EMAILS"`
 	AllowedDomains     []string `env:"ALLOWED_DOMAINS"`
+
+	// AllowedM2MServiceAccounts は、ブラウザではなく機械が /api を叩くときに
+	// 許可するサービスアカウントです（ap-mcp など）。
+	//
+	// **空でも起動します。** 未設定なら M2M の検証は常に失敗し、すべての
+	// リクエストがセッション認証へ落ちます。つまり API を使わない構成では
+	// 何も設定しなくてよく、使う構成で書き忘れると「エージェントだけが
+	// ログイン画面へ飛ばされる」形で現れます。兄弟アプリと同じ env 名です。
+	AllowedM2MServiceAccounts []string `env:"ALLOWED_M2M_SERVICE_ACCOUNTS"`
 }
 
 // NotificationConfig は通知の設定です。
@@ -248,6 +257,7 @@ func (c *Config) normalize() error {
 
 	c.Auth.AllowedEmails = normalizeList(c.Auth.AllowedEmails)
 	c.Auth.AllowedDomains = normalizeList(c.Auth.AllowedDomains)
+	c.Auth.AllowedM2MServiceAccounts = normalizeList(c.Auth.AllowedM2MServiceAccounts)
 
 	c.GCP.ProjectID = strings.TrimSpace(c.GCP.ProjectID)
 	c.GCP.LocationID = strings.TrimSpace(c.GCP.LocationID)

@@ -3,11 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html/template"
 	"net/http"
-	"slices"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-utils/jobid"
@@ -45,6 +42,22 @@ type detailView struct {
 // フォームから任意の行数を組み立てられるため、上限が無いと 1 リクエストで
 // 際限なく合成を積めます。プロンプトの目安（最大 80 発言）より広く取ります。
 const maxScriptLines = 200
+
+// History は、これまでのジョブを新しい順に並べます。
+func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
+	jobs, err := h.repo.List(r.Context(), historyLimit)
+	if err != nil {
+		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
+		return
+	}
+
+	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs})
+}
+
+// Detail は、1 件のジョブの台本を表示します。ここから音声の確認と作成を行います。
+func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
+	h.renderDetail(w, r, http.StatusOK, "", "")
+}
 
 // UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
 //
@@ -89,9 +102,8 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 
 // scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
 //
-// **話者とスタイルは一覧に載っているものだけを通します。** 画面は選択肢で出しますが、
-// フォームは何でも送れるためです。実在しない組み合わせは合成時に既定スタイルへ
-// 黙って落ちるので、保存する前に弾きます。
+// 組み立てるだけで、実在するかの確認は validateScript が行います。
+// **API と同じ関数を通す**ため、どちらか一方だけが緩くなることがありません。
 func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 	speakers := r.Form["speaker"]
 	styles := r.Form["style"]
@@ -100,50 +112,13 @@ func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 	if len(speakers) != len(styles) || len(speakers) != len(texts) {
 		return domain.Script{}, errors.New("台本の項目数が揃っていません")
 	}
-	if len(speakers) == 0 {
-		return domain.Script{}, errors.New("台本が空です")
-	}
-	if len(speakers) > maxScriptLines {
-		return domain.Script{}, fmt.Errorf("台本が長すぎます（%d 行、上限 %d 行）", len(speakers), maxScriptLines)
-	}
 
 	lines := make([]domain.ScriptLine, 0, len(speakers))
 	for i := range speakers {
-		text := strings.TrimSpace(texts[i])
-		if text == "" {
-			// 空にした行は削除の意思表示として落とします。
-			continue
-		}
-		valid, ok := h.speakers.StylesFor(speakers[i])
-		if !ok {
-			return domain.Script{}, fmt.Errorf("%d 行目: 話者 %q は一覧にありません", i+1, speakers[i])
-		}
-		if !slices.Contains(valid, styles[i]) {
-			return domain.Script{}, fmt.Errorf("%d 行目: %q に %q というスタイルはありません", i+1, speakers[i], styles[i])
-		}
-		lines = append(lines, domain.ScriptLine{Speaker: speakers[i], Style: styles[i], Text: text})
-	}
-	if len(lines) == 0 {
-		return domain.Script{}, errors.New("本文のある行がありません")
+		lines = append(lines, domain.ScriptLine{Speaker: speakers[i], Style: styles[i], Text: texts[i]})
 	}
 
-	return domain.Script{Title: strings.TrimSpace(r.FormValue("title")), Lines: lines}, nil
-}
-
-// History は、これまでのジョブを新しい順に並べます。
-func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
-	jobs, err := h.repo.List(r.Context(), historyLimit)
-	if err != nil {
-		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
-		return
-	}
-
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs})
-}
-
-// Detail は、1 件のジョブの台本を表示します。ここから音声の作成を指示します。
-func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
-	h.renderDetail(w, r, http.StatusOK, "", "")
+	return h.validateScript(domain.Script{Title: r.FormValue("title"), Lines: lines})
 }
 
 // Delete は、1 つのジョブの成果物をまとめて消します。
@@ -221,17 +196,4 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		Message:    message,
 		Error:      errMsg,
 	})
-}
-
-// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を返します。
-// 画面側はこれを見て、話者を変えたときにスタイルの選択肢を差し替えます。
-func (h *Handler) stylesBySpeaker() map[string][]string {
-	names := h.speakers.SpeakerNames()
-	out := make(map[string][]string, len(names))
-	for _, name := range names {
-		if styles, ok := h.speakers.StylesFor(name); ok {
-			out[name] = styles
-		}
-	}
-	return out
 }

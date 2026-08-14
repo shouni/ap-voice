@@ -152,6 +152,17 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
+- **`/api/*` is the same surface for machines**, under the same middleware: `ProtectedMiddleware`
+  tries an OIDC bearer first and falls back to session + CSRF, so one route serves a browser and
+  an agent — the arrangement ap-comp, ap-mv and ap-story already use. `ALLOWED_M2M_SERVICE_ACCOUNTS`
+  is optional; unset, verification always fails and everything falls through to the session, so
+  the failure mode of forgetting it is "the agent gets redirected to login".
+  **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
+  ずんだもん has eight, an impossible pair is rejected on save, and a client with no way to read
+  the list can only guess. `PUT /api/jobs/{id}/script` saves without synthesizing, since an agent
+  may revise several times before spending the minutes once; the browser folds the two into one
+  button because a person editing has already decided. Both go through `validateScript` — one
+  loose path is enough to store a pair that silently becomes the speaker's default at synthesis.
 - **`/modes` lists, `/modes/{mode}` shows one**, the split ap-comp uses. The index carries only
   front matter and **assembles no prompts**: the seven bodies come to more than 10k characters,
   so building them for a page that may only be scanned is waste, and a reader — or an MCP client

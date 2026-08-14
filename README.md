@@ -46,6 +46,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `SESSION_SECRET` | セッションの署名鍵。**16バイト以上**。 |
 | `SESSION_ENCRYPT_KEY` | セッションの暗号化鍵。AES の要件で **16 / 24 / 32 バイト**のいずれか。 |
 | `ALLOWED_EMAILS` / `ALLOWED_DOMAINS` | ログインを許可する相手（カンマ区切り）。**どちらも空だと起動しません。** |
+| `ALLOWED_M2M_SERVICE_ACCOUNTS` | `/api/*` を機械（ap-mcp など）から叩くときに許可する SA（カンマ区切り）。**任意** — 空なら M2M 検証は常に失敗し、すべてセッション認証に落ちます。 |
 
 **Worker 面（`worker` / `both`）で必須**
 
@@ -88,6 +89,24 @@ go run .        # SERVER_ROLE が必須
 | `both` | 両方（ローカル開発用） | 上記すべて |
 
 `GET /modes` は選べるモードの一覧、`GET /modes/{mode}` はその 1 つの詳細で、**実際に渡るプロンプト本文**を見せます。
+
+#### API（機械向け）
+
+**画面と同じ認証の下**にあります。`ProtectedMiddleware` が OIDC の Bearer とセッションの
+両方を通すため、同じ URL を人も機械も叩けます（御三家と同じ形）。
+
+| メソッド | パス | 用途 |
+| --- | --- | --- |
+| `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
+| `GET` | `/api/modes` | 選べるモード（キー・表示名・説明）。 |
+| `GET` | `/api/jobs` | ジョブを新しい順に。 |
+| `POST` | `/api/jobs` | `generate` / `generate_and_synthesize` を投入。 |
+| `GET` | `/api/jobs/{jobID}/script` | 台本を取得。 |
+| `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
+| `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る。 |
+| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。 |
+
+台本の検証（話者・スタイルが実在するか、行数の上限）は**画面と同じ関数**を通ります。
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、

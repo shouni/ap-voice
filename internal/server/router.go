@@ -68,18 +68,33 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		if h.Web == nil {
 			return
 		}
-		// **2つ重ねます。** gcp-kit の ProtectedMiddleware が内部で
-		// Middleware(CSRFContextMiddleware(next)) と連結しているのと同じ形です
-		// （こちらは M2M 検証を使わないため直接組みます）。CSRF の方を省くと
-		// トークンが生成されず、フォームの POST が必ず弾かれます。
-		r.Use(h.Auth.Middleware)
-		r.Use(h.Auth.CSRFContextMiddleware)
+		// **ブラウザと機械の両方を通します。** ProtectedMiddleware は先に M2M の
+		// OIDC を試し、そうでなければ Middleware(CSRFContextMiddleware(next)) へ
+		// 落とします。CSRF の方を省くとトークンが生成されず、フォームの POST が
+		// 必ず弾かれるため、この 2 つは常に対です。
+		r.Use(h.Auth.ProtectedMiddleware(h.M2M))
 
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
 		r.Route("/modes", func(r chi.Router) {
 			r.Get("/", h.Web.Modes)
 			r.Get("/{mode}", h.Web.ModeDetail)
+		})
+
+		// 機械（ap-mcp など）から使う口です。**画面と同じ認証の下にあります** —
+		// ProtectedMiddleware が OIDC の Bearer とセッションの両方を通すため、
+		// 別のミドルウェアを重ねる必要がありません。
+		r.Route("/api", func(r chi.Router) {
+			r.Get("/speakers", h.Web.APISpeakers)
+			r.Get("/modes", h.Web.APIModes)
+			r.Route("/jobs", func(r chi.Router) {
+				r.Get("/", h.Web.APIJobs)
+				r.Post("/", h.Web.APIEnqueue)
+				r.Delete("/{jobID}", h.Web.APIDeleteJob)
+				r.Get("/{jobID}/script", h.Web.APIScript)
+				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
+				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
+			})
 		})
 
 		// 台本ができたら履歴に並び、詳細から音声を作ります。
