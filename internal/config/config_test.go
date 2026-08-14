@@ -16,7 +16,9 @@ var managedEnvKeys = []string{
 	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "SESSION_ENCRYPT_KEY",
 	"ALLOWED_EMAILS", "ALLOWED_DOMAINS",
 	"GCP_PROJECT_ID", "GCP_LOCATION_ID", "GEMINI_MODELS", "GCS_VOICE_BUCKET",
-	"VOICEVOX_API_URL", "SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
+	"VOICEVOX_API_URL", "VOICEVOX_MAX_PARALLEL_SEGMENTS",
+	"VOICEVOX_SEGMENT_RATE_LIMIT", "VOICEVOX_SEGMENT_TIMEOUT",
+	"SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
 }
 
 // essentialEnv は、どのロールでも要る最低限です。
@@ -346,4 +348,41 @@ func TestValidateEssentialConfig_BucketRequiredForBothRoles(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 合成の流量はエンジンの大きさで変わるため env で調整できます。
+// 未設定なら既定値が入り、コードを触らずに絞れることを固定します。
+func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
+	t.Run("未設定なら既定値", func(t *testing.T) {
+		cfg := loadFor(t, nil)
+
+		if cfg.Voicevox.MaxParallelSegments != DefaultMaxParallelSegments {
+			t.Errorf("MaxParallelSegments = %d, want %d", cfg.Voicevox.MaxParallelSegments, DefaultMaxParallelSegments)
+		}
+		if cfg.Voicevox.SegmentRateLimit != DefaultSegmentRateLimit {
+			t.Errorf("SegmentRateLimit = %v, want %v", cfg.Voicevox.SegmentRateLimit, DefaultSegmentRateLimit)
+		}
+		if cfg.Voicevox.SegmentTimeout != DefaultSegmentTimeout {
+			t.Errorf("SegmentTimeout = %v, want %v", cfg.Voicevox.SegmentTimeout, DefaultSegmentTimeout)
+		}
+	})
+
+	// OOM が出たときにエンジンの vCPU 数まで絞る、という操作が env だけで済むこと。
+	t.Run("絞れる", func(t *testing.T) {
+		cfg := loadFor(t, map[string]string{
+			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "4",
+			"VOICEVOX_SEGMENT_RATE_LIMIT":    "1s",
+			"VOICEVOX_SEGMENT_TIMEOUT":       "90s",
+		})
+
+		if cfg.Voicevox.MaxParallelSegments != 4 {
+			t.Errorf("MaxParallelSegments = %d, want 4", cfg.Voicevox.MaxParallelSegments)
+		}
+		if cfg.Voicevox.SegmentRateLimit != time.Second {
+			t.Errorf("SegmentRateLimit = %v, want 1s", cfg.Voicevox.SegmentRateLimit)
+		}
+		if cfg.Voicevox.SegmentTimeout != 90*time.Second {
+			t.Errorf("SegmentTimeout = %v, want 90s", cfg.Voicevox.SegmentTimeout)
+		}
+	})
 }

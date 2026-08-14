@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
 	"github.com/shouni/go-voicevox/voicevox"
 
+	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
@@ -25,33 +25,6 @@ const (
 	voicevoxWavCacheControl = "public, max-age=1800"
 )
 
-// 合成の流量に関わる3つの値。**スループットを決めているのはレート制限**で、
-// 並列数は「同時に処理待ちで居られる上限」です。
-//
-//	スループット = min(1/レート制限, 並列数 ÷ 1セグメントの所要時間)
-//
-// Cloud Run の max_instance_request_concurrency（= 1）とは別の軸です。あちらは
-// 1インスタンスが同時に受けるジョブ数で、ここは1ジョブ内のセグメント数です。
-const (
-	// defaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数です。
-	//
-	// 下げるとレート制限に届かなくなります（1セグメント4秒なら 8÷4 = 秒2件で
-	// ちょうど釣り合う）。一方でエンジンは 4 vCPU なので、増やしても総スループットは
-	// 変わらず待ち行列が伸びるだけです。**効いてくるとすればエンジン側のメモリ**で、
-	// 同時に抱える合成の数だけバッファが積まれます。OOM が出たらここを 4（エンジンの
-	// vCPU 数）へ下げるのが最初の一手です。
-	defaultMaxParallelSegments = 8
-	// defaultSegmentRateLimit はセグメントの投入間隔です（秒2件）。
-	//
-	// **VOICEVOX に API のレート制限はありません。** 自前で立てたエンジンで、
-	// サイドカー構成では同一インスタンス内にいます。外部仕様への準拠ではなく、
-	// エンジンを叩きすぎないための自主的な絞りです。
-	defaultSegmentRateLimit = 500 * time.Millisecond
-	// defaultSegmentTimeout はセグメント1件あたりの上限です。
-	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
-	defaultSegmentTimeout = 120 * time.Second
-)
-
 // VoiceAdapter は、音声合成する役割を担います。
 type VoiceAdapter struct {
 	engine voicevox.Engine
@@ -60,19 +33,18 @@ type VoiceAdapter struct {
 
 // NewVoiceAdapter は、VoiceAdapterを初期化します。
 //
-// apiURL には VOICEVOX エンジンの URL を渡します。空文字の場合は go-voicevox が
-// http://localhost:50021 へ落とすため、ローカル実行とサイドカー構成のどちらでも
-// そのまま動きます。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, apiURL string, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
+// 流量の設定は cfg が持ちます。エンジンの大きさで変わる値なので、ここに定数を
+// 置かず env から受けます（config.VoicevoxConfig 参照）。
+func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg config.VoicevoxConfig, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
-		apiURL,
+		cfg.APIURL,
 		true,
 		speakers,
-		voicevox.WithMaxParallelSegments(defaultMaxParallelSegments),
-		voicevox.WithSegmentRateLimit(defaultSegmentRateLimit),
-		voicevox.WithSegmentTimeout(defaultSegmentTimeout),
+		voicevox.WithMaxParallelSegments(cfg.MaxParallelSegments),
+		voicevox.WithSegmentRateLimit(cfg.SegmentRateLimit),
+		voicevox.WithSegmentTimeout(cfg.SegmentTimeout),
 	)
 
 	if err != nil {

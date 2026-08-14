@@ -21,6 +21,12 @@ const (
 	// 合成はセグメント数に比例して伸びるため長めに取りますが、上限が無いと
 	// エンジンが応答しなくなった際に Cloud Run のインスタンスを占有し続けます。
 	DefaultPipelineTimeout = 25 * time.Minute
+	// DefaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数の既定です。
+	DefaultMaxParallelSegments = 8
+	// DefaultSegmentRateLimit はセグメントの投入間隔の既定です（秒2件）。
+	DefaultSegmentRateLimit = 500 * time.Millisecond
+	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
+	DefaultSegmentTimeout = 120 * time.Second
 	// DefaultDispatchDeadline は Cloud Tasks がワーカーの応答を待つ上限です。
 	// **Cloud Tasks の HTTP ターゲットは 30 分が上限**で、そこから先へは伸ばせません。
 	DefaultDispatchDeadline = 30 * time.Minute
@@ -90,11 +96,38 @@ type AIConfig struct {
 }
 
 // VoicevoxConfig は音声合成エンジンの設定です。
+//
+// 流量の3つは**デプロイ先のエンジンの大きさで変わる値**なので env に置きます。
+// エンジンが 4 vCPU / 3 GiB のサイドカーだという事実はこのリポジトリではなく
+// ap-infra が持っており、そこに合わせて絞るにはコードのビルドを挟みたくありません。
+//
+// スループットを決めているのは SegmentRateLimit です。
+//
+//	スループット = min(1/SegmentRateLimit, MaxParallelSegments ÷ 1セグメントの所要時間)
 type VoicevoxConfig struct {
 	// APIURL が空なら go-voicevox が http://localhost:50021 へ落とします。
 	// ローカル実行と Cloud Run のサイドカー構成のどちらもその値でよいため、
 	// モデル名と違って未設定を許します。
 	APIURL string `env:"VOICEVOX_API_URL"`
+
+	// MaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数です。
+	//
+	// 下げるとレート制限に届かなくなります（1セグメント4秒なら 8÷4 = 秒2件で釣り合う）。
+	// 増やしてもエンジンの vCPU 以上には速くならず、待ち行列が伸びるだけです。
+	// **効いてくるとすればエンジン側のメモリ**で、同時に抱える合成の数だけ
+	// バッファが積まれます。OOM が出たらここをエンジンの vCPU 数まで下げます。
+	MaxParallelSegments int `env:"VOICEVOX_MAX_PARALLEL_SEGMENTS"`
+
+	// SegmentRateLimit はセグメントの投入間隔です。
+	//
+	// **VOICEVOX に API のレート制限はありません。** 自前で立てたエンジンで、
+	// サイドカー構成では同一インスタンス内にいます。外部仕様への準拠ではなく、
+	// エンジンを叩きすぎないための自主的な絞りです。
+	SegmentRateLimit time.Duration `env:"VOICEVOX_SEGMENT_RATE_LIMIT"`
+
+	// SegmentTimeout はセグメント 1 件あたりの上限です。
+	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
+	SegmentTimeout time.Duration `env:"VOICEVOX_SEGMENT_TIMEOUT"`
 }
 
 // PipelineConfig はジョブ 1 件の実行に関する設定です。
@@ -211,6 +244,15 @@ func (c *Config) normalize() error {
 
 	c.Storage.GCSBucket = strings.TrimSpace(c.Storage.GCSBucket)
 	c.Voicevox.APIURL = strings.TrimSpace(c.Voicevox.APIURL)
+	if c.Voicevox.MaxParallelSegments <= 0 {
+		c.Voicevox.MaxParallelSegments = DefaultMaxParallelSegments
+	}
+	if c.Voicevox.SegmentRateLimit <= 0 {
+		c.Voicevox.SegmentRateLimit = DefaultSegmentRateLimit
+	}
+	if c.Voicevox.SegmentTimeout <= 0 {
+		c.Voicevox.SegmentTimeout = DefaultSegmentTimeout
+	}
 	c.Notification.SlackWebhookURL = strings.TrimSpace(c.Notification.SlackWebhookURL)
 
 	if c.HTTP.Timeout <= 0 {

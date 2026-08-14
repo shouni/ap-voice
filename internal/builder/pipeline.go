@@ -60,7 +60,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*pipeline.
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
 func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
-	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox.APIURL, appCtx.Speakers, appCtx.RemoteIO.Writer)
+	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox, appCtx.Speakers, appCtx.RemoteIO.Writer)
 	if err != nil {
 		return nil, err
 	}
