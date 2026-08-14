@@ -12,6 +12,7 @@ import (
 	"github.com/shouni/netarmor/securenet"
 
 	"github.com/shouni/ap-voice/assets"
+	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -107,6 +108,13 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		return fmt.Errorf("生成モードの読み込みに失敗しました: %w", err)
 	}
 
+	// カタログでプロンプト本文を見せるために、生成側と同じ組み立てを使います。
+	// 別に持つと、画面に出るものと実際に渡すものがずれます。
+	renderer, err := adapters.NewPromptAdapter()
+	if err != nil {
+		return fmt.Errorf("プロンプトの組み立てに失敗しました: %w", err)
+	}
+
 	webHandler, err := handlers.NewHandler(handlers.HandlerOptions{
 		Queue:     appCtx.TaskQueue,
 		Templates: tmpl,
@@ -116,6 +124,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Repo:      appCtx.Repository,
 		Signer:    appCtx.RemoteIO.Signer,
 		Speakers:  appCtx.Speakers,
+		Renderer:  renderer,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)

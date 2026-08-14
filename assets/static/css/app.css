@@ -92,3 +92,12 @@ body {
 .script-table td .form-control {
     min-width: 16rem;
 }
+
+/* カタログのプロンプト本文。<pre> は既定で折り返さないため、長い行がそのまま
+   横へ伸びてページを広げます。読むためのものなので折り返します。 */
+.prompt-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 30rem;
+    overflow-y: auto;
+}
