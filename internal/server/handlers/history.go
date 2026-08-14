@@ -20,7 +20,8 @@ type historyView struct {
 
 // detailView は詳細画面に渡す値です。
 type detailView struct {
-	JobID string
+	CSRFToken string
+	JobID     string
 	// Script は保存済みの台本です。ここで内容を確認してから音声を作ります。
 	Script []domain.ScriptLine
 	// HasAudio は音声が既にあるかです。無ければ「音声を作成」だけを出します。
@@ -122,10 +123,11 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 	}
 
 	h.renderTemplate(w, status, "detail.html", detailView{
-		JobID:    jobID,
-		Script:   script,
-		HasAudio: hasAudio,
-		Message:  message,
-		Error:    errMsg,
+		CSRFToken: csrfToken(r),
+		JobID:     jobID,
+		Script:    script,
+		HasAudio:  hasAudio,
+		Message:   message,
+		Error:     errMsg,
 	})
 }

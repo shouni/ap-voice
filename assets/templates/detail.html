@@ -26,13 +26,12 @@
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
-  <div class="d-flex gap-2 align-items-center mb-4">
-    <form method="post" action="/history/{{ .JobID }}/synthesize">
-      <button class="btn btn-primary" type="submit">
-        {{ if .HasAudio }}音声を作り直す{{ else }}音声を作成{{ end }}
-      </button>
-    </form>
-  </div>
+  <form method="post" action="/history/{{ .JobID }}/synthesize" class="d-grid gap-2 mb-4">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <button class="btn btn-primary btn-lg" type="submit">
+      {{ if .HasAudio }}音声を作り直す{{ else }}音声を作成{{ end }}
+    </button>
+  </form>
 
   {{ if .HasAudio }}
     {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。
@@ -42,7 +41,7 @@
   {{ end }}
 
   <h2 class="h6">台本（{{ len .Script }} 行）</h2>
-  <table class="table table-sm align-middle">
+  <table class="table table-sm align-middle card p-2 shadow-sm">
     <thead>
       <tr><th style="width: 9rem;">話者</th><th style="width: 7rem;">スタイル</th><th>テキスト</th></tr>
     </thead>

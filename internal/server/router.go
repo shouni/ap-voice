@@ -68,7 +68,13 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		if h.Web == nil {
 			return
 		}
+		// **2つ重ねます。** gcp-kit の ProtectedMiddleware が内部で
+		// Middleware(CSRFContextMiddleware(next)) と連結しているのと同じ形です
+		// （こちらは M2M 検証を使わないため直接組みます）。CSRF の方を省くと
+		// トークンが生成されず、フォームの POST が必ず弾かれます。
 		r.Use(h.Auth.Middleware)
+		r.Use(h.Auth.CSRFContextMiddleware)
+
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
 

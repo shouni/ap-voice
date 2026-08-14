@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/shouni/gcp-kit/auth"
 	"github.com/shouni/go-remote-io/remoteio"
 
 	"github.com/shouni/go-utils/jobid"
@@ -99,19 +100,27 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 
 // formView はフォーム画面に渡す値です。
 type formView struct {
-	Modes   []string
-	Models  []string
-	Message string
-	Error   string
-	Form    domain.Request
+	CSRFToken string
+	Modes     []string
+	Models    []string
+	Message   string
+	Error     string
+	Form      domain.Request
+}
+
+// csrfToken は、CSRFContextMiddleware が context に入れたトークンを取り出します。
+// フォームはこれを hidden で送り返し、Middleware が検証します。
+func csrfToken(r *http.Request) string {
+	return auth.CSRFTokenFromContext(r.Context())
 }
 
 // Home は投入フォームを表示します。
-func (h *Handler) Home(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	h.render(w, http.StatusOK, formView{
-		Modes:  h.modes,
-		Models: h.models,
-		Form:   domain.Request{Command: domain.CommandGenerate},
+		CSRFToken: csrfToken(r),
+		Modes:     h.modes,
+		Models:    h.models,
+		Form:      domain.Request{Command: domain.CommandGenerate},
 	})
 }
 
@@ -121,7 +130,7 @@ func (h *Handler) Home(w http.ResponseWriter, _ *http.Request) {
 // 結果は Slack 通知と出力先で受け取ります。
 func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, http.StatusBadRequest, domain.Request{}, "フォームの解析に失敗しました")
+		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, "フォームの解析に失敗しました")
 		return
 	}
 
@@ -132,7 +141,7 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	// それを渡す口が無いためです。台本からの再合成は履歴の詳細画面が担います。
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
-		h.renderError(w, http.StatusInternalServerError, domain.Request{}, "ジョブIDの発行に失敗しました")
+		h.renderError(w, r, http.StatusInternalServerError, domain.Request{}, "ジョブIDの発行に失敗しました")
 		return
 	}
 
@@ -148,25 +157,32 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	// worker 側でも Execute の冒頭で検証しますが、投入前に弾けば
 	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます。
 	if err := req.Validate(); err != nil {
-		h.renderError(w, http.StatusBadRequest, req, err.Error())
+		h.renderError(w, r, http.StatusBadRequest, req, err.Error())
 		return
 	}
 
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderError(w, http.StatusBadGateway, req, err.Error())
+		h.renderError(w, r, http.StatusBadGateway, req, err.Error())
 		return
 	}
 
 	h.render(w, http.StatusAccepted, formView{
-		Modes:   h.modes,
-		Models:  h.models,
-		Message: fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
-		Form:    domain.Request{Command: domain.CommandGenerate},
+		CSRFToken: csrfToken(r),
+		Modes:     h.modes,
+		Models:    h.models,
+		Message:   fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
+		Form:      domain.Request{Command: domain.CommandGenerate},
 	})
 }
 
-func (h *Handler) renderError(w http.ResponseWriter, status int, form domain.Request, msg string) {
-	h.render(w, status, formView{Modes: h.modes, Models: h.models, Error: msg, Form: form})
+func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, form domain.Request, msg string) {
+	h.render(w, status, formView{
+		CSRFToken: csrfToken(r),
+		Modes:     h.modes,
+		Models:    h.models,
+		Error:     msg,
+		Form:      form,
+	})
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, view formView) {
