@@ -108,6 +108,14 @@ type PipelineConfig struct {
 	Timeout time.Duration `env:"PIPELINE_TIMEOUT"`
 }
 
+// StorageConfig はストレージの設定です。
+type StorageConfig struct {
+	// GCSBucket は成果物の出力先です。**出力先は利用者に入力させません。**
+	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
+	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
+	GCSBucket string `env:"GCS_VOICE_BUCKET"`
+}
+
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。
 type AuthConfig struct {
 	GoogleClientID     string   `env:"GOOGLE_CLIENT_ID"`
@@ -138,6 +146,7 @@ type Config struct {
 	Server       ServerConfig
 	Tasks        TasksConfig
 	Pipeline     PipelineConfig
+	Storage      StorageConfig
 	Auth         AuthConfig
 	GCP          GCPConfig
 	AI           AIConfig
@@ -200,6 +209,7 @@ func (c *Config) normalize() error {
 	c.AI.GeminiModels = normalizeList(c.AI.GeminiModels)
 	c.AI.GeminiModel = firstModel(c.AI.GeminiModels)
 
+	c.Storage.GCSBucket = strings.TrimSpace(c.Storage.GCSBucket)
 	c.Voicevox.APIURL = strings.TrimSpace(c.Voicevox.APIURL)
 	c.Notification.SlackWebhookURL = strings.TrimSpace(c.Notification.SlackWebhookURL)
 
@@ -267,6 +277,10 @@ func (c *Config) validateWebConfig() error {
 	// ALLOWED_TASK_SERVICE_ACCOUNTS で別に指定します。
 	if c.Tasks.CallerServiceAccountEmail == "" {
 		return fmt.Errorf("TASK_CALLER_SERVICE_ACCOUNT_EMAIL が設定されていません")
+	}
+	// 出力先はフォームで受け取らずジョブ ID から導くため、バケット名は Web 面の要件です。
+	if c.Storage.GCSBucket == "" {
+		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")
 	}
 
 	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {

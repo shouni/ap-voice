@@ -2,6 +2,7 @@
 package server
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shouni/gcp-kit/cloudlog"
 
+	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
 )
 
@@ -42,6 +44,8 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	setupStaticRoutes(r)
 
 	if h == nil {
 		slog.Warn("AppHandlers is nil, skipping application routes registration")
@@ -83,4 +87,22 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Use(h.TaskAuth.Middleware)
 		r.Method(http.MethodPost, "/tasks/generate", h.Worker)
 	})
+}
+
+// setupStaticRoutes は、埋め込み済みの静的ファイル（CSS）を /static/* で配信します。
+//
+// 認証の外側に置きます。スタイルシートにログインを求める理由が無く、
+// 未認証で表示されるログイン画面からも参照されるためです。
+func setupStaticRoutes(r chi.Router) {
+	staticFS, err := fs.Sub(assets.StaticFiles, "static")
+	if err != nil {
+		slog.Error("static assets are unavailable", "error", err)
+		return
+	}
+
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
+		fileServer.ServeHTTP(w, r)
+	}))
 }

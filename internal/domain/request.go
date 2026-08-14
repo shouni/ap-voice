@@ -36,6 +36,10 @@ type Request struct {
 	// 課金と出力の両方が変わる取り違えを、既定値で吸収する価値はありません。
 	Command Command `json:"command"`
 
+	// JobID は 1 回の実行を識別します。成果物の置き場もこの ID から決まります。
+	// 発行するのは投入側（Web 面）で、Worker 面はログと通知で使うだけです。
+	JobID string `json:"job_id,omitempty"`
+
 	// InputURI は generate の入力ソース（Web URL / gs://）です。
 	InputURI string `json:"input_uri,omitempty"`
 	// OutputURI は WAV の出力先です。台本は同名の .json として隣に置かれます。

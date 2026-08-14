@@ -4,68 +4,65 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AP Voice</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body {
-      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-      max-width: 44rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.7;
-    }
-    h1 { font-size: 1.4rem; margin-bottom: .25rem; }
-    p.lead { margin-top: 0; opacity: .75; font-size: .9rem; }
-    label { display: block; margin-top: 1.1rem; font-weight: 600; font-size: .9rem; }
-    input, select { width: 100%; padding: .5rem; margin-top: .25rem; font: inherit; box-sizing: border-box; }
-    small { display: block; margin-top: .2rem; opacity: .7; }
-    button { margin-top: 1.5rem; padding: .6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
-    .notice { padding: .75rem 1rem; margin-bottom: 1rem; border-left: 4px solid; }
-    .ok { border-color: #2e7d32; background: rgba(46,125,50,.08); }
-    .ng { border-color: #c62828; background: rgba(198,40,40,.08); }
-  </style>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+  <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
-  <h1>AP Voice</h1>
-  <p class="lead">ドキュメントをナレーション音声に変換します。実行は非同期で、完了すると通知が届きます。</p>
+<nav class="navbar navbar-expand-lg mb-4">
+  <div class="container">
+    <span class="navbar-brand fw-bold">✍️ AP Voice</span>
+    <a class="nav-link ms-auto" href="/auth/logout">ログアウト</a>
+  </div>
+</nav>
 
-  {{ with .Message }}<div class="notice ok">{{ . }}</div>{{ end }}
-  {{ with .Error }}<div class="notice ng">{{ . }}</div>{{ end }}
+<main class="container main-content" style="max-width: 46rem;">
+  <p class="text-secondary">
+    ドキュメントから<strong>ナレーション台本</strong>を作ります。台本ができたら履歴に並ぶので、
+    内容を確認してから音声を作ります。実行は非同期で、完了すると通知が届きます。
+  </p>
 
-  <form method="post" action="/">
-    <label>
-      処理
-      <select name="command">
-        <option value="generate" {{ if eq .Form.Command "generate" }}selected{{ end }}>generate — 入力から台本を作って音声化</option>
-        <option value="synthesize" {{ if eq .Form.Command "synthesize" }}selected{{ end }}>synthesize — 保存済みの台本から音声だけ作る</option>
-      </select>
-      <small>synthesize は台本を渡す必要があるため、いまは API 経由のみです。</small>
-    </label>
+  {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
+  {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
-    <label>
-      入力ソース
-      <input type="text" name="input_uri" value="{{ .Form.InputURI }}"
-             placeholder="https://example.com/article  または  gs://bucket/doc.md">
-      <small>generate で必須です。Web URL と GCS を透過的に読みます。</small>
-    </label>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" action="/">
+        {{/* synthesize はここから選ばせません。台本を渡す口がフォームに無く、
+             選んでも必ず検証で弾かれるためです。台本の貼り戻しは履歴の詳細画面から
+             行います。 */}}
+        <input type="hidden" name="command" value="generate">
 
-    <label>
-      出力先
-      <input type="text" name="output_uri" value="{{ .Form.OutputURI }}"
-             placeholder="gs://bucket/audio/out.wav">
-      <small>WAV を保存し、同名の <code>.json</code> に台本も保存します。</small>
-    </label>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="input_uri">入力ソース</label>
+          <input class="form-control" type="text" id="input_uri" name="input_uri" value="{{ .Form.InputURI }}"
+                 placeholder="https://example.com/article  または  gs://bucket/doc.md">
+          <div class="form-text">Web URL と GCS を透過的に読みます。</div>
+        </div>
 
-    <label>
-      生成モード
-      <select name="mode">
-        {{ range .Modes }}<option value="{{ . }}" {{ if eq $.Form.Mode . }}selected{{ end }}>{{ . }}</option>{{ end }}
-      </select>
-      <small>プロンプトの埋め込みから読んでいるので、生成側と食い違いません。</small>
-    </label>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="mode">生成モード</label>
+          <select class="form-select" id="mode" name="mode">
+            {{ range .Modes }}<option value="{{ . }}" {{ if eq $.Form.Mode . }}selected{{ end }}>{{ . }}</option>{{ end }}
+          </select>
+          <div class="form-text">プロンプトの埋め込みから読んでいるので、生成側と食い違いません。</div>
+        </div>
 
-    <label>
-      モデル（任意）
-      <input type="text" name="ai_model" value="{{ .Form.AIModel }}" placeholder="空なら GEMINI_MODELS の先頭">
-    </label>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="ai_model">モデル</label>
+          <select class="form-select" id="ai_model" name="ai_model">
+            {{ range $i, $m := .Models }}<option value="{{ $m }}" {{ if eq $.Form.AIModel $m }}selected{{ end }}>{{ $m }}{{ if eq $i 0 }}（既定）{{ end }}</option>{{ end }}
+          </select>
+        </div>
 
-    <button type="submit">実行する</button>
-  </form>
+        <div class="form-text mb-3">
+          出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。
+        </div>
+
+        <button class="btn btn-primary" type="submit">台本を作成</button>
+      </form>
+    </div>
+  </div>
+</main>
 </body>
 </html>
