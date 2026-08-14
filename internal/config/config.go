@@ -274,7 +274,8 @@ func (c *Config) normalize() error {
 	c.AI.GeminiModels = normalizeList(c.AI.GeminiModels)
 	c.AI.GeminiModel = firstModel(c.AI.GeminiModels)
 
-	c.Storage.GCSBucket = strings.TrimSpace(c.Storage.GCSBucket)
+	c.Storage.GCSBucket = normalizeGCSBucket(c.Storage.GCSBucket)
+	c.Storage.MusicBucket = normalizeGCSBucket(c.Storage.MusicBucket)
 	c.Voicevox.APIURL = strings.TrimSpace(c.Voicevox.APIURL)
 	if c.Voicevox.MaxParallelSegments <= 0 {
 		c.Voicevox.MaxParallelSegments = DefaultMaxParallelSegments
@@ -383,6 +384,19 @@ func firstModel(models []string) string {
 		return ""
 	}
 	return models[0]
+}
+
+// normalizeGCSBucket は、バケット名の表記ゆれを整えます。
+//
+// **バケット「名」であって URI ではありません。** `gs://ap-music/` のように
+// コンソールから貼った形で渡されることがあり、そのまま使うと
+// `gs://gs://ap-music//music/...` という URI を組み立ててしまいます。
+// ap-mv の同名の関数と同じ規則です — 同じバケットを読む側が 2 つある以上、
+// 受け取り方まで揃えておかないと、片方だけ動く設定が生まれます。
+func normalizeGCSBucket(bucket string) string {
+	bucket = strings.TrimSpace(bucket)
+	bucket = strings.TrimPrefix(bucket, "gs://")
+	return strings.Trim(bucket, "/")
 }
 
 // normalizeList は env が分割しただけのカンマ区切り値を整えます。

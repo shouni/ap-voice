@@ -386,3 +386,31 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 		}
 	})
 }
+
+// TestNormalizeGCSBucketStripsURIForm は、URI の形で渡されたバケット名が
+// 名前だけに整えられることを検証します。
+//
+// **バケット「名」であって URI ではありません。** コンソールから貼ると
+// `gs://ap-music/` の形になり、そのまま使うと組み立てた URI が
+// `gs://gs://ap-music//music/...` になります。ap-mv が同じ整え方をします。
+func TestNormalizeGCSBucketStripsURIForm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "ap-music", want: "ap-music"},
+		{in: "  ap-music  ", want: "ap-music"},
+		{in: "gs://ap-music", want: "ap-music"},
+		{in: "gs://ap-music/", want: "ap-music"},
+		{in: " gs://ap-music/ ", want: "ap-music"},
+		{in: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		if got := normalizeGCSBucket(tt.in); got != tt.want {
+			t.Errorf("normalizeGCSBucket(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
