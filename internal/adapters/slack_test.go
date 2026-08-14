@@ -109,13 +109,14 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 	// クエリだけで 1000 文字を超え、本文が URL で埋まるためです。
 	// 出力は**ファイル名まで出しません**。generate の時点では音声がまだ無く、
 	// audio.wav を示すと存在しないものを案内することになります。
-	want := "**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
-		"**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
+	// 並びは「どのジョブか → 何ができたか → どう作ったか」です。
+	want := "**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
 		"**処理:** `generate`\n" +
 		"**ジョブID:** `job-1`\n" +
+		"**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
 		// gs:// は Slack では文字列なので、表示はそのままリンク先だけコンソールへ向けます。
-		"**入力URI:** [gs://in/article.txt](https://console.cloud.google.com/storage/browser/_details/in/article.txt)\n" +
 		"**出力先:** [gs://out/](https://console.cloud.google.com/storage/browser/out/)\n" +
+		"**入力URI:** [gs://in/article.txt](https://console.cloud.google.com/storage/browser/_details/in/article.txt)\n" +
 		"**モード:** `dialogue`\n" +
 		"**モデル:** `gemini-3-pro`"
 	if msg.Body != want {
@@ -337,5 +338,36 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 				t.Errorf("Level = %v, want %v", msg.Level, notify.LevelFailure)
 			}
 		})
+	}
+}
+
+// TestNotifyGroupsFieldsByPurpose は、項目が「どのジョブか → 何ができたか →
+// どう作ったか」の順に並ぶことを検証します。
+//
+// **synthesize では最後の組がまるごと消えます。** 入力URI・モード・モデルを
+// 持たないためで、識別と成果物だけが残ります。生成条件が途中に挟まっていると、
+// 項目が欠けているのか、そもそも持たないのかを読み分けられません。
+func TestNotifyGroupsFieldsByPurpose(t *testing.T) {
+	t.Parallel()
+
+	adapter, rec := newTestAdapter()
+	req := testRequest()
+	// synthesize は保存済みの台本から作るため、生成条件を持ちません。
+	req.Command = domain.CommandSynthesize
+	req.InputURI = ""
+	req.Mode = ""
+	req.AIModel = ""
+
+	if err := adapter.Notify(context.Background(), req, "https://example.com/voice.wav"); err != nil {
+		t.Fatalf("Notify failed: %v", err)
+	}
+
+	want := "**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
+		"**処理:** `synthesize`\n" +
+		"**ジョブID:** `job-1`\n" +
+		"**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
+		"**出力先:** [gs://out/](https://console.cloud.google.com/storage/browser/out/)"
+	if got := rec.last(t).Body; got != want {
+		t.Errorf("Body =\n%q\nwant\n%q", got, want)
 	}
 }
