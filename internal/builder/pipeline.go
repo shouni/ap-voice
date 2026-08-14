@@ -12,25 +12,25 @@ import (
 	"github.com/shouni/ap-voice/internal/pipeline"
 )
 
-// buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。
+// buildPipeline は、各段を組み立てて Pipeline を返します。
 func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeline, error) {
-	generateRunner, err := buildGenerateRunner(ctx, appCtx)
+	scriptStep, err := buildScriptStep(ctx, appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("生成ランナーの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("台本生成の段の初期化に失敗しました: %w", err)
 	}
-	publisherRunner, err := buildPublishRunner(ctx, appCtx)
+	publishStep, err := buildPublishStep(ctx, appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("パブリッシャーランナーの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("保存の段の初期化に失敗しました: %w", err)
 	}
 
-	p := pipeline.NewPipeline(generateRunner, publisherRunner, appCtx.Notifier, appCtx.Repository, appCtx.Config.Pipeline.Timeout)
+	p := pipeline.NewPipeline(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.Config.Pipeline.Timeout)
 
 	return p, nil
 }
 
-// buildGenerateRunner は、GenerateRunner のインスタンスを返します。
-func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
-	promptBuilder, err := adapters.NewPromptAdapter(appCtx.Speakers)
+// buildScriptStep は、台本を生成する段を返します。
+func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
+	promptBuilder, err := adapters.NewPromptAdapter()
 	if err != nil {
 		return nil, fmt.Errorf("プロンプトビルダーの作成に失敗しました: %w", err)
 	}
@@ -58,8 +58,8 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*pipeline.
 	), nil
 }
 
-// buildPublishRunner は、PublisherRunner のインスタンスを返します。
-func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
+// buildPublishStep は、成果物を保存する段を返します。
+func buildPublishStep(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
 	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox, appCtx.Speakers, appCtx.RemoteIO.Writer)
 	if err != nil {
 		return nil, err

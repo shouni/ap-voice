@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/shouni/gcp-kit/auth"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/shouni/go-utils/jobid"
 
+	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
 )
@@ -28,8 +28,8 @@ type Handler struct {
 	templates *template.Template
 	// modes は投入フォームに出す生成モードです。**生成時と同じ埋め込みテンプレートから
 	// 取ります。** フォーム側が別の一覧を持つと、画面に出したモードが worker に無い、
-	// という食い違いが起こり得ます。
-	modes []string
+	// という食い違いが起こり得ます。表示名と説明はプロンプトの front matter です。
+	modes []assets.Mode
 	// models は GEMINI_MODELS です。先頭が既定で、フォームでは選択肢になります。
 	models []string
 	// bucket と layout で出力先を決めます。**利用者には入力させません。**
@@ -56,7 +56,7 @@ const signedURLExpiry = time.Hour
 type HandlerOptions struct {
 	Queue     domain.TaskQueue
 	Templates *template.Template
-	Modes     []string
+	Modes     []assets.Mode
 	Models    []string
 	Bucket    string
 	Repo      ScriptRepository
@@ -84,13 +84,10 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		return nil, errors.New("リポジトリが指定されていません")
 	}
 
-	modes := append([]string(nil), opts.Modes...)
-	sort.Strings(modes)
-
 	return &Handler{
 		queue:     opts.Queue,
 		templates: opts.Templates,
-		modes:     modes,
+		modes:     append([]assets.Mode(nil), opts.Modes...),
 		models:    append([]string(nil), opts.Models...),
 		bucket:    opts.Bucket,
 		layout:    domain.NewStorageLayout(),
@@ -112,7 +109,7 @@ type baseView struct {
 // formView はフォーム画面に渡す値です。
 type formView struct {
 	baseView
-	Modes   []string
+	Modes   []assets.Mode
 	Models  []string
 	Message string
 	Error   string
@@ -196,7 +193,10 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 		Modes:    h.modes,
 		Models:   h.models,
 		Message:  fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
-		Form:     domain.Request{Command: domain.CommandGenerate},
+		// **投入した内容をそのまま残します。** 同じソースからモードを変えて
+		// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
+		// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
+		Form: req,
 	})
 }
 

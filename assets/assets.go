@@ -1,11 +1,7 @@
 // Package assets は、プロンプト・話者一覧・HTML テンプレートを埋め込みリソースとして提供します。
 package assets
 
-import (
-	"embed"
-
-	"github.com/shouni/go-prompt-kit/resource"
-)
+import "embed"
 
 // promptDir はテンプレートの置き場です。ファイル名がそのままモード名になります
 // （prompts/duet.md → mode="duet"）。ディレクトリで区切っている以上、ファイル名側の
@@ -40,14 +36,8 @@ var SpeakersJSON []byte
 //go:embed templates/*.html
 var Templates embed.FS
 
-// StaticFiles は Web 面の静的ファイルです。いまは CSS だけで、自前の JS はありません
-// （Bootstrap は CDN から読み、音声は <audio controls> で足りるため）。
-// ディレクトリごと埋め込むので、static/js を置けば配信は自動で効きます。
+// StaticFiles は Web 面の静的ファイルです。ディレクトリごと埋め込むので、
+// ファイルを足せば配信は自動で効きます。
 //
 //go:embed static
 var StaticFiles embed.FS
-
-// LoadPrompts は埋め込まれたプロンプトファイルを読み込みます。
-func LoadPrompts() (map[string]string, error) {
-	return resource.Load(PromptFiles, promptDir, "")
-}
