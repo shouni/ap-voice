@@ -82,7 +82,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Route("/history", func(r chi.Router) {
 			r.Get("/", h.Web.History)
 			r.Get("/{jobID}", h.Web.Detail)
-			r.Post("/{jobID}/synthesize", h.Web.Synthesize)
+			r.Post("/{jobID}/script", h.Web.UpdateScript)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
 		})

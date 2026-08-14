@@ -13,6 +13,7 @@ import (
 	"github.com/shouni/go-remote-io/remoteio"
 
 	"github.com/shouni/go-utils/jobid"
+	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -39,12 +40,17 @@ type Handler struct {
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer remoteio.URLSigner
+	// speakers は編集画面の選択肢です。**話者ごとに実在するスタイルだけ**を出すために持ちます。
+	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
+	// 落ちて指示が無視されます。
+	speakers *speaker.Registry
 }
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
 	List(ctx context.Context, limit int) ([]repository.Job, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
+	Save(ctx context.Context, jobID string, script domain.Script) error
 	HasAudio(ctx context.Context, jobID string) (bool, error)
 	Delete(ctx context.Context, jobID string) error
 }
@@ -62,6 +68,7 @@ type HandlerOptions struct {
 	Bucket    string
 	Repo      ScriptRepository
 	Signer    remoteio.URLSigner
+	Speakers  *speaker.Registry
 }
 
 // NewHandler は Handler を生成します。
@@ -84,6 +91,9 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	if opts.Repo == nil {
 		return nil, errors.New("リポジトリが指定されていません")
 	}
+	if opts.Speakers == nil {
+		return nil, errors.New("話者一覧が指定されていません")
+	}
 
 	return &Handler{
 		queue:     opts.Queue,
@@ -94,6 +104,7 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		layout:    domain.NewStorageLayout(),
 		repo:      opts.Repo,
 		signer:    opts.Signer,
+		speakers:  opts.Speakers,
 	}, nil
 }
 

@@ -87,7 +87,7 @@ go run .        # SERVER_ROLE が必須
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
-`POST /history/{jobID}/synthesize`（音声を作る）、`POST /history/{jobID}/delete`（削除）、
+`POST /history/{jobID}/script`（台本を保存して音声を作る）、`POST /history/{jobID}/delete`（削除）、
 `GET /history/{jobID}/audio`（署名付き URL へ 302）です。
 
 `POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
@@ -171,17 +171,18 @@ sequenceDiagram
     Note right of Worker: **音声はまだ作りません**
     Worker->>Slack: 完了通知（詳細画面のリンク付き）
 
-    Note over User, Slack: 2. 台本を確認する
+    Note over User, Slack: 2. 台本を確認・修正する
     User->>Web: GET /history
     Web->>Store: ジョブを一覧
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
-    Web-->>User: 台本を表示
+    Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
 
     Note over User, Slack: 3. 音声を作る (command=synthesize)
-    User->>Web: POST /history/{jobID}/synthesize
+    User->>Web: POST /history/{jobID}/script （必要なら直してから）
+    Web->>Store: 直した audio.json を保存
     Web->>Tasks: enqueue(Request{JobID})
-    Note right of Web: 台本は載せません（1MB 上限）
+    Note right of Web: 台本は載せません（1MB 上限）。先に保存して ID だけ渡します
     Tasks->>Worker: POST /tasks/generate (OIDC)
     Worker->>Store: audio.json を読む
     loop セグメントごと（並列・レート制限あり）

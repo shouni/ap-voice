@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/shouni/go-remote-io/remoteio"
+
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // fakeStore は GCS の代わりに、パス→中身のマップを持ちます。
@@ -18,6 +20,7 @@ type fakeStore struct {
 	objects map[string]string
 	opened  int32
 	exists  int32
+	written int32
 }
 
 func (f *fakeStore) Open(_ context.Context, path string) (io.ReadCloser, error) {
@@ -45,6 +48,16 @@ func (f *fakeStore) Exists(_ context.Context, path string) (bool, error) {
 	atomic.AddInt32(&f.exists, 1)
 	_, ok := f.objects[path]
 	return ok, nil
+}
+
+func (f *fakeStore) Write(_ context.Context, path string, r io.Reader, _ ...remoteio.WriteOption) error {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	atomic.AddInt32(&f.written, 1)
+	f.objects[path] = string(body)
+	return nil
 }
 
 func (f *fakeStore) Delete(_ context.Context, path string) error {
@@ -214,5 +227,49 @@ func TestDeleteRemovesTheWholeJobPrefix(t *testing.T) {
 	}
 	if len(store.objects) != 2 {
 		t.Errorf("他のジョブまで消えています: %v", store.objects)
+	}
+}
+
+// TestSaveWritesBackToTheStoredScript は、編集した台本が**読み出し先と同じ場所**へ
+// 保存されることを検証します。
+//
+// 保存先と読み出し先がずれると、編集したのに古い台本で合成される、という
+// 気付きにくい壊れ方をします。
+func TestSaveWritesBackToTheStoredScript(t *testing.T) {
+	t.Parallel()
+
+	store, ids := newStore(t, 1)
+	repo := newRepo(t, store)
+	id := ids[0]
+
+	edited := domain.Script{
+		Title: "直した題名",
+		Lines: []domain.ScriptLine{{Speaker: "四国めたん", Style: "ノーマル", Text: "直した本文"}},
+	}
+	if err := repo.Save(context.Background(), id, edited); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := repo.Load(context.Background(), id)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Title != edited.Title || len(got.Lines) != 1 || got.Lines[0] != edited.Lines[0] {
+		t.Errorf("読み戻した台本が違います: %+v", got)
+	}
+}
+
+// TestSaveRejectsBadJobID は、不正なジョブ ID をパスへ埋める前に弾くことを検証します。
+func TestSaveRejectsBadJobID(t *testing.T) {
+	t.Parallel()
+
+	store, _ := newStore(t, 1)
+	repo := newRepo(t, store)
+
+	if err := repo.Save(context.Background(), "../../evil", domain.Script{Title: "x"}); err == nil {
+		t.Fatal("不正なジョブIDが素通りしました")
+	}
+	if store.written != 0 {
+		t.Error("検証前に書き込んでいます")
 	}
 }

@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,10 +25,10 @@ import (
 // 書き込みは PublishStep が担い、ここは読むだけです。**成果物がジョブ ID ごとの
 // プレフィックスにまとまっている**ため、一覧も削除も中身を知らずに行えます。
 type Repository struct {
-	reader  remoteio.InputReader
-	remover remoteio.Remover
-	bucket  string
-	layout  domain.StorageLayout
+	reader remoteio.InputReader
+	writer remoteio.OutputWriter
+	bucket string
+	layout domain.StorageLayout
 }
 
 // titleFetchParallelism は題名を読むときの同時実行数です。
@@ -35,17 +36,41 @@ type Repository struct {
 const titleFetchParallelism = 8
 
 // NewRepository は Repository を構築します。
-func NewRepository(reader remoteio.InputReader, remover remoteio.Remover, bucket string) (*Repository, error) {
+func NewRepository(reader remoteio.InputReader, writer remoteio.OutputWriter, bucket string) (*Repository, error) {
 	if reader == nil {
 		return nil, fmt.Errorf("読み出しクライアントが指定されていません")
 	}
-	if remover == nil {
-		return nil, fmt.Errorf("削除クライアントが指定されていません")
+	if writer == nil {
+		return nil, fmt.Errorf("書き込みクライアントが指定されていません")
 	}
 	if bucket == "" {
 		return nil, fmt.Errorf("バケットが指定されていません")
 	}
-	return &Repository{reader: reader, remover: remover, bucket: bucket, layout: domain.NewStorageLayout()}, nil
+	return &Repository{reader: reader, writer: writer, bucket: bucket, layout: domain.NewStorageLayout()}, nil
+}
+
+// Save は、編集された台本を保存済みのものへ書き戻します。
+//
+// **編集内容をタスクのペイロードに載せません。** Cloud Tasks は 1MB が上限で、
+// 長い台本はそこに当たりえます。先に保存してから JobID だけを渡せば、
+// Worker は既存の「保存済み台本を読む」経路をそのまま使えます。
+func (r *Repository) Save(ctx context.Context, jobID string, script domain.Script) error {
+	if err := jobid.Validate(jobID); err != nil {
+		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+	}
+
+	body, err := json.MarshalIndent(script, "", "  ")
+	if err != nil {
+		return fmt.Errorf("台本のJSONエンコードに失敗しました: %w", err)
+	}
+
+	uri := r.uri(r.layout.ScriptPath(jobID))
+	if err := r.writer.Write(ctx, uri, bytes.NewReader(body),
+		remoteio.WithContentType("application/json; charset=utf-8")); err != nil {
+		return fmt.Errorf("台本の保存に失敗しました (%s): %w", uri, err)
+	}
+	slog.InfoContext(ctx, "編集された台本を保存しました", "job_id", jobID, "lines", len(script.Lines))
+	return nil
 }
 
 // Load は、保存済みの台本を読み出します。domain.ScriptStore を満たします。
@@ -200,7 +225,7 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 	}
 
 	for _, path := range paths {
-		if err := r.remover.Delete(ctx, path); err != nil {
+		if err := r.writer.Delete(ctx, path); err != nil {
 			return fmt.Errorf("削除に失敗しました (%s): %w", path, err)
 		}
 	}

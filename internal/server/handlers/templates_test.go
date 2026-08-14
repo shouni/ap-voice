@@ -114,16 +114,25 @@ func TestTemplatesRender(t *testing.T) {
 			name:     "詳細（音声あり）",
 			template: "detail.html",
 			view: detailView{
-				baseView: testBaseView("/history/voice-1"),
-				JobID:    "voice-1",
-				Script:   script,
-				HasAudio: true,
+				baseView:   testBaseView("/history/voice-1"),
+				JobID:      "voice-1",
+				Script:     script,
+				HasAudio:   true,
+				Speakers:   []string{"ずんだもん", "四国めたん"},
+				StylesJSON: template.JS(`{"ずんだもん":["ノーマル"]}`),
 			},
 			want: []string{
-				"音声を作り直す",
+				"保存して音声を作り直す",
 				"このジョブを削除",
 				"履歴一覧へ戻る",
 				`src="/history/voice-1/audio"`,
+				// 台本は読むだけでなく直せます。
+				`action="/history/voice-1/script"`,
+				`name="title"`,
+				`<textarea class="form-control form-control-sm js-text" name="text"`,
+				`<option value="四国めたん"`,
+				// 保存済みのスタイルは選ばれた状態で戻ること。
+				`data-selected="ノーマル"`,
 				"こんにちはなのだ",
 			},
 		},
@@ -135,8 +144,9 @@ func TestTemplatesRender(t *testing.T) {
 				JobID:    "voice-2",
 				Script:   script,
 				HasAudio: false,
+				Speakers: []string{"ずんだもん"},
 			},
-			want: []string{"音声を作成"},
+			want: []string{"保存して音声を作成"},
 		},
 	}
 
@@ -219,6 +229,7 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 			JobID:    "voice-1",
 			Script:   domain.Script{Title: "T"},
 			HasAudio: true,
+			Speakers: []string{"ずんだもん"},
 		},
 	}
 

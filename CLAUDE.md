@@ -152,7 +152,17 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **`internal/repository` serves the history screens** — `List`, `Load`, `HasAudio`, and
+- **The detail screen edits the script, it does not just show it.** That is what makes the
+  two-command split pay: the reason given for it is fixing a reading without regenerating, and
+  until the form existed there was no way to fix anything, so review could only choose between
+  synthesizing and deleting. Saving and synthesizing are one button — with the script editable,
+  a re-synthesis that skips the save would only ever reproduce the same audio.
+  **The edited script is not put in the task.** `UpdateScript` writes it to GCS and enqueues the
+  job ID alone, so a long script cannot reach Cloud Tasks' 1MB limit and the worker keeps using
+  the stored-script path it already had. Speaker and style come from the registry and are
+  re-checked on submit: the browser offers only valid pairs, but the form accepts anything, and
+  an impossible pair is not rejected downstream — `getStyleID` silently falls back.
+- **`internal/repository` serves the history screens** — `List`, `Load`, `Save`, `HasAudio`, and
   `Delete`, which removes the whole job prefix rather than a fixed list of names. `List` sorts
   and truncates **before** filling in titles, so a page of 50 costs 50 object reads no matter how
   many jobs exist; doing it the other way round made every page view scale with the bucket.
