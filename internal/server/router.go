@@ -77,6 +77,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
+		r.Get("/modes", h.Web.Modes)
 
 		// 台本ができたら履歴に並び、詳細から音声を作ります。
 		r.Route("/history", func(r chi.Router) {

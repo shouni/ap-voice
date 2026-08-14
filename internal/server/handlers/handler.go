@@ -40,10 +40,19 @@ type Handler struct {
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer remoteio.URLSigner
+	// renderer はカタログでプロンプト本文を見せるために使います。
+	// **生成時と同じ組み立て**を通すので、画面に出るものと Gemini へ渡るものが一致します。
+	renderer PromptRenderer
 	// speakers は編集画面の選択肢です。**話者ごとに実在するスタイルだけ**を出すために持ちます。
 	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
 	// 落ちて指示が無視されます。
 	speakers *speaker.Registry
+}
+
+// PromptRenderer は、モードのプロンプト本文を組み立てます。
+// 生成側（ScriptStep）が使うのと同じ実装を渡します。
+type PromptRenderer interface {
+	Generate(mode, content string) (string, error)
 }
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
@@ -69,6 +78,7 @@ type HandlerOptions struct {
 	Repo      ScriptRepository
 	Signer    remoteio.URLSigner
 	Speakers  *speaker.Registry
+	Renderer  PromptRenderer
 }
 
 // NewHandler は Handler を生成します。
@@ -94,6 +104,9 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	if opts.Speakers == nil {
 		return nil, errors.New("話者一覧が指定されていません")
 	}
+	if opts.Renderer == nil {
+		return nil, errors.New("プロンプトの組み立てが指定されていません")
+	}
 
 	return &Handler{
 		queue:     opts.Queue,
@@ -105,6 +118,7 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		repo:      opts.Repo,
 		signer:    opts.Signer,
 		speakers:  opts.Speakers,
+		renderer:  opts.Renderer,
 	}, nil
 }
 

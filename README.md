@@ -1,8 +1,10 @@
 # ✍️ AP Voice
 
-[![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/shouni/ap-voice/actions/workflows/ci.yml/badge.svg)](https://github.com/shouni/ap-voice/actions/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](#)
+[![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
+[![Platform](https://img.shields.io/badge/Platform-Cloud%20Run-blue?logo=google-cloud)](https://cloud.google.com/run)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 💡 概要 (About)
 
@@ -81,9 +83,11 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | 投入フォーム・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `/history/*`, `/auth/*` |
+| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `GET /modes`, `/history/*`, `/auth/*` |
 | `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
+
+`GET /modes` は選べるモードの一覧です。表示名・説明・**実際に渡るプロンプト本文**を並べます。
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
@@ -109,7 +113,7 @@ go run .        # SERVER_ROLE が必須
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
 | `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |
-| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<ジャンル>_<形式>.md` を置けばモードが増えます。** 表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。<br>技術: `tech_solo`（ひとり語り）/ `tech_dialogue`（対話）/ `tech_duet`（交互）/ `tech_howto`（手順）<br>その他: `news_anchor`（ニュース）/ `story_reading`（朗読）/ `music_promo`（楽曲紹介） |
+| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<ジャンル>_<形式>.md` を置けばモードが増えます。** 表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。<br>一覧は `GET /modes` で見られます。 |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
 | `script` | 台本の行（`ScriptLine` の配列）。`synthesize` で `job_id` を省くときに必須。保存された `audio.json` の `lines` がそのまま入ります。 |
 

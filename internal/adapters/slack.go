@@ -81,10 +81,7 @@ func (s *SlackAdapter) Notify(ctx context.Context, req domain.Request, publicURL
 		return nil
 	}
 
-	// リンクの表示名には署名付き URL をそのまま使いません。クエリだけで 1000 文字を
-	// 超えるため、本文が URL で埋まって他の項目が読めなくなります。
-	body := notify.NewBody().Link("音声", publicURL, req.OutputURI)
-	s.writeCommonMetadata(body, req)
+	body := s.metadata(req, publicURL)
 
 	if err := s.pipeline.Success(ctx, body); err != nil {
 		return fmt.Errorf("Slackへの結果URL投稿に失敗しました: %w", err)
@@ -103,7 +100,7 @@ func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, er
 		return nil
 	}
 
-	pipeline, body := s.pipeline, s.commonMetadata(req)
+	pipeline, body := s.pipeline, s.metadata(req, "")
 	if isTimeout(err) {
 		pipeline = pipeline.WithTitles(timeoutTitles)
 		body = body.Text(timeoutGuidance)
@@ -125,32 +122,37 @@ func isTimeout(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
-// commonMetadata は、各通知で共通して表示するメタデータだけを持つ本文を返します。
-func (s *SlackAdapter) commonMetadata(req domain.Request) *notify.Body {
-	return s.writeCommonMetadata(notify.NewBody(), req)
-}
+// metadata は、通知本文を組み立てます。publicURL が空なら音声の行は出ません。
+//
+// **並びは「何のジョブか → 何ができたか → どう作ったか」**です。値が空の項目は
+// notify.Body が行ごと省くため、synthesize では最後の組がまるごと消え、
+// 識別と成果物だけが残ります。項目が混ざっていると、欠けているのか
+// そもそも持たないのかを読み分けられません。
+func (s *SlackAdapter) metadata(req domain.Request, publicURL string) *notify.Body {
+	body := notify.NewBody()
 
-// writeCommonMetadata は、各通知で共通して表示するメタデータを本文へ追記します。
-// 値が空の項目は notify.Body が行ごと省きます。
-func (s *SlackAdapter) writeCommonMetadata(body *notify.Body, req domain.Request) *notify.Body {
+	// ── どのジョブか ──
 	// 詳細画面は台本の確認と再合成の入口です。通知から1手で辿れないと、
 	// ジョブ ID を控えて自分で URL を組み立てることになります。
 	if url := s.detailURL(req.JobID); url != "" {
 		body = body.Link("詳細", url, req.JobID)
 	}
-
-	// synthesize は入力URI・モード・モデルを持たないため、通知に処理名が無いと
-	// 「項目が欠けている」のか「台本から合成しただけ」なのか読み分けられません。
 	body = body.
 		Code("処理", string(req.Command)).
 		Code("ジョブID", req.JobID)
 
-	writeURIField(body, "入力URI", req.InputURI)
+	// ── 何ができたか ──
+	// リンクの表示名には署名付き URL をそのまま使いません。クエリだけで 1000 文字を
+	// 超えるため、本文が URL で埋まって他の項目が読めなくなります。
+	body = body.Link("音声", publicURL, req.OutputURI)
 	// **ファイル名まで出しません。** generate の時点では音声がまだ無く、
 	// audio.wav を出力先として示すと存在しないものを案内することになります。
 	// 何が置かれたかは詳細画面が示します。
 	writeURIField(body, "出力先", outputPrefix(req.OutputURI))
 
+	// ── どう作ったか ──
+	// synthesize は保存済みの台本から作るため、この 3 つを持ちません。
+	writeURIField(body, "入力URI", req.InputURI)
 	return body.
 		Code("モード", req.Mode).
 		Code("モデル", req.AIModel)

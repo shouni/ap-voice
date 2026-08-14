@@ -279,3 +279,52 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 		})
 	}
 }
+
+// TestDetailAlwaysEmitsValidStylesScript は、話者→スタイルの対応表が空でも
+// 壊れた JavaScript を吐かないことを検証します。
+//
+// `window.apVoiceStyles = {{ .StylesJSON }};` を素で埋めると、値が空のときに
+// `= ;` になります。**構文エラーはその行で止まらず、以降の読み込みごと壊します。**
+func TestDetailAlwaysEmitsValidStylesScript(t *testing.T) {
+	t.Parallel()
+
+	tmpl := parseTemplates(t)
+
+	tests := []struct {
+		name string
+		view detailView
+	}{
+		{
+			name: "対応表がある",
+			view: detailView{
+				baseView:   testBaseView("/history/voice-1"),
+				JobID:      "voice-1",
+				Speakers:   []string{"ずんだもん"},
+				StylesJSON: template.JS(`{"ずんだもん":["ノーマル"]}`),
+			},
+		},
+		{
+			// 何らかの理由で対応表を組めなかった場合です。画面は開けるべきです。
+			name: "対応表が空",
+			view: detailView{
+				baseView: testBaseView("/history/voice-1"),
+				JobID:    "voice-1",
+				Speakers: []string{"ずんだもん"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf strings.Builder
+			if err := tmpl.ExecuteTemplate(&buf, "detail.html", tt.view); err != nil {
+				t.Fatalf("描画に失敗しました: %v", err)
+			}
+			if got := buf.String(); strings.Contains(got, "apVoiceStyles = ;") {
+				t.Error("空の代入を吐いています（JS が構文エラーになります）")
+			}
+		})
+	}
+}
