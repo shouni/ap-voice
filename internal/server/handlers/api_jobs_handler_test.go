@@ -414,3 +414,101 @@ func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.Res
 	h(rec, req)
 	return rec
 }
+
+// TestAPIEnqueueCreatesJobFromSuppliedScript は、持ち込んだ台本から新しいジョブを
+// 作れることを検証します。
+//
+// **既存ジョブが要りません。** 保存先はジョブ ID から決まるだけで、SaveScript は
+// ジョブの存在を確かめないため、ID を発行して保存すればそれが新規作成になります。
+// これが無いと、自分で書いた台本を喋らせるのに、捨てる前提の生成を 1 回
+// 走らせてから上書きする迂回が要りました。
+func TestAPIEnqueueCreatesJobFromSuppliedScript(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	repo := &savingRepo{}
+	h := apiHandler(t, repo)
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
+	h.queue = recordingQueue{order: &order}
+
+	rec := postJSON(t, h.APIEnqueue, "/api/jobs", `{
+		"command":"synthesize",
+		"script":{"title":"漫才","lines":[
+			{"speaker":"ずんだもん","style":"ノーマル","text":"どうもなのだ"},
+			{"speaker":"四国めたん","style":"ノーマル","text":"どうも"}
+		]}
+	}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+
+	// **台本は投入より先に保存されます。** タスクには載せないため、
+	// worker は保存済みの台本を読む既存の経路をそのまま使えます。
+	if len(repo.saved.Lines) != 2 || repo.saved.Title != "漫才" {
+		t.Errorf("保存された台本が違います: %+v", repo.saved)
+	}
+	if len(order) != 2 || order[0] != "status" || order[1] != "enqueue" {
+		t.Errorf("順序 = %v, want [status enqueue]", order)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["job_id"] == "" {
+		t.Error("新しいジョブ ID が返っていません")
+	}
+	if body["command"] != string(domain.CommandSynthesize) {
+		t.Errorf("command = %q", body["command"])
+	}
+}
+
+// TestAPIEnqueueRejectsBadSuppliedScript は、持ち込んだ台本にも同じ検証が
+// かかることを検証します。片方だけ緩いと、そちらから実在しない組み合わせが入ります。
+func TestAPIEnqueueRejectsBadSuppliedScript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{
+			name:    "script が無い",
+			body:    `{"command":"synthesize"}`,
+			wantErr: "script が要ります",
+		},
+		{
+			name:    "実在しない話者",
+			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"誰か","style":"ノーマル","text":"本文"}]}}`,
+			wantErr: "一覧にありません",
+		},
+		{
+			// 春日部つむぎの talk スタイルは「ノーマル」だけです。
+			name:    "話者が持たないスタイル",
+			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"春日部つむぎ","style":"セクシー","text":"本文"}]}}`,
+			wantErr: "というスタイルはありません",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := &savingRepo{}
+			h := apiHandler(t, repo)
+			h.queue = recordingQueue{order: &[]string{}}
+
+			rec := postJSON(t, h.APIEnqueue, "/api/jobs", tt.body)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400", rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), tt.wantErr) {
+				t.Errorf("body = %s, want に %q を含む", rec.Body.String(), tt.wantErr)
+			}
+			if repo.calls != 0 {
+				t.Error("弾いたのに保存しています")
+			}
+		})
+	}
+}

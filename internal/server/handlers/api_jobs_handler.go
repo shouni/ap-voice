@@ -46,13 +46,17 @@ type apiAccepted struct {
 }
 
 // apiEnqueue は、ジョブ投入の要求です。
+//
+// **入口は 2 つあります。** 入力ソースから AI に書かせるか（generate 系）、
+// 既に手元にある台本をそのまま渡すか（synthesize）です。後者は呼び出し側が
+// 自分で書いた台本を喋らせる経路で、Gemini を呼びません。
 type apiEnqueue struct {
-	// Command は generate か generate_and_synthesize です。
-	// synthesize は台本が要るため、既存ジョブへの POST 側で受けます。
 	Command  string `json:"command"`
-	InputURI string `json:"input_uri"`
-	Mode     string `json:"mode"`
+	InputURI string `json:"input_uri,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 	AIModel  string `json:"ai_model,omitempty"`
+	// Script は command が synthesize のときの台本です。
+	Script *domain.Script `json:"script,omitempty"`
 }
 
 // apiJobPage は、ページ付きの一覧応答です。
@@ -97,9 +101,11 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	command := domain.Command(body.Command)
-	if command != domain.CommandGenerate && command != domain.CommandGenerateAndSynthesize {
-		writeErrorJSON(w, http.StatusBadRequest, fmt.Sprintf("command は %q か %q です",
-			domain.CommandGenerate, domain.CommandGenerateAndSynthesize))
+	switch command {
+	case domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize:
+	default:
+		writeErrorJSON(w, http.StatusBadRequest, fmt.Sprintf("command は %q / %q / %q です",
+			domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize))
 		return
 	}
 
@@ -117,6 +123,26 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		Mode:      body.Mode,
 		AIModel:   body.AIModel,
 	}
+
+	// **持ち込まれた台本は、投入の前に保存します。** 保存先はジョブ ID から決まるので、
+	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
+	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
+	if command == domain.CommandSynthesize {
+		if body.Script == nil {
+			writeErrorJSON(w, http.StatusBadRequest, "synthesize には script が要ります")
+			return
+		}
+		cleaned, vErr := h.validateScript(*body.Script)
+		if vErr != nil {
+			writeErrorJSON(w, http.StatusBadRequest, vErr.Error())
+			return
+		}
+		if saveErr := h.repo.SaveScript(r.Context(), jobID, cleaned); saveErr != nil {
+			writeErrorJSON(w, http.StatusBadGateway, "台本の保存に失敗しました")
+			return
+		}
+	}
+
 	if err := req.Validate(); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, err.Error())
 		return

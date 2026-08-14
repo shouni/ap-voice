@@ -103,7 +103,7 @@ go run .        # SERVER_ROLE が必須
 | `GET` | `/api/jobs` | ジョブを新しい順に。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。 |
 | `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `GET` | `/api/jobs/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
-| `POST` | `/api/jobs` | `generate` / `generate_and_synthesize` を投入。 |
+| `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
 | `GET` | `/api/jobs/{jobID}/script` | 台本を取得。 |
 | `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
 | `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る。 |
