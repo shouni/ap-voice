@@ -10,10 +10,18 @@ type Pipeline interface {
 	Execute(ctx context.Context, req Request) error
 }
 
-// Voice は、音声合成を行うインターフェースです。
+// Voice は、音声合成と成果物の保存を行うインターフェースです。
 type Voice interface {
 	UploadWav(ctx context.Context, outputURI string, lines []ScriptLine) error
 	UploadScript(ctx context.Context, outputURI string, lines []ScriptLine) error
+}
+
+// ScriptStore は、保存済みの台本を読み書きします。
+//
+// generate が書き、synthesize と詳細画面が読みます。台本を Cloud Tasks の
+// ペイロードで運ばないのは、長い台本が 1MB の上限に当たりうるためです。
+type ScriptStore interface {
+	Load(ctx context.Context, jobID string) ([]ScriptLine, error)
 }
 
 // TaskQueue は、実行を Worker 面へ引き渡すインターフェースです。

@@ -10,7 +10,6 @@ import (
 	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
 	"github.com/shouni/ap-voice/internal/pipeline"
-	"github.com/shouni/ap-voice/internal/runner"
 )
 
 // buildPipeline は、提供されたランナーを使用して新しいパイプラインを初期化して返します。
@@ -24,13 +23,13 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 		return nil, fmt.Errorf("パブリッシャーランナーの初期化に失敗しました: %w", err)
 	}
 
-	p := pipeline.NewPipeline(generateRunner, publisherRunner, appCtx.Notifier, appCtx.Config.Pipeline.Timeout)
+	p := pipeline.NewPipeline(generateRunner, publisherRunner, appCtx.Notifier, appCtx.Repository, appCtx.Config.Pipeline.Timeout)
 
 	return p, nil
 }
 
 // buildGenerateRunner は、GenerateRunner のインスタンスを返します。
-func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.GenerateRunner, error) {
+func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
 	promptBuilder, err := adapters.NewPromptAdapter(appCtx.Speakers)
 	if err != nil {
 		return nil, fmt.Errorf("プロンプトビルダーの作成に失敗しました: %w", err)
@@ -50,7 +49,7 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
 	}
 
-	return runner.NewGenerateRunner(
+	return pipeline.NewScriptStep(
 		contentReader,
 		promptBuilder,
 		aiClient,
@@ -60,13 +59,13 @@ func buildGenerateRunner(ctx context.Context, appCtx *app.Container) (*runner.Ge
 }
 
 // buildPublishRunner は、PublisherRunner のインスタンスを返します。
-func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*runner.PublishRunner, error) {
+func buildPublishRunner(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
 	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox.APIURL, appCtx.Speakers, appCtx.RemoteIO.Writer)
 	if err != nil {
 		return nil, err
 	}
 
-	return runner.NewPublishRunner(
+	return pipeline.NewPublishStep(
 		voiceAdapter,
 		appCtx.RemoteIO.Signer,
 	), nil

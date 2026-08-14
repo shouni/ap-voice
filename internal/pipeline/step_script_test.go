@@ -1,4 +1,4 @@
-package runner
+package pipeline
 
 import (
 	"context"
@@ -75,7 +75,7 @@ func (r *closeTrackingReader) Close() error {
 	return nil
 }
 
-func TestGenerateRunnerRun(t *testing.T) {
+func TestScriptStepRun(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -93,7 +93,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		promptCalled := false
 		aiCalled := false
 
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, uri string) (io.ReadCloser, error) {
 					readerCalled = true
@@ -158,7 +158,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 	t.Run("異常系: InputURI が空ならエラーになること", func(t *testing.T) {
 		t.Parallel()
 
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{},
 			&mockPromptBuilder{},
 			&mockAIClient{},
@@ -176,7 +176,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("open failed")
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return nil, expectedErr
@@ -198,7 +198,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		short := strings.Repeat("a", config.MinInputContentLength-1)
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader(short)), nil
@@ -220,7 +220,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("prompt failed")
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
@@ -246,7 +246,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("ai failed")
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
@@ -275,7 +275,7 @@ func TestGenerateRunnerRun(t *testing.T) {
 	t.Run("異常系: 不正なJSON応答はエラーになること", func(t *testing.T) {
 		t.Parallel()
 
-		runner := NewGenerateRunner(
+		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
 					return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil

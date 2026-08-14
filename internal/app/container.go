@@ -11,6 +11,8 @@ import (
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
+
+	"github.com/shouni/ap-voice/internal/repository"
 )
 
 // Container はアプリケーションの依存関係（DIコンテナ）を保持します。
@@ -23,6 +25,8 @@ type Container struct {
 	Speakers *speaker.Registry
 	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。
 	TaskQueue domain.TaskQueue
+	// Repository は成果物の読み出しです。履歴の表示と、保存済み台本からの合成に使います。
+	Repository *repository.Repository
 	// External Adapters
 	HTTPClient httpkit.Requester
 	Notifier   domain.Notifier

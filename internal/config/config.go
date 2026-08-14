@@ -110,7 +110,7 @@ type PipelineConfig struct {
 
 // StorageConfig はストレージの設定です。
 type StorageConfig struct {
-	// GCSBucket は成果物の出力先です。**出力先は利用者に入力させません。**
+	// GCSBucket は成果物の置き場です。**出力先は利用者に入力させません。**
 	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
 	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
 	GCSBucket string `env:"GCS_VOICE_BUCKET"`
@@ -232,6 +232,12 @@ func (c *Config) ValidateEssentialConfig() error {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
 	}
 
+	// **両ロールで要ります。** web は履歴の一覧と出力先の組み立てに、worker は
+	// synthesize が保存済み台本を読むために使います。
+	if c.Storage.GCSBucket == "" {
+		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")
+	}
+
 	// 三段のうち上二段の関係はどちらのロールでも検査します。web は投入時に
 	// dispatch_deadline を載せ、worker はその内側で PIPELINE_TIMEOUT を使うため、
 	// 崩れていると片方だけ直しても噛み合いません。
@@ -277,10 +283,6 @@ func (c *Config) validateWebConfig() error {
 	// ALLOWED_TASK_SERVICE_ACCOUNTS で別に指定します。
 	if c.Tasks.CallerServiceAccountEmail == "" {
 		return fmt.Errorf("TASK_CALLER_SERVICE_ACCOUNT_EMAIL が設定されていません")
-	}
-	// 出力先はフォームで受け取らずジョブ ID から導くため、バケット名は Web 面の要件です。
-	if c.Storage.GCSBucket == "" {
-		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")
 	}
 
 	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {

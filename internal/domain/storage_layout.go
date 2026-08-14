@@ -25,14 +25,31 @@ func (l StorageLayout) VoiceJobPrefix(jobID string) string {
 }
 
 // AudioPath は、WAV の相対オブジェクトパスを返します。
-//
-// 台本はこのパスの拡張子を .json に替えた位置へ PublishRunner が書きます。
-// 隣に置くのは、貼り戻して synthesize に渡す入力でもあるためです。
 func (l StorageLayout) AudioPath(jobID string) string {
 	return l.VoiceJobPrefix(jobID) + "audio.wav"
 }
 
+// ScriptPath は、台本 JSON の相対オブジェクトパスを返します。
+//
+// 台本は**成果物であると同時に入力**です。generate はこれだけを書き、
+// synthesize はこれを読んで音声を作ります。
+//
+// **音声と同じ名前で拡張子だけ違えます。** VoiceAdapter が出力先の拡張子を .json に
+// 替えて台本を書くため、別名にすると保存先と読み出し先がずれます。
+func (l StorageLayout) ScriptPath(jobID string) string {
+	return l.VoiceJobPrefix(jobID) + "audio.json"
+}
+
 // AudioURI は、WAV の完全な出力先 URI を返します。
 func (l StorageLayout) AudioURI(bucket, jobID string) string {
-	return fmt.Sprintf("gs://%s/%s", bucket, l.AudioPath(jobID))
+	return l.uri(bucket, l.AudioPath(jobID))
+}
+
+// ScriptURI は、台本 JSON の完全な出力先 URI を返します。
+func (l StorageLayout) ScriptURI(bucket, jobID string) string {
+	return l.uri(bucket, l.ScriptPath(jobID))
+}
+
+func (l StorageLayout) uri(bucket, path string) string {
+	return fmt.Sprintf("gs://%s/%s", bucket, path)
 }

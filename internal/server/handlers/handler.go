@@ -2,15 +2,20 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 	"sort"
+	"time"
+
+	"github.com/shouni/go-remote-io/remoteio"
 
 	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/repository"
 )
 
 // jobIDPrefix は発行するジョブ ID の接頭辞です（voice-{日付}-{時刻}-{hex12}）。
@@ -29,7 +34,21 @@ type Handler struct {
 	// bucket と layout で出力先を決めます。**利用者には入力させません。**
 	bucket string
 	layout domain.StorageLayout
+	// repo は履歴の一覧と台本の読み出しです。
+	repo ScriptRepository
+	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
+	signer remoteio.URLSigner
 }
+
+// ScriptRepository は、履歴の一覧と台本の読み出しです。
+type ScriptRepository interface {
+	List(ctx context.Context, limit int) ([]repository.Job, error)
+	Load(ctx context.Context, jobID string) ([]domain.ScriptLine, error)
+}
+
+// signedURLExpiry は音声の署名付き URL の有効期限です。
+// 再生している最中に切れない程度に取り、リンクを配って回れるほど長くはしません。
+const signedURLExpiry = time.Hour
 
 // HandlerOptions は Handler の依存です。
 type HandlerOptions struct {
@@ -38,6 +57,8 @@ type HandlerOptions struct {
 	Modes     []string
 	Models    []string
 	Bucket    string
+	Repo      ScriptRepository
+	Signer    remoteio.URLSigner
 }
 
 // NewHandler は Handler を生成します。
@@ -57,6 +78,9 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	if opts.Bucket == "" {
 		return nil, errors.New("出力先バケットが指定されていません")
 	}
+	if opts.Repo == nil {
+		return nil, errors.New("リポジトリが指定されていません")
+	}
 
 	modes := append([]string(nil), opts.Modes...)
 	sort.Strings(modes)
@@ -68,6 +92,8 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		models:    append([]string(nil), opts.Models...),
 		bucket:    opts.Bucket,
 		layout:    domain.NewStorageLayout(),
+		repo:      opts.Repo,
+		signer:    opts.Signer,
 	}, nil
 }
 
@@ -134,7 +160,7 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	h.render(w, http.StatusAccepted, formView{
 		Modes:   h.modes,
 		Models:  h.models,
-		Message: fmt.Sprintf("実行を受け付けました（%s）。完了すると %s に出力されます。", req.JobID, req.OutputURI),
+		Message: fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
 		Form:    domain.Request{Command: domain.CommandGenerate},
 	})
 }
@@ -144,9 +170,14 @@ func (h *Handler) renderError(w http.ResponseWriter, status int, form domain.Req
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, view formView) {
+	h.renderTemplate(w, status, "home.html", view)
+}
+
+// renderTemplate は指定のテンプレートを描画します。
+func (h *Handler) renderTemplate(w http.ResponseWriter, status int, name string, view any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := h.templates.ExecuteTemplate(w, "home.html", view); err != nil {
+	if err := h.templates.ExecuteTemplate(w, name, view); err != nil {
 		// ヘッダーは送信済みなので、ここでステータスは変えられません。
 		http.Error(w, "画面の描画に失敗しました", http.StatusInternalServerError)
 	}

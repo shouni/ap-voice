@@ -1,5 +1,4 @@
-// Package runner は、ナレーションスクリプトの生成・整形・出力を実行します。
-package runner
+package pipeline
 
 import (
 	"context"
@@ -35,8 +34,8 @@ type StructuredGenerator interface {
 	GenerateWithAttachments(ctx context.Context, modelName string, prompt string, attachments []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
-// GenerateRunner はスクリプト生成の実行に必要な依存とオプションを保持します。
-type GenerateRunner struct {
+// ScriptStep はスクリプト生成の実行に必要な依存とオプションを保持します。
+type ScriptStep struct {
 	reader        ContentReader
 	promptBuilder PromptBuilder
 	aiClient      StructuredGenerator
@@ -48,15 +47,15 @@ type GenerateRunner struct {
 	schema *gemini.Schema
 }
 
-// NewGenerateRunner は、依存関係を注入して GenerateRunner の新しいインスタンスを生成します。
-func NewGenerateRunner(
+// NewScriptStep は、依存関係を注入して ScriptStep の新しいインスタンスを生成します。
+func NewScriptStep(
 	reader ContentReader,
 	promptBuilder PromptBuilder,
 	aiClient StructuredGenerator,
 	defaultModel string,
 	speakers *speaker.Registry,
-) *GenerateRunner {
-	return &GenerateRunner{
+) *ScriptStep {
+	return &ScriptStep{
 		reader:        reader,
 		promptBuilder: promptBuilder,
 		aiClient:      aiClient,
@@ -68,7 +67,7 @@ func NewGenerateRunner(
 // modelFor は、リクエストが指定したモデル名を返します。
 // 指定が無ければ既定モデルを使います。タスクのペイロードは呼び出し元が組み立てるため、
 // モデル名が欠けることは十分にあり、そこで生成ごと失敗させる理由はありません。
-func (gr *GenerateRunner) modelFor(req domain.Request) string {
+func (gr *ScriptStep) modelFor(req domain.Request) string {
 	if model := strings.TrimSpace(req.AIModel); model != "" {
 		return model
 	}
@@ -76,7 +75,7 @@ func (gr *GenerateRunner) modelFor(req domain.Request) string {
 }
 
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用して構造化ナレーションスクリプトを生成する一連の処理を実行します。
-func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
 	if req.InputURI == "" {
 		return nil, errors.New("入力ソース(InputURI)が指定されていません")
 	}
@@ -111,7 +110,7 @@ func (gr *GenerateRunner) Run(ctx context.Context, req domain.Request) ([]domain
 }
 
 // readContent は、指定されたソースURLからコンテンツを取得します。
-func (gr *GenerateRunner) readContent(ctx context.Context, sourceURL string) (string, error) {
+func (gr *ScriptStep) readContent(ctx context.Context, sourceURL string) (string, error) {
 	stream, err := gr.reader.Open(ctx, sourceURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to read source: %w", err)

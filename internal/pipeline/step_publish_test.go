@@ -1,4 +1,4 @@
-package runner
+package pipeline
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func (m *mockURLSigner) GenerateSignedURL(ctx context.Context, path string, meth
 
 var _ remoteio.URLSigner = (*mockURLSigner)(nil)
 
-func TestPublishRunnerRun(t *testing.T) {
+func TestPublishStepRun(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -50,7 +50,7 @@ func TestPublishRunnerRun(t *testing.T) {
 		scriptCalled := false
 		signerCalled := false
 
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc: func(_ context.Context, gotURI string, gotLines []domain.ScriptLine) error {
 					wavCalled = true
@@ -99,7 +99,7 @@ func TestPublishRunnerRun(t *testing.T) {
 	t.Run("正常系: signer が nil ならURLなしで成功すること", func(t *testing.T) {
 		t.Parallel()
 
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
 				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
@@ -119,7 +119,7 @@ func TestPublishRunnerRun(t *testing.T) {
 	t.Run("正常系: signer エラー時も公開成功としてURLなしで返すこと", func(t *testing.T) {
 		t.Parallel()
 
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
 				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
@@ -143,7 +143,7 @@ func TestPublishRunnerRun(t *testing.T) {
 	t.Run("異常系: outputURI が空ならエラーになること", func(t *testing.T) {
 		t.Parallel()
 
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
 				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
@@ -161,7 +161,7 @@ func TestPublishRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("wav failed")
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return expectedErr },
 				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
@@ -179,7 +179,7 @@ func TestPublishRunnerRun(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("script failed")
-		runner := NewPublishRunner(
+		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
 				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return expectedErr },

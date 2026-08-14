@@ -71,6 +71,14 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Use(h.Auth.Middleware)
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
+
+		// 台本ができたら履歴に並び、詳細から音声を作ります。
+		r.Route("/history", func(r chi.Router) {
+			r.Get("/", h.Web.History)
+			r.Get("/{jobID}", h.Web.Detail)
+			r.Post("/{jobID}/synthesize", h.Web.Synthesize)
+			r.Get("/{jobID}/audio", h.Web.Audio)
+		})
 	})
 
 	// Cloud Tasks 専用ルート (Worker 用)。

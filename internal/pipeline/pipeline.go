@@ -10,19 +10,22 @@ import (
 
 // Pipeline はパイプラインの実行に必要な外部依存関係を保持するサービス構造体です。
 type Pipeline struct {
-	generator GenerateRunner
-	publisher PublishRunner
+	generator scriptGenerator
+	publisher publisher
 	notifier  domain.Notifier
+	// scripts は保存済み台本の読み出しです。synthesize が JobID だけを渡されたときに使います。
+	scripts domain.ScriptStore
 	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
 	timeout time.Duration
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator GenerateRunner, publisher PublishRunner, notifier domain.Notifier, timeout time.Duration) *Pipeline {
+func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, timeout time.Duration) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
 		notifier:  notifier,
+		scripts:   scripts,
 		timeout:   timeout,
 	}
 }
@@ -61,7 +64,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	}
 
 	var publicURL string
-	publicURL, err = p.publisher.Run(ctx, req.OutputURI, lines)
+	publicURL, err = p.publish(ctx, req, lines)
 	if err != nil {
 		err = fmt.Errorf("公開処理の実行に失敗しました: %w", err)
 		return err
@@ -72,14 +75,36 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	return nil
 }
 
+// publish は、Command に応じて保存する成果物を切り替えます。
+//
+// generate は台本まで、synthesize は音声まで。**generate で音声を作らない**のは、
+// 台本を確認・修正してから合成へ進めるようにするためです。
+func (p *Pipeline) publish(ctx context.Context, req domain.Request, lines []domain.ScriptLine) (string, error) {
+	if req.Command == domain.CommandGenerate {
+		return p.publisher.PublishScript(ctx, req.OutputURI, lines)
+	}
+	return p.publisher.Run(ctx, req.OutputURI, lines)
+}
+
 // resolveScript は、Command に応じて合成対象の台本を用意します。
 //
-// generate は入力ソースから作り、synthesize は渡されたものをそのまま使います。
-// どちらの経路でも、以降の公開処理は同じ台本を受け取ります。
+// generate は入力ソースから作ります。synthesize は渡された台本を使い、
+// 無ければ JobID で保存済みのものを読みます。**台本をタスクのペイロードで
+// 運ばない**のは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
 func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
 	if req.Command == domain.CommandSynthesize {
-		// Validate が空でないことを確かめているため、ここでの再検査は要りません。
-		return req.Script, nil
+		if len(req.Script) > 0 {
+			return req.Script, nil
+		}
+
+		lines, err := p.scripts.Load(ctx, req.JobID)
+		if err != nil {
+			return nil, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)
+		}
+		if len(lines) == 0 {
+			return nil, fmt.Errorf("保存済み台本が空です (%s)", req.JobID)
+		}
+		return lines, nil
 	}
 
 	lines, err := p.generator.Run(ctx, req)

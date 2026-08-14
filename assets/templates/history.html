@@ -1,0 +1,41 @@
+{{ define "history.html" }}<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>履歴 | AP Voice</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">✍️ AP Voice</a>
+    <div class="ms-auto">
+      <a class="nav-link d-inline" href="/history">履歴</a>
+      <a class="nav-link d-inline ms-3" href="/auth/logout">ログアウト</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container main-content" style="max-width: 46rem;">
+  <h1 class="h5 mb-3">履歴</h1>
+
+  {{ if .Jobs }}
+    <div class="list-group">
+      {{ range .Jobs }}
+        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+           href="/history/{{ .ID }}">
+          <code>{{ .ID }}</code>
+          {{ if .HasAudio }}<span class="badge bg-success">音声あり</span>
+          {{ else }}<span class="badge bg-secondary">台本のみ</span>{{ end }}
+        </a>
+      {{ end }}
+    </div>
+  {{ else }}
+    <p class="text-secondary">まだ何もありません。<a href="/">台本を作成</a>してください。</p>
+  {{ end }}
+</main>
+</body>
+</html>{{ end }}
