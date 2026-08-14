@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/shouni/go-remote-io/remoteio"
-	"github.com/shouni/go-web-reader/pkg/reader"
+	"github.com/shouni/go-web-reader/reader"
 
 	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
@@ -40,14 +40,11 @@ func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.Scri
 		return nil, err
 	}
 
-	contentReader, err := reader.New(
+	contentReader := reader.New(
 		reader.WithGCSFactory(func(_ context.Context) (remoteio.IOFactory, error) {
 			return appCtx.RemoteIO.Factory, nil
 		}),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize content reader: %w", err)
-	}
 
 	return pipeline.NewScriptStep(
 		contentReader,
