@@ -2,7 +2,7 @@
 
 [![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-WIP-orange)](#)
+[![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](#)
 
 ## 💡 概要 (About)
 
@@ -58,8 +58,8 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | --- | --- |
 | `SERVICE_URL` / `PORT` | 公開 URL と待ち受けポート (Default: `http://localhost:8080` / `8080`)。 |
 | `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
-| `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**エンジンがメモリ不足になったらここを vCPU 数まで下げます。** |
-| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**スループットを決めているのはこの値です。** |
+| `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**スループットを縛っているのはこの値です。** 代償はエンジンのメモリで、OOM が出たら下げます。ピークは台本の長さでは上がりません（同時数で頭打ちのため）。 |
+| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**実測では8倍の余裕があり、調整つまみとして機能していません**（12セグメントの実効 0.24 件/秒 に対し、許容 2.0 件/秒）。エンジンを叩きすぎないための保険です。 |
 | `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
 | `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
@@ -166,7 +166,7 @@ sequenceDiagram
     Tasks->>Worker: POST /tasks/generate (OIDC)
     Worker->>Store: 入力を読む (gs:// のとき)
     Worker->>Gemini: 台本を生成 (スキーマ強制)
-    Gemini-->>Worker: []ScriptLine
+    Gemini-->>Worker: Script（title + lines）
     Worker->>Store: audio.json を書く
     Note right of Worker: **音声はまだ作りません**
     Worker->>Slack: 完了通知（詳細画面のリンク付き）
