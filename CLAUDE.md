@@ -152,13 +152,14 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **`/modes` is the catalog**, in the shape ap-comp uses: a table of every mode with its label,
-  what it makes and when to pick it, then each prompt as it is actually assembled — partials
-  expanded, through the same builder the worker uses, so the page cannot describe something
-  different from what Gemini receives. It feeds a placeholder input and, when a mode refuses
-  plain text, retries with a sample recipe; that avoids naming the recipe-input mode a second
-  time, which would leave two places to update. One mode failing to assemble is reported in its
-  own row rather than failing the page.
+- **`/modes` lists, `/modes/{mode}` shows one**, the split ap-comp uses. The index carries only
+  front matter and **assembles no prompts**: the seven bodies come to more than 10k characters,
+  so building them for a page that may only be scanned is waste, and a reader — or an MCP client
+  — that wants the index should not pay for the bodies. The detail assembles through the same
+  builder the worker uses, partials expanded, so the page cannot describe something different
+  from what Gemini receives. It feeds a placeholder input and retries with a sample recipe when a
+  mode refuses plain text, which avoids naming the recipe-input mode a second time; a key that is
+  not in the list is a 404 rather than an assembly error.
 - **The detail screen edits the script, it does not just show it.** That is what makes the
   two-command split pay: the reason given for it is fixing a reading without regenerating, and
   until the form existed there was no way to fix anything, so review could only choose between

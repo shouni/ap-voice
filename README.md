@@ -83,11 +83,11 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `GET /modes`, `/history/*`, `/auth/*` |
+| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `/modes/*`, `/history/*`, `/auth/*` |
 | `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
 
-`GET /modes` は選べるモードの一覧です。表示名・説明・**実際に渡るプロンプト本文**を並べます。
+`GET /modes` は選べるモードの一覧、`GET /modes/{mode}` はその 1 つの詳細で、**実際に渡るプロンプト本文**を見せます。
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
