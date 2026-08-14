@@ -130,6 +130,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Signer:    appCtx.RemoteIO.Signer,
 		Speakers:  appCtx.Speakers,
 		Renderer:  renderer,
+		Reading:   adapters.NewReadingAdapter(),
 		JobStatus: appCtx.JobStatus,
 	})
 	if err != nil {

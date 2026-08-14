@@ -30,11 +30,11 @@ type Repository struct {
 	layout domain.StorageLayout
 	// status はジョブの進行状況です。**成果物と同じジョブディレクトリ**に置くので、
 	// 履歴の削除（プレフィックスの一括削除）で状態ファイルも一緒に片付きます。
-	status *jobstatus.Store[jobstatus.Status]
+	status *jobstatus.Store[domain.JobStatus]
 }
 
 // Get は、ジョブの状態を読みます。jobstatus.StatusStore を満たします。
-func (r *Repository) Get(ctx context.Context, jobID string) (jobstatus.Status, error) {
+func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, error) {
 	return r.status.Get(ctx, jobID)
 }
 
@@ -42,7 +42,7 @@ func (r *Repository) Get(ctx context.Context, jobID string) (jobstatus.Status, e
 //
 // **Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。**
 // 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
-func (r *Repository) Save(ctx context.Context, jobID string, status jobstatus.Status) error {
+func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobStatus) error {
 	return r.status.Save(ctx, jobID, status)
 }
 
@@ -65,7 +65,7 @@ func NewRepository(reader remoteio.InputReader, writer remoteio.OutputWriter, bu
 	return &Repository{
 		reader: reader, writer: writer, bucket: bucket, layout: layout,
 		// UnderJobDir は baseURI/{jobID}/status.json を指します。
-		status: jobstatus.NewStore[jobstatus.Status](reader, writer,
+		status: jobstatus.NewStore[domain.JobStatus](reader, writer,
 			jobstatus.UnderJobDir(strings.TrimSuffix(fmt.Sprintf("gs://%s/%s", bucket, layout.VoicePrefix()), "/"))),
 	}, nil
 }

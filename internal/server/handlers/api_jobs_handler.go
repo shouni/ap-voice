@@ -46,13 +46,17 @@ type apiAccepted struct {
 }
 
 // apiEnqueue は、ジョブ投入の要求です。
+//
+// **入口は 2 つあります。** 入力ソースから AI に書かせるか（generate 系）、
+// 既に手元にある台本をそのまま渡すか（synthesize）です。後者は呼び出し側が
+// 自分で書いた台本を喋らせる経路で、Gemini を呼びません。
 type apiEnqueue struct {
-	// Command は generate か generate_and_synthesize です。
-	// synthesize は台本が要るため、既存ジョブへの POST 側で受けます。
 	Command  string `json:"command"`
-	InputURI string `json:"input_uri"`
-	Mode     string `json:"mode"`
+	InputURI string `json:"input_uri,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 	AIModel  string `json:"ai_model,omitempty"`
+	// Script は command が synthesize のときの台本です。
+	Script *domain.Script `json:"script,omitempty"`
 }
 
 // apiJobPage は、ページ付きの一覧応答です。
@@ -97,9 +101,11 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	command := domain.Command(body.Command)
-	if command != domain.CommandGenerate && command != domain.CommandGenerateAndSynthesize {
-		writeErrorJSON(w, http.StatusBadRequest, fmt.Sprintf("command は %q か %q です",
-			domain.CommandGenerate, domain.CommandGenerateAndSynthesize))
+	switch command {
+	case domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize:
+	default:
+		writeErrorJSON(w, http.StatusBadRequest, fmt.Sprintf("command は %q / %q / %q です",
+			domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize))
 		return
 	}
 
@@ -117,6 +123,26 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		Mode:      body.Mode,
 		AIModel:   body.AIModel,
 	}
+
+	// **持ち込まれた台本は、投入の前に保存します。** 保存先はジョブ ID から決まるので、
+	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
+	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
+	if command == domain.CommandSynthesize {
+		if body.Script == nil {
+			writeErrorJSON(w, http.StatusBadRequest, "synthesize には script が要ります")
+			return
+		}
+		cleaned, vErr := h.validateScript(*body.Script)
+		if vErr != nil {
+			writeErrorJSON(w, http.StatusBadRequest, vErr.Error())
+			return
+		}
+		if saveErr := h.repo.SaveScript(r.Context(), jobID, cleaned); saveErr != nil {
+			writeErrorJSON(w, http.StatusBadGateway, "台本の保存に失敗しました")
+			return
+		}
+	}
+
 	if err := req.Validate(); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, err.Error())
 		return
@@ -221,6 +247,114 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+// apiReadingRequest は POST /api/preview-reading の要求です。
+type apiReadingRequest struct {
+	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
+	Lines []domain.ScriptLine `json:"lines"`
+}
+
+// apiReadingLine は 1 行分の読みです。
+type apiReadingLine struct {
+	Text string `json:"text"`
+	// Reading は合成時に実際に読まれるカタカナです。
+	Reading string `json:"reading"`
+	// Changed は、変換で表記が変わったかどうかです。**確かめる価値がある行の目印**で、
+	// カタカナだけの行は変換しても変わらないため false になります。
+	Changed bool `json:"changed"`
+}
+
+// apiReadingResponse は POST /api/preview-reading の応答です。
+type apiReadingResponse struct {
+	Lines []apiReadingLine `json:"lines"`
+}
+
+// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。**合成はしません。**
+//
+// **読みは自明ではありません。**「田中」「同姓同名」のような語がどう読まれるかは、
+// 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
+// 気付くことになるため、その前に確かめられるようにします。
+//
+// 意図と違う読みになる語は、その部分をカタカナで書けば直せます。
+func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
+	var body apiReadingRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
+		return
+	}
+	if len(body.Lines) == 0 {
+		writeErrorJSON(w, http.StatusBadRequest, "lines が空です")
+		return
+	}
+	if len(body.Lines) > maxScriptLines {
+		writeErrorJSON(w, http.StatusBadRequest,
+			fmt.Sprintf("行が多すぎます（%d 行、上限 %d 行）", len(body.Lines), maxScriptLines))
+		return
+	}
+
+	out := make([]apiReadingLine, 0, len(body.Lines))
+	for _, line := range body.Lines {
+		reading, err := h.reading.ConvertToReading(line.Text)
+		if err != nil {
+			writeErrorJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out = append(out, apiReadingLine{
+			Text: line.Text, Reading: reading, Changed: reading != line.Text,
+		})
+	}
+	writeJSON(w, http.StatusOK, apiReadingResponse{Lines: out})
+}
+
+// apiAudio は GET /api/jobs/{jobID}/audio の応答です。
+type apiAudio struct {
+	JobID string `json:"job_id"`
+	// AudioURI は保存先です。期限が無いので、記録や再取得の手掛かりになります。
+	AudioURI string `json:"audio_uri"`
+	// SignedURL は誰でも再生・取得できるリンクです。**期限があります。**
+	SignedURL string `json:"signed_url"`
+	// ExpiresInSeconds は SignedURL の有効期間です。
+	ExpiresInSeconds int `json:"expires_in_seconds"`
+}
+
+// APIAudio は、音声を取得できるリンクを発行します。
+//
+// **状態や一覧には署名付き URL を載せません。** 1 時間で切れるうえ発行に計算が要るため、
+// 30 秒ごとのポーリングで毎回作るのは無駄で、渡した頃には切れています。
+// 必要になった時点でこの口を叩く形にしています。
+//
+// 音声がまだ無いジョブは 404 です。署名は対象の存在を確かめないので、
+// 先に確かめないと「開くと 404 になるリンク」を配ることになります。
+func (h *Handler) APIAudio(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.apiJobID(w, r)
+	if !ok {
+		return
+	}
+
+	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadGateway, "音声の有無を確認できませんでした")
+		return
+	}
+	if !hasAudio {
+		writeErrorJSON(w, http.StatusNotFound, "このジョブにはまだ音声がありません")
+		return
+	}
+
+	audioURI := h.layout.AudioURI(h.bucket, jobID)
+	signed, err := h.signer.GenerateSignedURL(r.Context(), audioURI, http.MethodGet, signedURLExpiry)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadGateway, "音声のURL生成に失敗しました")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, apiAudio{
+		JobID:            jobID,
+		AudioURI:         audioURI,
+		SignedURL:        signed,
+		ExpiresInSeconds: int(signedURLExpiry.Seconds()),
+	})
 }
 
 // APIDeleteJob は、1 つのジョブの成果物をまとめて消します。

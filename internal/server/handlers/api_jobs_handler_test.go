@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-kit/jobstatus"
@@ -188,11 +189,11 @@ type recordingStore struct {
 	order *[]string
 }
 
-func (s recordingStore) Get(context.Context, string) (jobstatus.Status, error) {
-	return jobstatus.Status{}, errors.New("記録がありません")
+func (s recordingStore) Get(context.Context, string) (domain.JobStatus, error) {
+	return domain.JobStatus{}, errors.New("記録がありません")
 }
 
-func (s recordingStore) Save(context.Context, string, jobstatus.Status) error {
+func (s recordingStore) Save(context.Context, string, domain.JobStatus) error {
 	*s.order = append(*s.order, "status")
 	return nil
 }
@@ -218,7 +219,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 
 	var order []string
 	h := apiHandler(t, &savingRepo{})
-	h.status = jobstatus.NewRecorder[jobstatus.Status](recordingStore{order: &order})
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
 	h.queue = recordingQueue{order: &order}
 
 	req := httptest.NewRequest("POST", "/api/jobs",
@@ -243,5 +244,271 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	}
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
+	}
+}
+
+// audioRepo は音声の有無を差し替えられるフェイクです。
+type audioRepo struct {
+	ScriptRepository
+	hasAudio bool
+}
+
+func (r audioRepo) HasAudio(context.Context, string) (bool, error) { return r.hasAudio, nil }
+
+// stubSigner は署名付き URL を組み立てたことにするフェイクです。
+type stubSigner struct{ calls int }
+
+func (s *stubSigner) GenerateSignedURL(_ context.Context, path, _ string, _ time.Duration) (string, error) {
+	s.calls++
+	return "https://storage.googleapis.com/" + path + "?X-Goog-Signature=xxx", nil
+}
+
+// TestAPIAudioRefusesWhenThereIsNoAudio は、音声が無いジョブにリンクを出さないことを
+// 検証します。
+//
+// **署名は対象の存在を確かめません。** 作っていない音声の URL も署名できてしまうため、
+// 先に確かめないと「開くと 404 になるリンク」を配ることになります。
+// Slack 通知で同じことを一度やっています。
+func TestAPIAudioRefusesWhenThereIsNoAudio(t *testing.T) {
+	t.Parallel()
+
+	signer := &stubSigner{}
+	h := apiHandler(t, audioRepo{hasAudio: false})
+	h.signer = signer
+
+	rec := callAudio(t, h)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if signer.calls != 0 {
+		t.Error("音声が無いのに署名しています")
+	}
+}
+
+// TestAPIAudioReturnsBothLocations は、期限の無い保存先と再生できるリンクの
+// 両方を返すことを検証します。用途が違うため、片方では足りません。
+func TestAPIAudioReturnsBothLocations(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, audioRepo{hasAudio: true})
+	h.signer = &stubSigner{}
+
+	rec := callAudio(t, h)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var got apiAudio
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("応答のデコードに失敗しました: %v", err)
+	}
+	if !strings.HasPrefix(got.AudioURI, "gs://") {
+		t.Errorf("audio_uri = %q, want gs:// で始まること", got.AudioURI)
+	}
+	if !strings.Contains(got.SignedURL, "X-Goog-Signature") {
+		t.Errorf("signed_url に署名がありません: %q", got.SignedURL)
+	}
+	// **期限を伝えます。** いつまで使えるかが分からないと、呼び出し側は
+	// 切れたリンクを配ったことに気付けません。
+	if got.ExpiresInSeconds <= 0 {
+		t.Errorf("expires_in_seconds = %d", got.ExpiresInSeconds)
+	}
+}
+
+// callAudio は GET /api/jobs/{jobID}/audio を呼びます。
+func callAudio(t *testing.T, h *Handler) *httptest.ResponseRecorder {
+	t.Helper()
+
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
+	req := httptest.NewRequest("GET", "/api/jobs/"+jobID+"/audio", nil)
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("jobID", jobID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+
+	rec := httptest.NewRecorder()
+	h.APIAudio(rec, req)
+	return rec
+}
+
+// fakeReading は、変換したことにするフェイクです。実際の辞書は adapters 側で見ます。
+type fakeReading struct{ err error }
+
+func (f fakeReading) ConvertToReading(text string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if text == "水面" {
+		return "スイメン", nil
+	}
+	return text, nil
+}
+
+// TestAPIPreviewReadingMarksChangedLines は、変換で表記が変わった行に印が付くことを
+// 検証します。
+//
+// **確かめる価値がある行の目印です。** 台本が 30 行あっても、変わったのが 2 行なら
+// そこだけ読めば済みます。印が無いと全行を目で追うことになります。
+func TestAPIPreviewReadingMarksChangedLines(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, &savingRepo{})
+	h.reading = fakeReading{}
+
+	rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading",
+		`{"lines":[{"text":"水面"},{"text":"カタカナ"}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var got apiReadingResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("応答のデコードに失敗しました: %v", err)
+	}
+	if len(got.Lines) != 2 {
+		t.Fatalf("行数 = %d, want 2", len(got.Lines))
+	}
+	if got.Lines[0].Reading != "スイメン" || !got.Lines[0].Changed {
+		t.Errorf("変わった行に印がありません: %+v", got.Lines[0])
+	}
+	if got.Lines[1].Changed {
+		t.Errorf("変わっていない行に印が付いています: %+v", got.Lines[1])
+	}
+	// 元のテキストも返します。並べて読めないと、どこが変わったか分かりません。
+	if got.Lines[0].Text != "水面" {
+		t.Errorf("元のテキストが欠けています: %+v", got.Lines[0])
+	}
+}
+
+// TestAPIPreviewReadingRejectsEmptyAndOversized は、入力の境界を検証します。
+func TestAPIPreviewReadingRejectsEmptyAndOversized(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, &savingRepo{})
+	h.reading = fakeReading{}
+
+	if rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading", `{"lines":[]}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("空: status = %d, want 400", rec.Code)
+	}
+
+	var b strings.Builder
+	b.WriteString(`{"lines":[`)
+	for i := 0; i <= maxScriptLines; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`{"text":"あ"}`)
+	}
+	b.WriteString(`]}`)
+	if rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading", b.String()); rec.Code != http.StatusBadRequest {
+		t.Errorf("上限超過: status = %d, want 400", rec.Code)
+	}
+}
+
+// postJSON は JSON ボディの POST を呼びます。
+func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest("POST", path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec
+}
+
+// TestAPIEnqueueCreatesJobFromSuppliedScript は、持ち込んだ台本から新しいジョブを
+// 作れることを検証します。
+//
+// **既存ジョブが要りません。** 保存先はジョブ ID から決まるだけで、SaveScript は
+// ジョブの存在を確かめないため、ID を発行して保存すればそれが新規作成になります。
+// これが無いと、自分で書いた台本を喋らせるのに、捨てる前提の生成を 1 回
+// 走らせてから上書きする迂回が要りました。
+func TestAPIEnqueueCreatesJobFromSuppliedScript(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	repo := &savingRepo{}
+	h := apiHandler(t, repo)
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
+	h.queue = recordingQueue{order: &order}
+
+	rec := postJSON(t, h.APIEnqueue, "/api/jobs", `{
+		"command":"synthesize",
+		"script":{"title":"漫才","lines":[
+			{"speaker":"ずんだもん","style":"ノーマル","text":"どうもなのだ"},
+			{"speaker":"四国めたん","style":"ノーマル","text":"どうも"}
+		]}
+	}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+
+	// **台本は投入より先に保存されます。** タスクには載せないため、
+	// worker は保存済みの台本を読む既存の経路をそのまま使えます。
+	if len(repo.saved.Lines) != 2 || repo.saved.Title != "漫才" {
+		t.Errorf("保存された台本が違います: %+v", repo.saved)
+	}
+	if len(order) != 2 || order[0] != "status" || order[1] != "enqueue" {
+		t.Errorf("順序 = %v, want [status enqueue]", order)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["job_id"] == "" {
+		t.Error("新しいジョブ ID が返っていません")
+	}
+	if body["command"] != string(domain.CommandSynthesize) {
+		t.Errorf("command = %q", body["command"])
+	}
+}
+
+// TestAPIEnqueueRejectsBadSuppliedScript は、持ち込んだ台本にも同じ検証が
+// かかることを検証します。片方だけ緩いと、そちらから実在しない組み合わせが入ります。
+func TestAPIEnqueueRejectsBadSuppliedScript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{
+			name:    "script が無い",
+			body:    `{"command":"synthesize"}`,
+			wantErr: "script が要ります",
+		},
+		{
+			name:    "実在しない話者",
+			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"誰か","style":"ノーマル","text":"本文"}]}}`,
+			wantErr: "一覧にありません",
+		},
+		{
+			// 春日部つむぎの talk スタイルは「ノーマル」だけです。
+			name:    "話者が持たないスタイル",
+			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"春日部つむぎ","style":"セクシー","text":"本文"}]}}`,
+			wantErr: "というスタイルはありません",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := &savingRepo{}
+			h := apiHandler(t, repo)
+			h.queue = recordingQueue{order: &[]string{}}
+
+			rec := postJSON(t, h.APIEnqueue, "/api/jobs", tt.body)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400", rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), tt.wantErr) {
+				t.Errorf("body = %s, want に %q を含む", rec.Body.String(), tt.wantErr)
+			}
+			if repo.calls != 0 {
+				t.Error("弾いたのに保存しています")
+			}
+		})
 	}
 }

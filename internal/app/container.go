@@ -33,7 +33,7 @@ type Container struct {
 	Notifier   domain.Notifier
 	// JobStatus はジョブの進行状況を記録します。Web 面が queued を、
 	// Worker 面が running / succeeded / failed を書きます。
-	JobStatus *jobstatus.Recorder[jobstatus.Status]
+	JobStatus *jobstatus.Recorder[domain.JobStatus]
 	// Business Logic
 	Pipeline domain.Pipeline
 	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。

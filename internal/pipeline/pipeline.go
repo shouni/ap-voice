@@ -18,13 +18,13 @@ type Pipeline struct {
 	// scripts は保存済み台本の読み出しです。synthesize が JobID だけを渡されたときに使います。
 	scripts domain.ScriptStore
 	// status はジョブの進行状況です。nil でも動きます（記録しないだけ）。
-	status *jobstatus.Recorder[jobstatus.Status]
+	status *jobstatus.Recorder[domain.JobStatus]
 	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
 	timeout time.Duration
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobstatus.Recorder[jobstatus.Status], timeout time.Duration) *Pipeline {
+func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobstatus.Recorder[domain.JobStatus], timeout time.Duration) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
@@ -37,14 +37,16 @@ func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain
 
 // record は、ジョブの状態を書きます。**記録の失敗で処理は止めません** —
 // 状態は進行を知るためのもので、成果物より重くはありません。
-func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstatus.State, apply ...func(next, prev *jobstatus.Status)) {
+func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstatus.State, apply ...func(next, prev *domain.JobStatus)) {
 	if p.status == nil || req.JobID == "" {
 		return
 	}
-	p.status.Record(ctx, req.JobID, jobstatus.Status{
-		JobID:   req.JobID,
-		Command: string(req.Command),
-		State:   state,
+	p.status.Record(ctx, req.JobID, domain.JobStatus{
+		Status: jobstatus.Status{
+			JobID:   req.JobID,
+			Command: string(req.Command),
+			State:   state,
+		},
 	}, apply...)
 }
 
@@ -69,16 +71,20 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		if err != nil {
 			// **通知と同じ ctx を使います。** 打ち切り済みの ctx で書くと、
 			// 失敗したことすら記録に残りません。
-			p.record(notifyCtx, req, jobstatus.StateFailed, func(next, _ *jobstatus.Status) {
+			p.record(notifyCtx, req, jobstatus.StateFailed, func(next, prev *domain.JobStatus) {
 				next.Error = err.Error()
+				// **前回までの成果物は残ります。** 合成に失敗しても台本は既に
+				// 保存されているので、在り処を消すと詳細画面からやり直せません。
+				carryArtifacts(next, prev)
 			})
 			p.notifyFailure(notifyCtx, req, err)
 		}
 	}()
 
 	// 試行回数を進めます。2 以上なら再配信されたということです。
-	p.record(ctx, req, jobstatus.StateRunning, func(next, _ *jobstatus.Status) {
+	p.record(ctx, req, jobstatus.StateRunning, func(next, prev *domain.JobStatus) {
 		next.Attempts++
+		carryArtifacts(next, prev)
 	})
 
 	if err = req.Validate(); err != nil {
@@ -98,12 +104,38 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return err
 	}
 
-	p.record(notifyCtx, req, jobstatus.StateSucceeded, func(next, _ *jobstatus.Status) {
+	p.record(notifyCtx, req, jobstatus.StateSucceeded, func(next, prev *domain.JobStatus) {
 		next.Title = script.Title
+		carryArtifacts(next, prev)
+
+		// **成果物の在り処を状態に載せます。** 「できた」だけでは、投入した側が
+		// 音声へ辿り着けません。台本はどの経路でも保存され、音声は publish が
+		// 作ったときだけです（generate は台本までで終わります）。
+		layout := domain.NewStorageLayout()
+		next.ScriptURI = layout.ScriptURIFor(req.OutputURI)
+		if req.Command != domain.CommandGenerate {
+			next.AudioURI = req.OutputURI
+		}
 	})
 	p.notifySuccess(notifyCtx, req, publicURL)
 
 	return nil
+}
+
+// carryArtifacts は、前回の記録から成果物の在り処を引き継ぎます。
+//
+// ワーカーは毎回タスクから状態を組み立て直すため、これが無いと running を
+// 書いた時点で前回の音声の在り処が消えます。
+func carryArtifacts(next, prev *domain.JobStatus) {
+	if prev == nil {
+		return
+	}
+	if next.AudioURI == "" {
+		next.AudioURI = prev.AudioURI
+	}
+	if next.ScriptURI == "" {
+		next.ScriptURI = prev.ScriptURI
+	}
 }
 
 // publish は、Command に応じて保存する成果物を切り替えます。
