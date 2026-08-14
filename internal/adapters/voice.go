@@ -40,7 +40,6 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg conf
 		ctx,
 		httpClient,
 		cfg.APIURL,
-		true,
 		speakers,
 		voicevox.WithMaxParallelSegments(cfg.MaxParallelSegments),
 		voicevox.WithSegmentRateLimit(cfg.SegmentRateLimit),
