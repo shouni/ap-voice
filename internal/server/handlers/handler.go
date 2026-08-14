@@ -196,7 +196,10 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 		Modes:    h.modes,
 		Models:   h.models,
 		Message:  fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
-		Form:     domain.Request{Command: domain.CommandGenerate},
+		// **投入した内容をそのまま残します。** 同じソースからモードを変えて
+		// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
+		// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
+		Form: req,
 	})
 }
 
