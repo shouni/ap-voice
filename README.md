@@ -101,10 +101,11 @@ go run .        # SERVER_ROLE が必須
 | --- | --- | --- |
 | `generate` | 入力ソースから台本を作る。**音声は作りません** | `input_uri`, `output_uri` |
 | `synthesize` | 台本から音声を作る（Gemini を呼ばない） | `output_uri` と、`script` または `job_id` |
+| `generate_and_synthesize` | 台本を作ってそのまま音声まで作る。**確認を挟みません** | `input_uri`, `output_uri` |
 
 | フィールド | 説明 |
 | --- | --- |
-| `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
+| `command` | `generate` / `synthesize` / `generate_and_synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
 | `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |

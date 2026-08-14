@@ -21,6 +21,16 @@ const (
 	// CommandSynthesize は、台本から音声を作ります。台本は Script で直接渡すか、
 	// JobID で保存済みのものを指します。Gemini は呼ばれません。
 	CommandSynthesize Command = "synthesize"
+	// CommandGenerateAndSynthesize は、台本を作ってそのまま音声まで作ります。
+	//
+	// **確認を省く選択です。** 台本を直せるようになった今、確認を挟むかどうかは
+	// 利用者が決められます。短いモード（ニュース、楽曲紹介）のように直す前提が
+	// 薄いものでは、履歴を開いてもう一度押す手間の方が大きくなります。
+	//
+	// 分岐は増えません。resolveScript は「synthesize 以外」を生成扱いにし、
+	// publish は「generate 以外」を音声まで作る扱いにするため、この値は
+	// 両方の望ましい側へ落ちます。
+	CommandGenerateAndSynthesize Command = "generate_and_synthesize"
 )
 
 // ErrUnknownCommand は、未知の Command が指定されたことを表します。
@@ -67,7 +77,7 @@ func (r Request) Validate() error {
 	}
 
 	switch r.Command {
-	case CommandGenerate:
+	case CommandGenerate, CommandGenerateAndSynthesize:
 		if strings.TrimSpace(r.InputURI) == "" {
 			return errors.New("入力ソース(input_uri)が指定されていません")
 		}
@@ -77,11 +87,11 @@ func (r Request) Validate() error {
 			return errors.New("台本が特定できません。script を直接渡すか、保存済み台本の job_id を指定してください")
 		}
 	case "":
-		return fmt.Errorf("%w: command が指定されていません（%q または %q）",
-			ErrUnknownCommand, CommandGenerate, CommandSynthesize)
+		return fmt.Errorf("%w: command が指定されていません（%q / %q / %q）",
+			ErrUnknownCommand, CommandGenerate, CommandSynthesize, CommandGenerateAndSynthesize)
 	default:
-		return fmt.Errorf("%w: %q（%q または %q）",
-			ErrUnknownCommand, r.Command, CommandGenerate, CommandSynthesize)
+		return fmt.Errorf("%w: %q（%q / %q / %q）",
+			ErrUnknownCommand, r.Command, CommandGenerate, CommandSynthesize, CommandGenerateAndSynthesize)
 	}
 
 	return nil

@@ -13,8 +13,9 @@
 
 <main class="container main-content">
   <p class="text-secondary">
-    ドキュメントから<strong>ナレーション台本</strong>を作ります。台本ができたら履歴に並ぶので、
-    内容を確認してから音声を作ります。実行は非同期で、完了すると通知が届きます。
+    ドキュメントから<strong>ナレーション台本</strong>を作ります。台本は履歴に並び、
+    <strong>詳細画面で読みや話者を直してから</strong>音声にできます。直す必要が無ければ、
+    音声までまとめて作れます。実行は非同期で、完了すると通知が届きます。
   </p>
 
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
@@ -22,10 +23,6 @@
 
   <form method="post" action="/" class="card p-4 shadow-sm">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-    {{/* synthesize はここから選ばせません。台本を渡す口がフォームに無く、選んでも
-         必ず検証で弾かれるためです。台本からの合成は履歴の詳細画面が担います。 */}}
-    <input type="hidden" name="command" value="generate">
-
     <div class="mb-3">
       <label class="form-label fw-semibold" for="input_uri">入力ソース</label>
       <input class="form-control" type="text" id="input_uri" name="input_uri" value="{{ .Form.InputURI }}"
@@ -57,8 +54,19 @@
       出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。
     </div>
 
+    {{/* command はボタンが決めます。synthesize はここに出しません。台本を渡す口が
+         フォームに無く、選んでも検証で弾かれるためです（合成は詳細画面が担います）。 */}}
     <div class="d-grid gap-2">
-      <button class="btn btn-primary btn-lg" type="submit">台本を作成</button>
+      <button class="btn btn-primary btn-lg" type="submit" name="command" value="generate">
+        台本を作成
+      </button>
+      <button class="btn btn-outline-primary" type="submit" name="command" value="generate_and_synthesize">
+        台本と音声をまとめて作成
+      </button>
+      <div class="form-text">
+        まとめて作ると確認を挟みません。<strong>直す前提があるなら「台本を作成」</strong>を選び、
+        履歴の詳細画面で読みや話者を直してから音声にしてください。
+      </div>
     </div>
   </form>
 </main>

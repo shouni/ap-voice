@@ -168,11 +168,17 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// **フォームが選べる command は限られます。** synthesize は台本が要り、この画面には
+	// それを渡す口がありません。Validate も弾きますが、受け付ける値をここで명示して
+	// おくと、画面から来るものと API から来るものの境界がはっきりします。
+	command := domain.Command(r.FormValue("command"))
+	if command != domain.CommandGenerate && command != domain.CommandGenerateAndSynthesize {
+		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, "この画面から実行できない処理です")
+		return
+	}
+
 	// **出力先はフォームから受け取りません。** ジョブ ID から導くことで、1 ジョブの
 	// 成果物が必ず 1 つのプレフィックスにまとまり、あとから一覧・削除できます。
-	//
-	// command も同様にフォームでは選ばせません。synthesize は台本が要り、この画面には
-	// それを渡す口が無いためです。台本からの再合成は履歴の詳細画面が担います。
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
 		h.renderError(w, r, http.StatusInternalServerError, domain.Request{}, "ジョブIDの発行に失敗しました")
@@ -180,7 +186,7 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := domain.Request{
-		Command:   domain.Command(r.FormValue("command")),
+		Command:   command,
 		JobID:     jobID,
 		InputURI:  r.FormValue("input_uri"),
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
@@ -210,6 +216,16 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 		// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
 		Form: req,
 	})
+}
+
+// acceptedMessage は、受け付けた処理に応じた案内文を返します。
+// **どちらを押したかが分かる文面**にします。まとめて作った場合は音声まで待つため、
+// 「履歴に並びます」だけでは、次に何を待てばよいのか分かりません。
+func acceptedMessage(command domain.Command, jobID string) string {
+	if command == domain.CommandGenerateAndSynthesize {
+		return fmt.Sprintf("台本と音声の作成を受け付けました（%s）。完了すると通知が届きます。", jobID)
+	}
+	return fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", jobID)
 }
 
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, form domain.Request, msg string) {

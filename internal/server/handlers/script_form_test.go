@@ -9,6 +9,7 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
+	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // testHandler は、実際の話者一覧を積んだ Handler を返します。
@@ -179,5 +180,29 @@ func TestScriptFromFormRejectsTooManyLines(t *testing.T) {
 
 	if _, err := parseScript(t, h, values); err == nil {
 		t.Fatalf("%d 行が素通りしました（上限 %d）", n, maxScriptLines)
+	}
+}
+
+// TestAcceptedMessageTellsWhichButtonWasPressed は、受付の案内文が押したボタンで
+// 変わることを検証します。
+//
+// まとめて作った場合は音声まで待つため、「履歴に並びます」だけだと
+// 次に何を待てばよいのか分かりません。
+func TestAcceptedMessageTellsWhichButtonWasPressed(t *testing.T) {
+	t.Parallel()
+
+	oneShot := acceptedMessage(domain.CommandGenerateAndSynthesize, "voice-1")
+	scriptOnly := acceptedMessage(domain.CommandGenerate, "voice-1")
+
+	if !strings.Contains(oneShot, "音声") || !strings.Contains(oneShot, "通知") {
+		t.Errorf("まとめて作成の案内が音声に触れていません: %q", oneShot)
+	}
+	if strings.Contains(scriptOnly, "音声") {
+		t.Errorf("台本のみの案内が音声に触れています: %q", scriptOnly)
+	}
+	for _, msg := range []string{oneShot, scriptOnly} {
+		if !strings.Contains(msg, "voice-1") {
+			t.Errorf("ジョブIDが入っていません: %q", msg)
+		}
 	}
 }

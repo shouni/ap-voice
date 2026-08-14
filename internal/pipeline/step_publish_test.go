@@ -193,3 +193,43 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 }
+
+// TestPublishStepRunSavesScriptBeforeAudio は、台本を音声より先に保存することを
+// 検証します。
+//
+// **台本と音声をまとめて作る経路では、生成した台本はまだどこにも無い状態です。**
+// 音声を先に作ると、合成が上限に達した時点で Gemini の生成結果ごと失われ、
+// もう一度生成し直すしかなくなります。先に保存しておけば、詳細画面から
+// 合成だけをやり直せます。
+func TestPublishStepRunSavesScriptBeforeAudio(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	voice := &mockVoice{
+		uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error {
+			order = append(order, "script")
+			return nil
+		},
+		uploadWavFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error {
+			order = append(order, "wav")
+			return errors.New("合成が打ち切られました")
+		},
+	}
+
+	step := NewPublishStep(voice, nil)
+	_, err := step.Run(context.Background(), "gs://bucket/voice/job/audio.wav", domain.Script{
+		Title: "題名",
+		Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Style: "ノーマル", Text: "本文"}},
+	})
+	if err == nil {
+		t.Fatal("合成が失敗したのにエラーになりません")
+	}
+
+	if len(order) == 0 || order[0] != "script" {
+		t.Fatalf("保存の順序 = %v, want 台本が先", order)
+	}
+	// 合成が落ちても、台本は既に保存されています。
+	if len(order) != 2 {
+		t.Errorf("順序 = %v, want [script wav]", order)
+	}
+}

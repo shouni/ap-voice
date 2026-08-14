@@ -195,11 +195,17 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
     writes the script only. **It produces no audio and returns no signed URL**, deliberately:
     signing does not check that the object exists, so signing a WAV that was never made hands out
     a 404 link in the Slack notification.
+  - `generate_and_synthesize` — the same as `generate` followed by `synthesize`, for when there
+    is nothing to fix. **It needs no new branching**: `resolveScript` treats anything that is not
+    `synthesize` as a generation, and `publish` treats anything that is not `generate` as going
+    all the way to audio, so the third value lands on the wanted side of both.
   - `synthesize` — never touches Gemini. It uses `Request.Script` when present and otherwise
     loads the stored script by `JobID` (`domain.ScriptStore`). The web face always takes the
     second path: **the script is not carried in the task payload**, because a long one can reach
-    Cloud Tasks' 1MB limit. `PublishStep.Run` writes the WAV *and* rewrites the script, so an
-    edited script cannot drift from the audio that was actually spoken.
+    Cloud Tasks' 1MB limit. `PublishStep.Run` rewrites the script *and* writes the WAV, so an
+    edited script cannot drift from the audio that was actually spoken. **The script goes
+    first**: in the combined command it exists only in memory until then, so writing audio first
+    would lose a generated script to a synthesis timeout, leaving nothing to retry from.
 
   `Request.Command` has **no default**: an empty command is an error, because silently treating it
   as `generate` would discard a caller's `script` and bill them for generation. `Request.Validate`
