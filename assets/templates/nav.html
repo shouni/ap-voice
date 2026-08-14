@@ -22,9 +22,14 @@
       {{/* 既定モデルは設定（GEMINI_MODELS）から出します。モデル ID は Google の都合で
            変わるため、ここに文言で書くと必ず古くなります。 */}}
       {{ with .DefaultModel }}
-        <span class="navbar-text text-white-50 small text-truncate me-3">{{ . }}</span>
+        <span class="navbar-text text-white-50 small text-truncate">{{ . }}</span>
       {{ end }}
-      <a class="nav-link" href="/auth/logout">ログアウト</a>
+      {{/* ログアウトのリンクは置きません。/auth/logout はアプリのセッション Cookie を
+           消しますが、**Google 側のセッションは終わらせられません。** 直後に
+           /auth/login へ飛び、Google が何も尋ねずに承認して戻すため（コールバックに
+           prompt=none が付きます）、0.5 秒で入り直した状態になります。
+           押しても何も起きないように見えるボタンを置くくらいなら、無い方が正直です。
+           御三家（ap-comp / ap-mv / ap-story）にも同じ理由で置いていません。 */}}
     </div>
   </div>
 </nav>

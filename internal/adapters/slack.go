@@ -123,16 +123,49 @@ func (s *SlackAdapter) writeCommonMetadata(body *notify.Body, req domain.Request
 
 	// synthesize は入力URI・モード・モデルを持たないため、通知に処理名が無いと
 	// 「項目が欠けている」のか「台本から合成しただけ」なのか読み分けられません。
-	return body.
+	body = body.
 		Code("処理", string(req.Command)).
-		Code("ジョブID", req.JobID).
-		Code("入力URI", req.InputURI).
-		// **ファイル名まで出しません。** generate の時点では音声がまだ無く、
-		// audio.wav を出力先として示すと存在しないものを案内することになります。
-		// 何が置かれたかは詳細画面が示します。
-		Code("出力先", outputPrefix(req.OutputURI)).
+		Code("ジョブID", req.JobID)
+
+	writeURIField(body, "入力URI", req.InputURI)
+	// **ファイル名まで出しません。** generate の時点では音声がまだ無く、
+	// audio.wav を出力先として示すと存在しないものを案内することになります。
+	// 何が置かれたかは詳細画面が示します。
+	writeURIField(body, "出力先", outputPrefix(req.OutputURI))
+
+	return body.
 		Code("モード", req.Mode).
 		Code("モデル", req.AIModel)
+}
+
+// writeURIField は、URI をコンソールへのリンクとして追記します。
+//
+// **`gs://` は Slack ではただの文字列です。** クリックしても何も起きないため、
+// 表示は `gs://` のまま、リンク先だけ Cloud Console に向けます。
+// リンクを作れない相手（http(s) の入力ソースなど）は素の値として並びます。
+// ap-mv の `writeURIField` と同じ形です。
+func writeURIField(body *notify.Body, label, uri string) {
+	uri = strings.TrimSpace(uri)
+	body.LinkOrField(label, gcsConsoleURL(uri), uri)
+}
+
+// gcsConsoleURL は gs:// URI に対応する Cloud Console の URL を返します。
+// gs:// 以外（http(s) や空文字）の場合は空文字を返します。
+//
+// 末尾がスラッシュのものはディレクトリ扱いでバケットブラウザへ、
+// 単体オブジェクトは詳細ページへ飛ばします。
+func gcsConsoleURL(uri string) string {
+	const scheme = "gs://"
+
+	objectPath, ok := strings.CutPrefix(strings.TrimSpace(uri), scheme)
+	if !ok || objectPath == "" {
+		return ""
+	}
+
+	if strings.HasSuffix(objectPath, "/") {
+		return "https://console.cloud.google.com/storage/browser/" + objectPath
+	}
+	return "https://console.cloud.google.com/storage/browser/_details/" + objectPath
 }
 
 // outputPrefix は出力先のジョブ単位のプレフィックスを返します。
