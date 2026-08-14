@@ -40,7 +40,9 @@ var SpeakersJSON []byte
 //go:embed templates/*.html
 var Templates embed.FS
 
-// StaticFiles は Web 面の静的ファイル（CSS）です。
+// StaticFiles は Web 面の静的ファイルです。いまは CSS だけで、自前の JS はありません
+// （Bootstrap は CDN から読み、音声は <audio controls> で足りるため）。
+// ディレクトリごと埋め込むので、static/js を置けば配信は自動で効きます。
 //
 //go:embed static
 var StaticFiles embed.FS

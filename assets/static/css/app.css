@@ -46,3 +46,13 @@ body {
 .card {
     border-color: var(--app-border-color);
 }
+
+/* ナビは Bootstrap の navbar-dark を前提に、地の色だけテーマへ寄せます。 */
+.navbar {
+    background-color: var(--zunda-green);
+}
+
+.navbar .nav-link.active {
+    color: #fff !important;
+    font-weight: 600;
+}
