@@ -512,3 +512,54 @@ func TestAPIEnqueueRejectsBadSuppliedScript(t *testing.T) {
 		})
 	}
 }
+
+// TestAPIEnqueueResolvesRecipeFromMusicJobID は、楽曲のジョブ ID から
+// レシピの場所が組み立てられることを検証します。
+//
+// **規則は ap-voice が持ちます。** 呼び出し側に gs:// を組み立てさせると、
+// 置き場を変えるときに全員へ知らせて回ることになります。画面の
+// 「楽曲レシピ」タブと同じ関数を通るので、両者がずれることもありません。
+func TestAPIEnqueueResolvesRecipeFromMusicJobID(t *testing.T) {
+	t.Parallel()
+
+	queue := &capturingQueue{}
+	h := apiHandler(t, nil)
+	h.queue = queue
+	h.musicBucket = "ap-music"
+
+	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(
+		`{"command":"generate","music_job_id":"music-20260814-031712-5c812debb05f","mode":"music_promo"}`))
+	rec := httptest.NewRecorder()
+	h.APIEnqueue(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+	const want = "gs://ap-music/music/music-20260814-031712-5c812debb05f/recipe.json"
+	if queue.got.InputURI != want {
+		t.Errorf("InputURI = %q, want %q", queue.got.InputURI, want)
+	}
+}
+
+// TestAPIEnqueueRejectsBadMusicJobID は、形式の違うジョブ ID を投入前に
+// 弾くことを検証します。存在しない場所を指すジョブを作らないためです。
+func TestAPIEnqueueRejectsBadMusicJobID(t *testing.T) {
+	t.Parallel()
+
+	queue := &capturingQueue{}
+	h := apiHandler(t, nil)
+	h.queue = queue
+	h.musicBucket = "ap-music"
+
+	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(
+		`{"command":"generate","music_job_id":"not-a-job-id","mode":"music_promo"}`))
+	rec := httptest.NewRecorder()
+	h.APIEnqueue(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if queue.calls != 0 {
+		t.Errorf("弾いたのに投入しています: %d 回", queue.calls)
+	}
+}

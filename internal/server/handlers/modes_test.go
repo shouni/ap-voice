@@ -47,7 +47,9 @@ func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 	renderer := &stubRenderer{}
 	h := testModesHandler(t, renderer,
 		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{Label: "技術解説・ひとり語り"}},
-		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{Label: "楽曲紹介"}},
+		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
+			Label: "楽曲紹介", Input: assets.InputRecipe,
+		}},
 	)
 
 	body := render(t, h.Modes, "/modes")
@@ -55,24 +57,28 @@ func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 	if len(renderer.got) != 0 {
 		t.Errorf("一覧でプロンプトを %d 回組み立てています", len(renderer.got))
 	}
-	for _, want := range []string{"tech_solo", "楽曲紹介", `href="/modes/tech_solo"`} {
+	// 入力の型も一覧に出ます。作成画面のどのタブに並ぶかがこれで決まるためです。
+	for _, want := range []string{"tech_solo", "楽曲紹介", `href="/modes/tech_solo"`, "テキスト", "楽曲レシピ"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("一覧に %q が出ていません", want)
 		}
 	}
 }
 
-// TestModeDetailRetriesWithRecipe は、素のテキストで組み立てられないモードが
-// レシピ形式で試し直されることを検証します。
+// TestModeDetailPicksTheSampleFromFrontMatter は、入力の型に合った仮の入力が
+// 一度で選ばれることを検証します。
 //
-// **画面にモード名を書かないための仕組みです。** 入力の型が違うモードは
-// adapters が 1 箇所だけ名指ししており、こちらにも書くと片方だけ古くなります。
-func TestModeDetailRetriesWithRecipe(t *testing.T) {
+// **以前は素のテキストで試し、失敗したらレシピで試し直していました。**
+// 当てずっぽうだと、本当の組み立て失敗も「型が違っただけ」に見えて隠れます。
+// どちらを渡すかは front matter の input が最初から知っています。
+func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
 	t.Parallel()
 
 	renderer := &stubRenderer{recipeOnly: "music_promo"}
 	h := testModesHandler(t, renderer,
-		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{Label: "楽曲紹介"}},
+		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
+			Label: "楽曲紹介", Input: assets.InputRecipe,
+		}},
 	)
 
 	body := renderDetailFor(t, h, "music_promo")
@@ -81,11 +87,40 @@ func TestModeDetailRetriesWithRecipe(t *testing.T) {
 		t.Error("本文が出ていません")
 	}
 	if strings.Contains(body, "組み立てに失敗しました") {
-		t.Error("再試行が効かずエラー表示になっています")
+		t.Error("エラー表示になっています")
 	}
-	// 1 回目（素のテキスト）と 2 回目（レシピ）で 2 度呼ばれます。
-	if len(renderer.got) != 2 {
-		t.Errorf("呼び出し回数 = %d, want 2", len(renderer.got))
+	// **1 回だけです。** 型が分かっているので、外して試す必要がありません。
+	if len(renderer.got) != 1 {
+		t.Errorf("呼び出し回数 = %d, want 1", len(renderer.got))
+	}
+}
+
+// TestModeDetailShowsTheInputKind は、詳細に入力の型が出ることを検証します。
+//
+// 型が作成画面のどのタブに出るかを決めるため、カタログを見た人が
+// 「このモードはどこから投げるのか」を判断できる必要があります。
+func TestModeDetailShowsTheInputKind(t *testing.T) {
+	t.Parallel()
+
+	renderer := &stubRenderer{recipeOnly: "music_promo"}
+	h := testModesHandler(t, renderer,
+		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
+			Label: "楽曲紹介", Input: assets.InputRecipe,
+		}},
+		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{Label: "ひとり語り"}},
+	)
+
+	recipe := renderDetailFor(t, h, "music_promo")
+	if !strings.Contains(recipe, "楽曲レシピ") || !strings.Contains(recipe, "ジョブID") {
+		t.Error("レシピ入力であることが詳細に出ていません")
+	}
+
+	text := renderDetailFor(t, h, "tech_solo")
+	if !strings.Contains(text, "入力ソース") {
+		t.Error("テキスト入力であることが詳細に出ていません")
+	}
+	if strings.Contains(text, "ジョブID") {
+		t.Error("テキスト入力なのにジョブIDの案内が出ています")
 	}
 }
 

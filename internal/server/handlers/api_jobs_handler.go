@@ -53,8 +53,14 @@ type apiAccepted struct {
 type apiEnqueue struct {
 	Command  string `json:"command"`
 	InputURI string `json:"input_uri,omitempty"`
-	Mode     string `json:"mode,omitempty"`
-	AIModel  string `json:"ai_model,omitempty"`
+	// MusicJobID は、入力が ap-comp の楽曲レシピのときのジョブ ID です。
+	//
+	// **解決はここでやります。** 呼び出し側に gs:// を組み立てさせると、
+	// 置き場の規則がサービスの外へ漏れ、変えるときに全員へ知らせて回ることに
+	// なります。画面の「楽曲レシピ」タブと同じ関数を通ります。
+	MusicJobID string `json:"music_job_id,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+	AIModel    string `json:"ai_model,omitempty"`
 	// Script は command が synthesize のときの台本です。
 	Script *domain.Script `json:"script,omitempty"`
 }
@@ -109,6 +115,18 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// music_job_id は input_uri より優先します（ap-mv の compose_video と同じ）。
+	// 両方来たときに黙って片方を捨てるより、ID を書いた側の意図を採ります。
+	inputURI := body.InputURI
+	if body.MusicJobID != "" {
+		resolved, rErr := h.recipeInputURI(body.MusicJobID)
+		if rErr != nil {
+			writeErrorJSON(w, http.StatusBadRequest, rErr.Error())
+			return
+		}
+		inputURI = resolved
+	}
+
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "ジョブIDの発行に失敗しました")
@@ -118,7 +136,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	req := domain.Request{
 		Command:   command,
 		JobID:     jobID,
-		InputURI:  body.InputURI,
+		InputURI:  inputURI,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 		Mode:      body.Mode,
 		AIModel:   body.AIModel,

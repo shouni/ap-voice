@@ -66,13 +66,14 @@ func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 
 	view := modeDetailView{baseView: h.base(r), Mode: mode}
 
-	// **モード名をここに書きません。** 入力の型が違うモードは adapters 側が
-	// 1 箇所だけ名指ししており、二重に持つと片方だけ古くなります。
-	// 素のテキストで組み立てられなければ、レシピ形式で試し直します。
-	prompt, err := h.renderer.Generate(key, samplePlaceholder)
-	if err != nil {
-		prompt, err = h.renderer.Generate(key, sampleRecipe)
+	// **入力の型は front matter が持っています。** 以前は素のテキストで試して
+	// 失敗したらレシピで試し直していましたが、当てずっぽうだと本当の失敗も
+	// 「型が違っただけ」に見えて隠れます。どちらを渡すかは最初から分かります。
+	sample := samplePlaceholder
+	if mode.NeedsRecipe() {
+		sample = sampleRecipe
 	}
+	prompt, err := h.renderer.Generate(key, sample)
 	if err != nil {
 		slog.WarnContext(r.Context(), "プロンプトの組み立てに失敗しました", "mode", key, "error", err)
 		view.Error = err.Error()
