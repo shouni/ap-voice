@@ -14,19 +14,10 @@ import (
 // TemplateData はプロンプトのテンプレートに渡すデータ構造です。
 type TemplateData struct {
 	InputText string
-	// Recipe は promoMode のときだけ非 nil です。楽曲レシピを素の JSON 文字列のまま
+	// Recipe は input: "recipe" のモードのときだけ非 nil です。楽曲レシピを素の JSON 文字列のまま
 	// 渡すと、AI が読み違えても気付けないうえ、テンプレートから項目を指せません。
 	Recipe *music.Recipe
 }
-
-// promoMode は、入力を楽曲レシピ（ap-comp が出力する recipe.json）として解釈する
-// 唯一のモードです。ほかのモードは入力を素のテキストとして扱います。
-//
-// モードは prompts/<mode>.md を置くだけで増える仕組みなので、ここに名前が要るのは
-// 「入力の型が違う」モードだけです。文章を渡すモードを足すときはここを触りません。
-//
-// **ファイル名を変えたらここも変わります。** モード名がコードに現れる唯一の場所です。
-const promoMode = "music_promo"
 
 // promptBuilder は、フォーマット済みのプロンプトを作成するためのインターフェースです。
 type promptBuilder interface {
@@ -36,6 +27,13 @@ type promptBuilder interface {
 // PromptAdapter は、さまざまなモードとデータに基づいてプロンプトを生成する役割を担います。
 type PromptAdapter struct {
 	scriptBuilder promptBuilder
+	// recipeModes は、入力を楽曲レシピとして解釈するモードです。
+	//
+	// **モード名をここに書きません。** prompts/<mode>.md の front matter が
+	// `input: "recipe"` を持つかどうかで決まるため、モードを足すのは
+	// ファイルを置くだけで済みます。画面のタブも同じ front matter を読むので、
+	// 「どのモードがレシピ入力か」の答えが 2 箇所に分かれません。
+	recipeModes map[string]bool
 }
 
 // NewPromptAdapter は動的に読み込んだテンプレートを使用して PromptAdapter を構築します。
@@ -49,8 +47,18 @@ func NewPromptAdapter() (*PromptAdapter, error) {
 		return nil, fmt.Errorf("ビルダーの構築に失敗: %w", err)
 	}
 
+	modes, err := assets.LoadModes()
+	if err != nil {
+		return nil, err
+	}
+	recipeModes := make(map[string]bool, 1)
+	for _, m := range assets.FilterModes(modes, assets.InputRecipe) {
+		recipeModes[m.Key] = true
+	}
+
 	return &PromptAdapter{
 		scriptBuilder: builder,
+		recipeModes:   recipeModes,
 	}, nil
 }
 
@@ -59,7 +67,7 @@ func (p *PromptAdapter) Generate(mode, content string) (string, error) {
 	data := TemplateData{
 		InputText: content,
 	}
-	if mode == promoMode {
+	if p.recipeModes[mode] {
 		recipe, err := decodeRecipe(content)
 		if err != nil {
 			return "", err

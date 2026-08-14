@@ -164,6 +164,11 @@ type StorageConfig struct {
 	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
 	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
 	GCSBucket string `env:"GCS_VOICE_BUCKET"`
+	// MusicBucket は、楽曲紹介モードの入力（ap-comp の recipe.json）を
+	// ジョブ ID から解決するために使います。
+	// **ap-mv と同じ環境変数・同じ規則です**（gs://<MusicBucket>/music/<jobID>/recipe.json）。
+	// 読む側が 2 つに増えたので、片方だけ別名にすると設定を移すときに取り違えます。
+	MusicBucket string `env:"AP_MUSIC_BUCKET" envDefault:"ap-music"`
 }
 
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。

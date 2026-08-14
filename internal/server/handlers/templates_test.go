@@ -46,6 +46,8 @@ func testModes() []assets.Mode {
 			Label:     "楽曲紹介（春日部つむぎ × ずんだもん）",
 			Direction: "楽曲レシピから作る宣伝ナレーション",
 			UseWhen:   "recipe.json のとき",
+			// 入力の型がタブを決めます。promo だけがレシピ入力です。
+			Input: assets.InputRecipe,
 		}},
 		{Key: "solo"},
 	}
@@ -74,10 +76,11 @@ func TestTemplatesRender(t *testing.T) {
 			name:     "投入フォーム",
 			template: "home.html",
 			view: formView{
-				baseView: testBaseView("/"),
-				Modes:    testModes(),
-				Models:   []string{"gemini-test"},
-				Message:  "受け付けました",
+				baseView:    testBaseView("/"),
+				TextModes:   assets.FilterModes(testModes(), assets.InputText),
+				RecipeModes: assets.FilterModes(testModes(), assets.InputRecipe),
+				Models:      []string{"gemini-test"},
+				Message:     "受け付けました",
 				// 投入後の再描画では入力内容が残ります。空に戻すと
 				// 同じソースから作り直すのに URL を貼り直すことになります。
 				Form: domain.Request{
@@ -196,10 +199,11 @@ func TestFormKeepsSelectedMode(t *testing.T) {
 
 	var buf strings.Builder
 	err := tmpl.ExecuteTemplate(&buf, "home.html", formView{
-		baseView: testBaseView("/"),
-		Modes:    testModes(),
-		Models:   []string{"gemini-test"},
-		Form:     domain.Request{Command: domain.CommandGenerate, Mode: "promo"},
+		baseView:    testBaseView("/"),
+		TextModes:   assets.FilterModes(testModes(), assets.InputText),
+		RecipeModes: assets.FilterModes(testModes(), assets.InputRecipe),
+		Models:      []string{"gemini-test"},
+		Form:        domain.Request{Command: domain.CommandGenerate, Mode: "promo"},
 	})
 	if err != nil {
 		t.Fatalf("home.html の描画に失敗しました: %v", err)
@@ -226,10 +230,11 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 
 	views := map[string]any{
 		"home.html": formView{
-			baseView: testBaseView("/"),
-			Modes:    testModes(),
-			Models:   []string{"gemini-test"},
-			Form:     domain.Request{Command: domain.CommandGenerate},
+			baseView:    testBaseView("/"),
+			TextModes:   assets.FilterModes(testModes(), assets.InputText),
+			RecipeModes: assets.FilterModes(testModes(), assets.InputRecipe),
+			Models:      []string{"gemini-test"},
+			Form:        domain.Request{Command: domain.CommandGenerate},
 		},
 		"detail.html": detailView{
 			baseView: testBaseView("/history/voice-1"),

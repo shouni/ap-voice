@@ -6,6 +6,7 @@
   <title>AP Voice</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
@@ -21,54 +22,134 @@
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
-  <form method="post" action="/" class="card p-4 shadow-sm">
-    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-    <div class="mb-3">
-      <label class="form-label fw-semibold" for="input_uri">入力ソース</label>
-      <input class="form-control" type="text" id="input_uri" name="input_uri" value="{{ .Form.InputURI }}"
-             placeholder="https://example.com/article  または  gs://bucket/doc.md">
-      <div class="form-text">Web URL と GCS を透過的に読みます。</div>
-    </div>
-
-    <div class="mb-3">
-      <label class="form-label fw-semibold" for="mode">生成モード</label>
-      {{/* 表示名も説明も prompts/<key>.md の front matter から来ます。値として送るのは
-           キーのままで、これがそのまま worker が読むファイル名になります。 */}}
-      <select class="form-select" id="mode" name="mode">
-        {{ range .Modes }}<option value="{{ .Key }}"
-                data-direction="{{ .Direction }}"
-                data-usewhen="{{ .UseWhen }}"
-                {{ if eq $.Form.Mode .Key }}selected{{ end }}>{{ .DisplayName }}</option>{{ end }}
-      </select>
-      <div class="form-text js-mode-desc" data-for="mode"></div>
-    </div>
-
-    <div class="mb-3">
-      <label class="form-label fw-semibold" for="ai_model">モデル</label>
-      <select class="form-select" id="ai_model" name="ai_model">
-        {{ range $i, $m := .Models }}<option value="{{ $m }}" {{ if eq $.Form.AIModel $m }}selected{{ end }}>{{ $m }}{{ if eq $i 0 }}（既定）{{ end }}</option>{{ end }}
-      </select>
-    </div>
-
-    <div class="form-text mb-3">
-      出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。
-    </div>
-
-    {{/* command はボタンが決めます。synthesize はここに出しません。台本を渡す口が
-         フォームに無く、選んでも検証で弾かれるためです（合成は詳細画面が担います）。 */}}
-    <div class="d-grid gap-2">
-      <button class="btn btn-primary btn-lg" type="submit" name="command" value="generate">
-        台本を作成
+  {{/* タブは入力の型で分かれています。**タブごとに別のフォーム**にしてあるので、
+       生成モードの選択肢はサーバ側で出し分け済みです。JavaScript で <select> を
+       組み替えると、どのモードがどの入力を取るかの根拠が画面側に移ります。 */}}
+  <ul class="nav nav-tabs app-tabs mb-4" id="createTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ if ne .ActiveTab "recipe" }}{{ if ne .ActiveTab "script" }}active{{ end }}{{ end }}"
+              data-bs-toggle="tab" data-bs-target="#tab-input" type="button" role="tab">
+        <i class="bi bi-link-45deg me-1"></i>入力ソース
       </button>
-      <button class="btn btn-outline-primary" type="submit" name="command" value="generate_and_synthesize">
-        台本と音声をまとめて作成
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ if eq .ActiveTab "recipe" }}active{{ end }}"
+              data-bs-toggle="tab" data-bs-target="#tab-recipe" type="button" role="tab">
+        <i class="bi bi-music-note-beamed me-1"></i>楽曲レシピ
       </button>
-      <div class="form-text">
-        まとめて作ると確認を挟みません。<strong>直す前提があるなら「台本を作成」</strong>を選び、
-        履歴の詳細画面で読みや話者を直してから音声にしてください。
-      </div>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ if eq .ActiveTab "script" }}active{{ end }}"
+              data-bs-toggle="tab" data-bs-target="#tab-script" type="button" role="tab">
+        <i class="bi bi-code-slash me-1"></i>台本JSON
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    {{/* --- 入力ソース：文書から台本を書かせる --- */}}
+    <div class="tab-pane fade {{ if ne .ActiveTab "recipe" }}{{ if ne .ActiveTab "script" }}show active{{ end }}{{ end }}"
+         id="tab-input" role="tabpanel">
+      <form method="post" action="/" class="card p-4 shadow-sm">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="source" value="input">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="input_uri">入力ソース</label>
+          <input class="form-control" type="text" id="input_uri" name="input_uri" value="{{ .Form.InputURI }}"
+                 placeholder="https://example.com/article  または  gs://bucket/doc.md">
+          <div class="form-text">Web URL と GCS を透過的に読みます。</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="mode_input">生成モード</label>
+          {{/* 表示名も説明も prompts/<key>.md の front matter から来ます。値として送るのは
+               キーのままで、これがそのまま worker が読むファイル名になります。 */}}
+          <select class="form-select" id="mode_input" name="mode">
+            {{ range .TextModes }}<option value="{{ .Key }}"
+                    data-direction="{{ .Direction }}"
+                    data-usewhen="{{ .UseWhen }}"
+                    {{ if eq $.Form.Mode .Key }}selected{{ end }}>{{ .DisplayName }}</option>{{ end }}
+          </select>
+          <div class="form-text js-mode-desc" data-for="mode_input"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="ai_model">モデル</label>
+          <select class="form-select" id="ai_model" name="ai_model">
+            {{ range $i, $m := .Models }}<option value="{{ $m }}" {{ if eq $.Form.AIModel $m }}selected{{ end }}>{{ $m }}{{ if eq $i 0 }}（既定）{{ end }}</option>{{ end }}
+          </select>
+        </div>
+
+        {{ template "create_buttons" . }}
+      </form>
     </div>
-  </form>
+
+    {{/* --- 楽曲レシピ：ap-comp の recipe.json から宣伝ナレーションを書かせる --- */}}
+    <div class="tab-pane fade {{ if eq .ActiveTab "recipe" }}show active{{ end }}" id="tab-recipe" role="tabpanel">
+      <form method="post" action="/" class="card p-4 shadow-sm">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="source" value="recipe">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="music_job_id">楽曲のジョブID</label>
+          <input class="form-control" type="text" id="music_job_id" name="music_job_id" value="{{ .MusicJobID }}"
+                 placeholder="music-20260814-031712-5c812debb05f">
+          <div class="form-text">
+            ap-comp のジョブIDです。<strong>gs:// のパスは要りません</strong> —
+            公開済みの楽曲レシピの場所をIDから導きます。
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="mode_recipe">生成モード</label>
+          <select class="form-select" id="mode_recipe" name="mode">
+            {{ range .RecipeModes }}<option value="{{ .Key }}"
+                    data-direction="{{ .Direction }}"
+                    data-usewhen="{{ .UseWhen }}"
+                    {{ if eq $.Form.Mode .Key }}selected{{ end }}>{{ .DisplayName }}</option>{{ end }}
+          </select>
+          <div class="form-text js-mode-desc" data-for="mode_recipe"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="ai_model_recipe">モデル</label>
+          <select class="form-select" id="ai_model_recipe" name="ai_model">
+            {{ range $i, $m := .Models }}<option value="{{ $m }}" {{ if eq $.Form.AIModel $m }}selected{{ end }}>{{ $m }}{{ if eq $i 0 }}（既定）{{ end }}</option>{{ end }}
+          </select>
+        </div>
+
+        {{ template "create_buttons" . }}
+      </form>
+    </div>
+
+    {{/* --- 台本JSON：書き上がった台本をそのまま合成する --- */}}
+    <div class="tab-pane fade {{ if eq .ActiveTab "script" }}show active{{ end }}" id="tab-script" role="tabpanel">
+      <form method="post" action="/" class="card p-4 shadow-sm">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="source" value="script">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="script_json">台本JSON</label>
+          <textarea class="form-control font-monospace" id="script_json" name="script_json" rows="14"
+                    placeholder='{"title": "...", "lines": [{"speaker": "ずんだもん", "style": "ノーマル", "text": "..."}]}'>{{ .ScriptJSON }}</textarea>
+          <div class="form-text">
+            <strong>生成モードはありません</strong> — Gemini を通さず、貼った台本をそのまま音声にします。
+            話者とスタイルは実在する組み合わせだけが通ります。
+          </div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary btn-lg" type="submit" name="command" value="synthesize">
+            音声を作成
+          </button>
+          <div class="form-text">
+            新しいジョブIDを発行して保存してから合成します。投入後は履歴の詳細で直せます。
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
@@ -76,3 +157,22 @@
 <script src="/static/js/mode_desc.js"></script>
 </body>
 </html>{{ end }}
+{{ define "create_buttons" }}
+  <div class="form-text mb-3">
+    出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。
+  </div>
+
+  {{/* command はボタンが決めます。 */}}
+  <div class="d-grid gap-2">
+    <button class="btn btn-primary btn-lg" type="submit" name="command" value="generate">
+      台本を作成
+    </button>
+    <button class="btn btn-outline-primary" type="submit" name="command" value="generate_and_synthesize">
+      台本と音声をまとめて作成
+    </button>
+    <div class="form-text">
+      まとめて作ると確認を挟みません。<strong>直す前提があるなら「台本を作成」</strong>を選び、
+      履歴の詳細画面で読みや話者を直してから音声にしてください。
+    </div>
+  </div>
+{{ end }}
