@@ -428,7 +428,11 @@ func TestPipelineNotifications(t *testing.T) {
 func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	t.Parallel()
 
-	notified := make(chan context.Context, 1)
+	type failure struct {
+		ctx context.Context
+		err error
+	}
+	notified := make(chan failure, 1)
 
 	p := NewPipeline(
 		&MockScriptStep{
@@ -440,8 +444,8 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 		},
 		&MockPublishStep{},
 		&MockNotifier{
-			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, _ error) error {
-				notified <- ctx
+			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, err error) error {
+				notified <- failure{ctx: ctx, err: err}
 				return nil
 			},
 		},
@@ -459,9 +463,15 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	}
 
 	select {
-	case gotCtx := <-notified:
-		if gotCtx.Err() != nil {
-			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", gotCtx.Err())
+	case got := <-notified:
+		if got.ctx.Err() != nil {
+			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctx.Err())
+		}
+		// **通知側が打ち切りだと判別できること。** ここが切れていると、
+		// SlackAdapter は時間切れを普通の失敗として出してしまいます。
+		// 途中の 1 箇所でも %w を %v に変えると落ちます。
+		if !errors.Is(got.err, context.DeadlineExceeded) {
+			t.Errorf("通知に渡ったエラーから打ち切りを判別できません: %v", got.err)
 		}
 	default:
 		t.Fatal("失敗通知が呼ばれていない")

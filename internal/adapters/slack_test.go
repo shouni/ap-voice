@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -324,5 +325,67 @@ func TestNotifyKeepsNonGCSInputAsPlainValue(t *testing.T) {
 
 	if body := rec.last(t).Body; !strings.Contains(body, "**入力URI:** https://example.com/tech-news\n") {
 		t.Errorf("Body = %q, want plain 入力URI", body)
+	}
+}
+
+// TestNotifyFailureDistinguishesTimeout は、打ち切りが専用の見出しで届くことを検証します。
+//
+// **時間切れと本当の失敗は対処が違います。** 前者は流し直せば通ることがあり、
+// 後者は入力か設定を直す必要があります。同じ ❌ で並ぶと、一覧では区別できません。
+func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		cause     error
+		wantTitle string
+		wantGuide bool
+	}{
+		{
+			name: "打ち切り",
+			// go-voicevox は原因を包んで返すため、素の DeadlineExceeded では届きません。
+			cause:     fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded),
+			wantTitle: timeoutTitles.Failure,
+			wantGuide: true,
+		},
+		{
+			name:      "Cloud Run の停止",
+			cause:     fmt.Errorf("中断されました: %w", context.Canceled),
+			wantTitle: timeoutTitles.Failure,
+			wantGuide: true,
+		},
+		{
+			name:      "本当の失敗",
+			cause:     errors.New("VOICEVOX に接続できません"),
+			wantTitle: slackTitles.Failure,
+			wantGuide: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adapter, rec := newTestAdapter()
+			if err := adapter.NotifyFailure(context.Background(), testRequest(), tt.cause); err != nil {
+				t.Fatalf("NotifyFailure failed: %v", err)
+			}
+
+			msg := rec.last(t)
+			if msg.Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", msg.Title, tt.wantTitle)
+			}
+			if got := strings.Contains(msg.Body, timeoutGuidance); got != tt.wantGuide {
+				t.Errorf("案内の有無 = %v, want %v", got, tt.wantGuide)
+			}
+			// 原因はどちらの場合も本文に残ります。
+			if !strings.Contains(msg.Body, "**エラー内容:**") {
+				t.Errorf("エラー内容が欠けています: %q", msg.Body)
+			}
+			// 見出しが変わっても種別は失敗のままです（Slack の色に効きます）。
+			if msg.Level != notify.LevelFailure {
+				t.Errorf("Level = %v, want %v", msg.Level, notify.LevelFailure)
+			}
+		})
 	}
 }

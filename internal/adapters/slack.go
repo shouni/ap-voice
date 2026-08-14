@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -22,6 +23,22 @@ var slackTitles = notify.Titles{
 	Failure: "❌ 処理に失敗しました。",
 	Skipped: "ℹ️ 処理をスキップしました。",
 }
+
+// timeoutTitles は、PIPELINE_TIMEOUT で打ち切ったときの見出しです。
+//
+// **時間切れは「失敗」と対処が違います。** 設定や入力が壊れているわけではなく、
+// もう一度流せば通ることも、台本を分ければ通ることもあります。同じ ❌ で並ぶと、
+// 一覧を見たときにどちらなのか開くまで分かりません。
+var timeoutTitles = notify.Titles{
+	Success: slackTitles.Success,
+	Failure: "⏳ 時間切れで打ち切りました。",
+	Skipped: slackTitles.Skipped,
+}
+
+// timeoutGuidance は、打ち切り時に本文へ足す案内です。
+const timeoutGuidance = "上限に達したため、アプリ側から打ち切りました。" +
+	"**音声は保存されていません。** 台本は残っているので、詳細画面から音声の作成をやり直せます。" +
+	"何度も起きる場合は、台本の行数を減らすか PIPELINE_TIMEOUT を延ばしてください。"
 
 // SlackAdapter は、Slack Webhook を介してパイプラインの結果を通知するアダプタです。
 // domain.Notifier を実装します。
@@ -80,17 +97,34 @@ func (s *SlackAdapter) Notify(ctx context.Context, req domain.Request, publicURL
 }
 
 // NotifyFailure は Slack へ失敗通知を送信します。
+//
+// **時間切れだけは見出しを分けます。** go-voicevox がバッチのエラーを
+// Unwrap() []error で返すようになったため、打ち切りかどうかが型で分かります。
 func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, err error) error {
 	if !s.pipeline.Enabled() {
 		return nil
 	}
 
-	if sendErr := s.pipeline.Failure(ctx, s.commonMetadata(req), err); sendErr != nil {
+	pipeline, body := s.pipeline, s.commonMetadata(req)
+	if isTimeout(err) {
+		pipeline = pipeline.WithTitles(timeoutTitles)
+		body = body.Text(timeoutGuidance)
+	}
+
+	if sendErr := pipeline.Failure(ctx, body, err); sendErr != nil {
 		return fmt.Errorf("slackへの失敗通知投稿に失敗しました: %w", sendErr)
 	}
 
-	slog.Info("パイプライン失敗通知を Slack に投稿しました。", "output_uri", req.OutputURI)
+	slog.Info("パイプライン失敗通知を Slack に投稿しました。", "output_uri", req.OutputURI, "timeout", isTimeout(err))
 	return nil
+}
+
+// isTimeout は、打ち切りが原因の失敗かどうかを返します。
+//
+// context.Canceled も見るのは、Cloud Run が SIGTERM でインスタンスを畳むときに
+// そちらで抜けるためです。利用者から見ればどちらも「途中で止まった」です。
+func isTimeout(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // NotifySkipped は Slack へスキップ通知を送信します。

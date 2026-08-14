@@ -96,7 +96,11 @@ is easy to break by editing.
   is simply lost. `ValidateEssentialConfig` rejects a configuration that inverts them.
   `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
   for notifications** — reusing the timed-out one would silence the very notification the ladder
-  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`).
+  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`). That test also pins the
+  error chain: the failure handed to the notifier must still satisfy
+  `errors.Is(err, context.DeadlineExceeded)`, because `SlackAdapter` gives a timeout its own
+  heading and guidance. One `%v` where a `%w` belongs, anywhere between the engine and the
+  pipeline, silently turns a timeout back into an ordinary failure.
 
 Per-run values (command, job ID, input, output, mode, model, script) are **not** environment
 variables — they are a `domain.Request`, built by the web form or posted as the JSON body of a
