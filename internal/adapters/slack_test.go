@@ -115,8 +115,9 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 		"**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
 		"**処理:** `generate`\n" +
 		"**ジョブID:** `job-1`\n" +
-		"**入力URI:** `gs://in/article.txt`\n" +
-		"**出力先:** `gs://out/`\n" +
+		// gs:// は Slack では文字列なので、表示はそのままリンク先だけコンソールへ向けます。
+		"**入力URI:** [gs://in/article.txt](https://console.cloud.google.com/storage/browser/_details/in/article.txt)\n" +
+		"**出力先:** [gs://out/](https://console.cloud.google.com/storage/browser/out/)\n" +
 		"**モード:** `dialogue`\n" +
 		"**モデル:** `gemini-3-pro`"
 	if msg.Body != want {
@@ -162,7 +163,7 @@ func TestNotifyFailureAppendsCause(t *testing.T) {
 	if !strings.Contains(msg.Body, "**エラー内容:**\nVOICEVOX に接続できません") {
 		t.Errorf("Body = %q, want error detail", msg.Body)
 	}
-	if !strings.Contains(msg.Body, "**入力URI:** `gs://in/article.txt`") {
+	if !strings.Contains(msg.Body, "**入力URI:** [gs://in/article.txt](") {
 		t.Errorf("Body = %q, want common metadata", msg.Body)
 	}
 }
@@ -218,7 +219,7 @@ func TestNotifySkippedWithNilReason(t *testing.T) {
 	if strings.Contains(body, "理由") {
 		t.Errorf("Body = %q, 理由が無いのに理由の節が出ています", body)
 	}
-	if !strings.Contains(body, "**入力URI:** `gs://in/article.txt`") {
+	if !strings.Contains(body, "**入力URI:** [gs://in/article.txt](") {
 		t.Errorf("Body = %q, want common metadata", body)
 	}
 }
@@ -265,5 +266,63 @@ func TestNotifySetsLevel(t *testing.T) {
 				t.Errorf("Level = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestGCSConsoleURL は、gs:// URI をコンソールの URL に直す規則を検証します。
+//
+// **末尾のスラッシュで行き先が変わります。** プレフィックスはバケットブラウザ、
+// 単体オブジェクトは詳細ページで、取り違えるとコンソールは何も表示しません。
+func TestGCSConsoleURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		uri  string
+		want string
+	}{
+		{
+			name: "プレフィックスはバケットブラウザへ",
+			uri:  "gs://ap-voice/voice/voice-1/",
+			want: "https://console.cloud.google.com/storage/browser/ap-voice/voice/voice-1/",
+		},
+		{
+			name: "オブジェクトは詳細ページへ",
+			uri:  "gs://ap-music/music/comp-1/recipe.json",
+			want: "https://console.cloud.google.com/storage/browser/_details/ap-music/music/comp-1/recipe.json",
+		},
+		// 入力ソースは Web 記事のこともあります。コンソールに対応先が無いので
+		// リンクにせず、素の値として並べます。
+		{name: "http(s) はリンクにしない", uri: "https://example.com/article", want: ""},
+		{name: "空文字", uri: "", want: ""},
+		{name: "スキームだけ", uri: "gs://", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := gcsConsoleURL(tt.uri); got != tt.want {
+				t.Errorf("gcsConsoleURL(%q) = %q, want %q", tt.uri, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNotifyKeepsNonGCSInputAsPlainValue は、コンソールへ飛ばせない入力ソースが
+// リンクではなく素の値として残ることを検証します。
+func TestNotifyKeepsNonGCSInputAsPlainValue(t *testing.T) {
+	t.Parallel()
+
+	adapter, rec := newTestAdapter()
+	req := testRequest()
+	req.InputURI = "https://example.com/tech-news"
+
+	if err := adapter.Notify(context.Background(), req, ""); err != nil {
+		t.Fatalf("Notify failed: %v", err)
+	}
+
+	if body := rec.last(t).Body; !strings.Contains(body, "**入力URI:** https://example.com/tech-news\n") {
+		t.Errorf("Body = %q, want plain 入力URI", body)
 	}
 }
