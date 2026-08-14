@@ -25,12 +25,31 @@ const (
 	voicevoxWavCacheControl = "public, max-age=1800"
 )
 
+// 合成の流量に関わる3つの値。**スループットを決めているのはレート制限**で、
+// 並列数は「同時に処理待ちで居られる上限」です。
+//
+//	スループット = min(1/レート制限, 並列数 ÷ 1セグメントの所要時間)
+//
+// Cloud Run の max_instance_request_concurrency（= 1）とは別の軸です。あちらは
+// 1インスタンスが同時に受けるジョブ数で、ここは1ジョブ内のセグメント数です。
 const (
-	// defaultMaxParallelSegments はVoicevoxエンジンの負荷テスト結果に基づき8に設定
+	// defaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数です。
+	//
+	// 下げるとレート制限に届かなくなります（1セグメント4秒なら 8÷4 = 秒2件で
+	// ちょうど釣り合う）。一方でエンジンは 4 vCPU なので、増やしても総スループットは
+	// 変わらず待ち行列が伸びるだけです。**効いてくるとすればエンジン側のメモリ**で、
+	// 同時に抱える合成の数だけバッファが積まれます。OOM が出たらここを 4（エンジンの
+	// vCPU 数）へ下げるのが最初の一手です。
 	defaultMaxParallelSegments = 8
-	// defaultSegmentRateLimit はAPIのレートリミット仕様に準拠
+	// defaultSegmentRateLimit はセグメントの投入間隔です（秒2件）。
+	//
+	// **VOICEVOX に API のレート制限はありません。** 自前で立てたエンジンで、
+	// サイドカー構成では同一インスタンス内にいます。外部仕様への準拠ではなく、
+	// エンジンを叩きすぎないための自主的な絞りです。
 	defaultSegmentRateLimit = 500 * time.Millisecond
-	defaultSegmentTimeout   = 120 * time.Second
+	// defaultSegmentTimeout はセグメント1件あたりの上限です。
+	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
+	defaultSegmentTimeout = 120 * time.Second
 )
 
 // VoiceAdapter は、音声合成する役割を担います。
