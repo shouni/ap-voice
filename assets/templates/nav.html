@@ -1,0 +1,31 @@
+{{ define "nav" }}
+{{/* ナビは3画面で共有します。以前は各ファイルに写していたため、
+     ホームだけ履歴リンクが欠けるという食い違いが起きました。
+     現在地の強調は .Path で行い、リンクの追加はここ 1 箇所で済みます。 */}}
+<nav class="navbar navbar-expand-lg mb-4 shadow-sm navbar-dark">
+  <div class="container">
+    <a class="navbar-brand text-white fw-bold" href="/">✍️ AP Voice</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto align-items-lg-center">
+        <li class="nav-item">
+          <a class="nav-link{{ if eq .Path "/" }} active{{ end }}"
+             {{ if eq .Path "/" }}aria-current="page" {{ end }}href="/">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link{{ if eq .Path "/history" }} active{{ end }}"
+             {{ if eq .Path "/history" }}aria-current="page" {{ end }}href="/history">History</a>
+        </li>
+      </ul>
+      {{/* 既定モデルは設定（GEMINI_MODELS）から出します。モデル ID は Google の都合で
+           変わるため、ここに文言で書くと必ず古くなります。 */}}
+      {{ with .DefaultModel }}
+        <span class="navbar-text text-white-50 small text-truncate me-3">{{ . }}</span>
+      {{ end }}
+      <a class="nav-link" href="/auth/logout">ログアウト</a>
+    </div>
+  </div>
+</nav>
+{{ end }}

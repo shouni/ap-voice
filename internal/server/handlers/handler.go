@@ -98,29 +98,53 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	}, nil
 }
 
-// formView はフォーム画面に渡す値です。
-type formView struct {
+// baseView は全画面で共通の値です。ナビが .Path と .DefaultModel を見ます。
+type baseView struct {
 	CSRFToken string
-	Modes     []string
-	Models    []string
-	Message   string
-	Error     string
-	Form      domain.Request
+	// Path は現在地です。ナビのハイライトに使います。
+	Path string
+	// DefaultModel は GEMINI_MODELS の先頭です。モデル ID は Google の都合で
+	// 変わるため、画面に文言で書かず設定から出します。
+	DefaultModel string
 }
 
-// csrfToken は、CSRFContextMiddleware が context に入れたトークンを取り出します。
+// formView はフォーム画面に渡す値です。
+type formView struct {
+	baseView
+	Modes   []string
+	Models  []string
+	Message string
+	Error   string
+	Form    domain.Request
+}
+
+// base は全画面共通の値を組み立てます。
+//
+// CSRF トークンは CSRFContextMiddleware が context に入れたものです。
 // フォームはこれを hidden で送り返し、Middleware が検証します。
-func csrfToken(r *http.Request) string {
-	return auth.CSRFTokenFromContext(r.Context())
+func (h *Handler) base(r *http.Request) baseView {
+	return baseView{
+		CSRFToken:    auth.CSRFTokenFromContext(r.Context()),
+		Path:         r.URL.Path,
+		DefaultModel: h.defaultModel(),
+	}
+}
+
+// defaultModel は一覧の先頭を返します。空の一覧は NewHandler が弾いています。
+func (h *Handler) defaultModel() string {
+	if len(h.models) == 0 {
+		return ""
+	}
+	return h.models[0]
 }
 
 // Home は投入フォームを表示します。
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	h.render(w, http.StatusOK, formView{
-		CSRFToken: csrfToken(r),
-		Modes:     h.modes,
-		Models:    h.models,
-		Form:      domain.Request{Command: domain.CommandGenerate},
+		baseView: h.base(r),
+		Modes:    h.modes,
+		Models:   h.models,
+		Form:     domain.Request{Command: domain.CommandGenerate},
 	})
 }
 
@@ -167,21 +191,21 @@ func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, http.StatusAccepted, formView{
-		CSRFToken: csrfToken(r),
-		Modes:     h.modes,
-		Models:    h.models,
-		Message:   fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
-		Form:      domain.Request{Command: domain.CommandGenerate},
+		baseView: h.base(r),
+		Modes:    h.modes,
+		Models:   h.models,
+		Message:  fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", req.JobID),
+		Form:     domain.Request{Command: domain.CommandGenerate},
 	})
 }
 
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, form domain.Request, msg string) {
 	h.render(w, status, formView{
-		CSRFToken: csrfToken(r),
-		Modes:     h.modes,
-		Models:    h.models,
-		Error:     msg,
-		Form:      form,
+		baseView: h.base(r),
+		Modes:    h.modes,
+		Models:   h.models,
+		Error:    msg,
+		Form:     form,
 	})
 }
 

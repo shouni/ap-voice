@@ -15,13 +15,14 @@ const historyLimit = 50
 
 // historyView は履歴一覧に渡す値です。
 type historyView struct {
+	baseView
 	Jobs []repository.Job
 }
 
 // detailView は詳細画面に渡す値です。
 type detailView struct {
-	CSRFToken string
-	JobID     string
+	baseView
+	JobID string
 	// Script は保存済みの台本です。ここで内容を確認してから音声を作ります。
 	Script []domain.ScriptLine
 	// HasAudio は音声が既にあるかです。無ければ「音声を作成」だけを出します。
@@ -38,7 +39,7 @@ func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{Jobs: jobs})
+	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs})
 }
 
 // Detail は、1 件のジョブの台本を表示します。ここから音声の作成を指示します。
@@ -123,11 +124,11 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 	}
 
 	h.renderTemplate(w, status, "detail.html", detailView{
-		CSRFToken: csrfToken(r),
-		JobID:     jobID,
-		Script:    script,
-		HasAudio:  hasAudio,
-		Message:   message,
-		Error:     errMsg,
+		baseView: h.base(r),
+		JobID:    jobID,
+		Script:   script,
+		HasAudio: hasAudio,
+		Message:  message,
+		Error:    errMsg,
 	})
 }
