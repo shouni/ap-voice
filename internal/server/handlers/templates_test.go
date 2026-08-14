@@ -1,0 +1,217 @@
+package handlers
+
+import (
+	"html/template"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/shouni/ap-voice/assets"
+	"github.com/shouni/ap-voice/internal/domain"
+	"github.com/shouni/ap-voice/internal/repository"
+)
+
+// テンプレートは実行時にしか評価されないため、参照している値の名前が変わっても
+// コンパイルは通ります。**画面を開くまで壊れたと分からない**のがテンプレートの弱点で、
+// ナビの重複や CSRF の hidden 欠落は実際にデプロイ後に見つかりました。
+//
+// ここでは builder と同じ組み立て方で読み、ハンドラーが渡すのと同じ型を流します。
+// map で流すと存在しないキーが "<no value>" になって素通りするため、
+// **必ず本物の View 構造体を使います。** それがフィールド名の改名を検知する条件です。
+
+// parseTemplates は builder/handlers.go と同じ手順でテンプレートを読みます。
+func parseTemplates(t *testing.T) *template.Template {
+	t.Helper()
+
+	tmpl, err := template.ParseFS(assets.Templates, "templates/*.html")
+	if err != nil {
+		t.Fatalf("テンプレートの読み込みに失敗しました: %v", err)
+	}
+	return tmpl
+}
+
+// testBaseView は全画面共通の値です。ナビが .Path と .DefaultModel を見ます。
+func testBaseView(path string) baseView {
+	return baseView{CSRFToken: "test-csrf-token", Path: path, DefaultModel: "gemini-test"}
+}
+
+// TestTemplatesRender は、3 画面が実際の View 構造体で描画できることを検証します。
+func TestTemplatesRender(t *testing.T) {
+	t.Parallel()
+
+	script := domain.Script{
+		Title: "テスト台本",
+		Lines: []domain.ScriptLine{
+			{Speaker: "ずんだもん", Style: "ノーマル", Text: "こんにちはなのだ"},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		view     any
+		// want は必ず出ていてほしい断片です。描画できるだけでは、値が
+		// 抜け落ちた画面を通してしまいます。
+		want []string
+	}{
+		{
+			name:     "投入フォーム",
+			template: "home.html",
+			view: formView{
+				baseView: testBaseView("/"),
+				Modes:    []string{"solo", "promo"},
+				Models:   []string{"gemini-test"},
+				Message:  "受け付けました",
+				// 投入後の再描画では入力内容が残ります。空に戻すと
+				// 同じソースから作り直すのに URL を貼り直すことになります。
+				Form: domain.Request{
+					Command:  domain.CommandGenerate,
+					InputURI: "gs://bucket/recipe.json",
+					Mode:     "promo",
+					AIModel:  "gemini-test",
+				},
+			},
+			want: []string{
+				`value="test-csrf-token"`,
+				`value="gs://bucket/recipe.json"`,
+				// 選択中のモードとモデルが選ばれた状態で戻ること。
+				`value="promo" selected`,
+				`value="gemini-test" selected`,
+				"受け付けました",
+			},
+		},
+		{
+			name:     "履歴一覧",
+			template: "history.html",
+			view: historyView{
+				baseView: testBaseView("/history"),
+				Jobs: []repository.Job{
+					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true},
+					// 台本が読めなかった場合はジョブ ID が題名に入ります。
+					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false},
+				},
+			},
+			want: []string{"一覧のタイトル", "voice-2"},
+		},
+		{
+			name:     "詳細（音声あり）",
+			template: "detail.html",
+			view: detailView{
+				baseView: testBaseView("/history/voice-1"),
+				JobID:    "voice-1",
+				Script:   script,
+				HasAudio: true,
+			},
+			want: []string{
+				"音声を作り直す",
+				"このジョブを削除",
+				"履歴一覧へ戻る",
+				`src="/history/voice-1/audio"`,
+				"こんにちはなのだ",
+			},
+		},
+		{
+			name:     "詳細（音声なし）",
+			template: "detail.html",
+			view: detailView{
+				baseView: testBaseView("/history/voice-2"),
+				JobID:    "voice-2",
+				Script:   script,
+				HasAudio: false,
+			},
+			want: []string{"音声を作成"},
+		},
+	}
+
+	tmpl := parseTemplates(t)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf strings.Builder
+			if err := tmpl.ExecuteTemplate(&buf, tt.template, tt.view); err != nil {
+				t.Fatalf("%s の描画に失敗しました: %v", tt.template, err)
+			}
+
+			got := buf.String()
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("%s に %q が含まれていません", tt.template, want)
+				}
+			}
+		})
+	}
+}
+
+// TestTemplatesIncludeCSRFTokenInForms は、POST するフォームすべてに
+// CSRF トークンの hidden があることを検証します。
+//
+// 1 つでも欠けるとその操作だけが「不正なCSRFトークン」で弾かれ、しかも
+// **画面は正常に見える**ため気付きにくい。実際に投入フォームで踏みました。
+func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
+	t.Parallel()
+
+	tmpl := parseTemplates(t)
+
+	views := map[string]any{
+		"home.html": formView{
+			baseView: testBaseView("/"),
+			Modes:    []string{"solo"},
+			Models:   []string{"gemini-test"},
+			Form:     domain.Request{Command: domain.CommandGenerate},
+		},
+		"detail.html": detailView{
+			baseView: testBaseView("/history/voice-1"),
+			JobID:    "voice-1",
+			Script:   domain.Script{Title: "T"},
+			HasAudio: true,
+		},
+	}
+
+	for name, view := range views {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf strings.Builder
+			if err := tmpl.ExecuteTemplate(&buf, name, view); err != nil {
+				t.Fatalf("%s の描画に失敗しました: %v", name, err)
+			}
+
+			got := buf.String()
+			// method="post" の数だけ hidden が要ります。
+			if forms, tokens := strings.Count(got, `method="post"`), strings.Count(got, `name="csrf_token"`); forms != tokens {
+				t.Errorf("%s: POST フォーム %d 件に対し csrf_token は %d 件です", name, forms, tokens)
+			}
+		})
+	}
+}
+
+// TestNavHighlightsCurrentPage は、ナビの現在地が .Path で切り替わることを検証します。
+// ナビは 3 画面で共有しており、以前は各ファイルに写していたため
+// ホームだけ履歴リンクが欠けるという食い違いが起きました。
+func TestNavHighlightsCurrentPage(t *testing.T) {
+	t.Parallel()
+
+	tmpl := parseTemplates(t)
+
+	for _, path := range []string{"/", "/history"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			var buf strings.Builder
+			if err := tmpl.ExecuteTemplate(&buf, "nav", testBaseView(path)); err != nil {
+				t.Fatalf("ナビの描画に失敗しました: %v", err)
+			}
+
+			got := buf.String()
+			// どの画面からでも両方のリンクが出ていること。
+			if !strings.Contains(got, `href="/"`) || !strings.Contains(got, `href="/history"`) {
+				t.Errorf("ナビにリンクが揃っていません: %s", got)
+			}
+			if want := `href="` + path + `"`; !strings.Contains(got, `aria-current="page" `+want) {
+				t.Errorf("現在地 %s が強調されていません", path)
+			}
+		})
+	}
+}
