@@ -75,13 +75,19 @@ is easy to break by editing.
   or `auth.TaskVerifier` is fail-closed, so `BuildHandlers` refuses to start rather than let
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_MAX_PARALLEL_SEGMENTS` / `VOICEVOX_SEGMENT_RATE_LIMIT` / `VOICEVOX_SEGMENT_TIMEOUT` —
-  optional; `8`, `500ms`, `120s`. **Throughput is set by the rate limit**, not the parallelism:
-  `min(1/rate, parallel ÷ time-per-segment)`. Lowering the parallelism below that ratio makes
-  runs *slower*, and raising it past the engine's vCPU count only lengthens the queue — what it
-  actually costs is engine memory, since each in-flight synthesis holds buffers. They are env
-  vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
+  optional; `8`, `500ms`, `120s`. Throughput is `min(1/rate, parallel ÷ time-per-segment)`, and
+  **measurement says the second term is the binding one**: a 12-segment job took 50s at 0.24
+  segments/sec while the limiter allowed 2.0/sec, so the rate limit never came into play and is
+  not a usable knob today. CPU did not saturate either (2.31 of 5 allocated vCPU, memory 0.94 of
+  4 GiB), so the limit sits inside the engine and **neither raising nor lowering the parallelism
+  has a predictable effect — measure before changing it.** What parallelism does cost is engine
+  memory, and note that the peak does not grow with script length: the in-flight count is capped,
+  so a 200-line script has the same memory peak as a 12-line one and only runs longer. They are
+  env vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
   throttling to fit it should not need a rebuild. Note this is **unrelated** to Cloud Run's
   `max_instance_request_concurrency = 1`, which counts *jobs* per instance, not segments per job.
+  go-voicevox logs per-segment avg/min/max at the end of each batch — read that before touching
+  any of the three.
 - `PIPELINE_TIMEOUT` / `TASK_DISPATCH_DEADLINE` — optional; default to `25m` and `30m`. These are
   the top two rungs of the fleet's timeout ladder
   (`PIPELINE_TIMEOUT` < dispatch deadline <= Cloud Run timeout). **The smallest wins**, so the
