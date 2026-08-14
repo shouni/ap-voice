@@ -57,14 +57,14 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return err
 	}
 
-	var lines []domain.ScriptLine
-	lines, err = p.resolveScript(ctx, req)
+	var script domain.Script
+	script, err = p.resolveScript(ctx, req)
 	if err != nil {
 		return err
 	}
 
 	var publicURL string
-	publicURL, err = p.publish(ctx, req, lines)
+	publicURL, err = p.publish(ctx, req, script)
 	if err != nil {
 		err = fmt.Errorf("公開処理の実行に失敗しました: %w", err)
 		return err
@@ -79,11 +79,11 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 //
 // generate は台本まで、synthesize は音声まで。**generate で音声を作らない**のは、
 // 台本を確認・修正してから合成へ進めるようにするためです。
-func (p *Pipeline) publish(ctx context.Context, req domain.Request, lines []domain.ScriptLine) (string, error) {
+func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domain.Script) (string, error) {
 	if req.Command == domain.CommandGenerate {
-		return p.publisher.PublishScript(ctx, req.OutputURI, lines)
+		return p.publisher.PublishScript(ctx, req.OutputURI, script)
 	}
-	return p.publisher.Run(ctx, req.OutputURI, lines)
+	return p.publisher.Run(ctx, req.OutputURI, script)
 }
 
 // resolveScript は、Command に応じて合成対象の台本を用意します。
@@ -91,29 +91,35 @@ func (p *Pipeline) publish(ctx context.Context, req domain.Request, lines []doma
 // generate は入力ソースから作ります。synthesize は渡された台本を使い、
 // 無ければ JobID で保存済みのものを読みます。**台本をタスクのペイロードで
 // 運ばない**のは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
-func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.Command == domain.CommandSynthesize {
+		// API から直接渡された台本を優先します。タイトルは保存済みのものを引き継ぎます。
 		if len(req.Script) > 0 {
-			return req.Script, nil
+			stored, err := p.scripts.Load(ctx, req.JobID)
+			if err != nil {
+				// 新規の貼り戻しならまだ保存されていないこともあります。
+				return domain.Script{Lines: req.Script}, nil
+			}
+			return domain.Script{Title: stored.Title, Lines: req.Script}, nil
 		}
 
-		lines, err := p.scripts.Load(ctx, req.JobID)
+		script, err := p.scripts.Load(ctx, req.JobID)
 		if err != nil {
-			return nil, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)
+			return domain.Script{}, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)
 		}
-		if len(lines) == 0 {
-			return nil, fmt.Errorf("保存済み台本が空です (%s)", req.JobID)
+		if len(script.Lines) == 0 {
+			return domain.Script{}, fmt.Errorf("保存済み台本が空です (%s)", req.JobID)
 		}
-		return lines, nil
+		return script, nil
 	}
 
-	lines, err := p.generator.Run(ctx, req)
+	script, err := p.generator.Run(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
 	}
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
+	if len(script.Lines) == 0 {
+		return domain.Script{}, fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
 	}
 
-	return lines, nil
+	return script, nil
 }

@@ -75,13 +75,13 @@ func (gr *ScriptStep) modelFor(req domain.Request) string {
 }
 
 // Run は、入力ソースからコンテンツを読み込み、AIモデルを使用して構造化ナレーションスクリプトを生成する一連の処理を実行します。
-func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.InputURI == "" {
-		return nil, errors.New("入力ソース(InputURI)が指定されていません")
+		return domain.Script{}, errors.New("入力ソース(InputURI)が指定されていません")
 	}
 	content, err := gr.readContent(ctx, req.InputURI)
 	if err != nil {
-		return nil, err
+		return domain.Script{}, err
 	}
 	model := gr.modelFor(req)
 	slog.Info("処理開始", "mode", req.Mode, "model", model, "input_size", len(content))
@@ -89,7 +89,7 @@ func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.Scr
 
 	prompt, err := gr.promptBuilder.Generate(req.Mode, content)
 	if err != nil {
-		return nil, err
+		return domain.Script{}, err
 	}
 
 	generatedResponse, err := gr.aiClient.GenerateWithAttachments(ctx, model, prompt, nil, gemini.GenerateOptions{
@@ -97,16 +97,16 @@ func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.Scr
 		ResponseSchema:   gr.schema,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("スクリプト生成に失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("スクリプト生成に失敗しました: %w", err)
 	}
 
-	var lines []domain.ScriptLine
-	if err := json.Unmarshal([]byte(generatedResponse.Text), &lines); err != nil {
-		return nil, fmt.Errorf("AI応答のJSONデコードに失敗しました: %w", err)
+	var script domain.Script
+	if err := json.Unmarshal([]byte(generatedResponse.Text), &script); err != nil {
+		return domain.Script{}, fmt.Errorf("AI応答のJSONデコードに失敗しました: %w", err)
 	}
-	slog.Info("AI スクリプト生成完了", "line_count", len(lines))
+	slog.Info("AI スクリプト生成完了", "line_count", len(script.Lines), "title", script.Title)
 
-	return lines, nil
+	return script, nil
 }
 
 // readContent は、指定されたソースURLからコンテンツを取得します。

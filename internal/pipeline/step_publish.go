@@ -30,35 +30,38 @@ func NewPublishStep(voice domain.Voice, signer remoteio.URLSigner) *PublishStep 
 //
 // 音声まで作らないのは、台本を確認・修正してから合成へ進めるようにするためです。
 // 合成は分単位かかるので、直す前提の台本で先に走らせても捨てることになります。
-func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if outputURI == "" {
 		return "", errors.New("出力先パス(outputURI)が指定されていません")
 	}
 
 	slog.InfoContext(ctx, "台本の保存を開始します。", "output_path", outputURI)
-	if err := r.voice.UploadScript(ctx, outputURI, lines); err != nil {
+	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
 		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "台本の保存が完了しました。", "output_path", outputURI)
 
-	return r.publicURLOrEmpty(ctx, outputURI), nil
+	// **署名付き URL は返しません。** 署名は対象の存在を確かめないため、まだ作っていない
+	// 音声の URL を署名でき、通知に載せると 404 のリンクを配ることになります。
+	// この段階で見るべきものは台本で、それは詳細画面が表示します。
+	return "", nil
 }
 
 // Run は音声を合成して保存します。台本も隣に書き直します。
-func (r *PublishStep) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+func (r *PublishStep) Run(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if outputURI == "" {
 		return "", errors.New("出力先パス(outputURI)が指定されていません")
 	}
 
 	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
-	if err := r.voice.UploadWav(ctx, outputURI, lines); err != nil {
+	if err := r.voice.UploadWav(ctx, outputURI, script.Lines); err != nil {
 		return "", fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
 
 	// 台本も書き直します。API から修正済みの台本を渡された場合、保存されている
 	// 台本と実際に喋った内容がずれてしまうためです。
-	if err := r.voice.UploadScript(ctx, outputURI, lines); err != nil {
+	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
 		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
 	}
 

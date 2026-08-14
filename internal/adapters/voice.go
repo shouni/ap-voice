@@ -72,11 +72,11 @@ func (a *VoiceAdapter) UploadWav(ctx context.Context, outputURI string, lines []
 }
 
 // UploadScript は指定されたURIの拡張子を.jsonに変更してスクリプトをアップロードします。
-func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
+func (a *VoiceAdapter) UploadScript(ctx context.Context, outputURI string, script domain.Script) error {
 	ext := filepath.Ext(outputURI)
 	jsonPath := strings.TrimSuffix(outputURI, ext) + ".json"
 
-	body, err := json.MarshalIndent(lines, "", "  ")
+	body, err := json.MarshalIndent(script, "", "  ")
 	if err != nil {
 		return fmt.Errorf("スクリプトのJSONエンコードに失敗しました: %w", err)
 	}

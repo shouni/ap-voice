@@ -10,3 +10,17 @@ type ScriptLine struct {
 	// Text は合成対象のテキストです。
 	Text string `json:"text"`
 }
+
+// Script は保存される台本です。
+//
+// **タイトルを持たせるために配列ではなくオブジェクトにしています。** 履歴の一覧で
+// ジョブ ID だけが並ぶと、どれが何だったか開くまで分かりません。タイトルは台本と
+// 同じ生成で作らせるので、追加の API 呼び出しは要りません。
+//
+// このまま `synthesize` へ貼り戻せる形でもあります。
+type Script struct {
+	// Title は一覧に出す短い題名です。
+	Title string `json:"title"`
+	// Lines は発言の並びです。
+	Lines []ScriptLine `json:"lines"`
+}

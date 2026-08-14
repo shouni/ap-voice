@@ -11,9 +11,10 @@
 <body>
 {{ template "nav" . }}
 
-<main class="container main-content" style="max-width: 52rem;">
-  <p class="mb-1"><a href="/history">← 履歴</a></p>
-  <h1 class="h5"><code>{{ .JobID }}</code></h1>
+<main class="container main-content">
+  <a class="btn btn-outline-secondary btn-sm mb-3" href="/history">← 履歴一覧へ戻る</a>
+  <h1 class="h5 mb-1">{{ with .Script.Title }}{{ . }}{{ else }}{{ $.JobID }}{{ end }}</h1>
+  <p class="text-secondary small"><code>{{ .JobID }}</code></p>
 
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
@@ -32,21 +33,28 @@
     <audio controls src="/history/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
   {{ end }}
 
-  <h2 class="h6">台本（{{ len .Script }} 行）</h2>
-  <table class="table table-sm align-middle card p-2 shadow-sm">
+  <h2 class="h6">台本（{{ len .Script.Lines }} 行）</h2>
+  <table class="table table-sm align-middle script-table">
     <thead>
-      <tr><th style="width: 9rem;">話者</th><th style="width: 7rem;">スタイル</th><th>テキスト</th></tr>
+      <tr><th>話者</th><th>スタイル</th><th>テキスト</th></tr>
     </thead>
     <tbody>
-      {{ range .Script }}
+      {{ range .Script.Lines }}
         <tr>
-          <td class="text-nowrap">{{ .Speaker }}</td>
-          <td class="text-nowrap text-secondary">{{ .Style }}</td>
+          <td class="speaker">{{ .Speaker }}</td>
+          <td class="style">{{ .Style }}</td>
           <td>{{ .Text }}</td>
         </tr>
       {{ end }}
     </tbody>
   </table>
+
+  {{/* 削除は最後に置き、確認を挟みます。成果物はプレフィックスごと消えます。 */}}
+  <form method="post" action="/history/{{ .JobID }}/delete" class="mt-4"
+        onsubmit="return confirm('このジョブの成果物（台本と音声）を削除します。よろしいですか？');">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <button class="btn btn-outline-danger btn-sm" type="submit">このジョブを削除</button>
+  </form>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"

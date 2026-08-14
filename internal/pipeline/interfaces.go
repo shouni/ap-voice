@@ -13,13 +13,13 @@ import (
 type (
 	// scriptGenerator は、入力ソースから台本を生成します。
 	scriptGenerator interface {
-		Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error)
+		Run(ctx context.Context, req domain.Request) (domain.Script, error)
 	}
 	// publisher は、成果物を保存します。
 	publisher interface {
 		// PublishScript は台本だけを保存します（generate）。
-		PublishScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
+		PublishScript(ctx context.Context, outputURI string, script domain.Script) (string, error)
 		// Run は音声を合成して保存します（synthesize）。
-		Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
+		Run(ctx context.Context, outputURI string, script domain.Script) (string, error)
 	}
 )

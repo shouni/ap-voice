@@ -130,7 +130,7 @@ func TestScriptStepRun(t *testing.T) {
 					if opts.ResponseSchema == nil {
 						t.Fatal("expected ResponseSchema to be set")
 					}
-					return &gemini.Response{Text: `[{"speaker":"ずんだもん","style":"ノーマル","text":"こんにちはなのだ"}]`}, nil
+					return &gemini.Response{Text: `{"title":"テスト台本","lines":[{"speaker":"ずんだもん","style":"ノーマル","text":"こんにちはなのだ"}]}`}, nil
 				},
 			},
 			defaultTestModel,
@@ -144,7 +144,11 @@ func TestScriptStepRun(t *testing.T) {
 		want := []domain.ScriptLine{
 			{Speaker: "ずんだもん", Style: "ノーマル", Text: "こんにちはなのだ"},
 		}
-		if len(got) != len(want) || got[0] != want[0] {
+		// タイトルは履歴の一覧に出すため、台本と同じ生成で受け取ります。
+		if got.Title != "テスト台本" {
+			t.Errorf("Title = %q, want テスト台本", got.Title)
+		}
+		if len(got.Lines) != len(want) || got.Lines[0] != want[0] {
 			t.Fatalf("unexpected output: %+v", got)
 		}
 		if !readerCalled || !promptCalled || !aiCalled {

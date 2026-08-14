@@ -13,15 +13,15 @@ import (
 
 type mockVoice struct {
 	uploadWavFunc    func(ctx context.Context, outputURI string, lines []domain.ScriptLine) error
-	uploadScriptFunc func(ctx context.Context, outputURI string, lines []domain.ScriptLine) error
+	uploadScriptFunc func(ctx context.Context, outputURI string, script domain.Script) error
 }
 
 func (m *mockVoice) UploadWav(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
 	return m.uploadWavFunc(ctx, outputURI, lines)
 }
 
-func (m *mockVoice) UploadScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) error {
-	return m.uploadScriptFunc(ctx, outputURI, lines)
+func (m *mockVoice) UploadScript(ctx context.Context, outputURI string, script domain.Script) error {
+	return m.uploadScriptFunc(ctx, outputURI, script)
 }
 
 type mockURLSigner struct {
@@ -59,10 +59,10 @@ func TestPublishStepRun(t *testing.T) {
 					}
 					return nil
 				},
-				uploadScriptFunc: func(_ context.Context, gotURI string, gotLines []domain.ScriptLine) error {
+				uploadScriptFunc: func(_ context.Context, gotURI string, gotScript domain.Script) error {
 					scriptCalled = true
-					if gotURI != outputURI || len(gotLines) != len(lines) {
-						t.Fatalf("unexpected script args: %s %+v", gotURI, gotLines)
+					if gotURI != outputURI || len(gotScript.Lines) != len(lines) {
+						t.Fatalf("unexpected script args: %s %+v", gotURI, gotScript)
 					}
 					return nil
 				},
@@ -84,7 +84,7 @@ func TestPublishStepRun(t *testing.T) {
 			},
 		)
 
-		got, err := runner.Run(ctx, outputURI, lines)
+		got, err := runner.Run(ctx, outputURI, domain.Script{Lines: lines})
 		if err != nil {
 			t.Fatalf("Run() failed: %v", err)
 		}
@@ -102,12 +102,12 @@ func TestPublishStepRun(t *testing.T) {
 		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
-				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
+				uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error { return nil },
 			},
 			nil,
 		)
 
-		got, err := runner.Run(ctx, outputURI, lines)
+		got, err := runner.Run(ctx, outputURI, domain.Script{Lines: lines})
 		if err != nil {
 			t.Fatalf("Run() failed: %v", err)
 		}
@@ -122,7 +122,7 @@ func TestPublishStepRun(t *testing.T) {
 		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
-				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
+				uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error { return nil },
 			},
 			&mockURLSigner{
 				generateSignedURLFunc: func(_ context.Context, _ string, _ string, _ time.Duration) (string, error) {
@@ -131,7 +131,7 @@ func TestPublishStepRun(t *testing.T) {
 			},
 		)
 
-		got, err := runner.Run(ctx, outputURI, lines)
+		got, err := runner.Run(ctx, outputURI, domain.Script{Lines: lines})
 		if err != nil {
 			t.Fatalf("Run() failed: %v", err)
 		}
@@ -146,12 +146,12 @@ func TestPublishStepRun(t *testing.T) {
 		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
-				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
+				uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error { return nil },
 			},
 			nil,
 		)
 
-		_, err := runner.Run(ctx, "", lines)
+		_, err := runner.Run(ctx, "", domain.Script{Lines: lines})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -164,12 +164,12 @@ func TestPublishStepRun(t *testing.T) {
 		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return expectedErr },
-				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
+				uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error { return nil },
 			},
 			nil,
 		)
 
-		_, err := runner.Run(ctx, outputURI, lines)
+		_, err := runner.Run(ctx, outputURI, domain.Script{Lines: lines})
 		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %v, got %v", expectedErr, err)
 		}
@@ -182,12 +182,12 @@ func TestPublishStepRun(t *testing.T) {
 		runner := NewPublishStep(
 			&mockVoice{
 				uploadWavFunc:    func(_ context.Context, _ string, _ []domain.ScriptLine) error { return nil },
-				uploadScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error { return expectedErr },
+				uploadScriptFunc: func(_ context.Context, _ string, _ domain.Script) error { return expectedErr },
 			},
 			nil,
 		)
 
-		_, err := runner.Run(ctx, outputURI, lines)
+		_, err := runner.Run(ctx, outputURI, domain.Script{Lines: lines})
 		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %v, got %v", expectedErr, err)
 		}

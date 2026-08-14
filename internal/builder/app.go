@@ -69,7 +69,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
 	// worker は synthesize が保存済み台本を読むために。
-	repo, err := repository.NewRepository(rio.Reader, cfg.Storage.GCSBucket)
+	repo, err := repository.NewRepository(rio.Reader, rio.Writer, cfg.Storage.GCSBucket)
 	if err != nil {
 		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
 	}

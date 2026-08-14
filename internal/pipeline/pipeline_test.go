@@ -15,45 +15,45 @@ var _ publisher = (*MockPublishStep)(nil)
 var _ domain.Notifier = (*MockNotifier)(nil)
 
 type MockScriptStep struct {
-	RunFunc func(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error)
+	RunFunc func(ctx context.Context, req domain.Request) (domain.Script, error)
 }
 
-func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) ([]domain.ScriptLine, error) {
+func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if m.RunFunc == nil {
-		return nil, nil
+		return domain.Script{}, nil
 	}
 	return m.RunFunc(ctx, req)
 }
 
 type MockPublishStep struct {
-	RunFunc           func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
-	PublishScriptFunc func(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error)
+	RunFunc           func(ctx context.Context, outputURI string, script domain.Script) (string, error)
+	PublishScriptFunc func(ctx context.Context, outputURI string, script domain.Script) (string, error)
 }
 
-func (m *MockPublishStep) PublishScript(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+func (m *MockPublishStep) PublishScript(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if m.PublishScriptFunc == nil {
 		return "", nil
 	}
-	return m.PublishScriptFunc(ctx, outputURI, lines)
+	return m.PublishScriptFunc(ctx, outputURI, script)
 }
 
 // MockScriptStore は保存済み台本の読み出しを差し替えます。
 type MockScriptStore struct {
-	LoadFunc func(ctx context.Context, jobID string) ([]domain.ScriptLine, error)
+	LoadFunc func(ctx context.Context, jobID string) (domain.Script, error)
 }
 
-func (m *MockScriptStore) Load(ctx context.Context, jobID string) ([]domain.ScriptLine, error) {
+func (m *MockScriptStore) Load(ctx context.Context, jobID string) (domain.Script, error) {
 	if m.LoadFunc == nil {
-		return nil, nil
+		return domain.Script{}, nil
 	}
 	return m.LoadFunc(ctx, jobID)
 }
 
-func (m *MockPublishStep) Run(ctx context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+func (m *MockPublishStep) Run(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if m.RunFunc == nil {
 		return "", nil
 	}
-	return m.RunFunc(ctx, outputURI, lines)
+	return m.RunFunc(ctx, outputURI, script)
 }
 
 type MockNotifier struct {
@@ -107,27 +107,27 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockScriptStep{
-				RunFunc: func(_ context.Context, got domain.Request) ([]domain.ScriptLine, error) {
+				RunFunc: func(_ context.Context, got domain.Request) (domain.Script, error) {
 					generateCalled = true
 					if !reflect.DeepEqual(got, req) {
 						t.Fatalf("unexpected request: %+v", got)
 					}
-					return sampleLines, nil
+					return domain.Script{Title: "テスト台本", Lines: sampleLines}, nil
 				},
 			},
 			&MockPublishStep{
 				// generate は台本だけを保存します。Run（音声合成）は呼ばれてはいけません。
-				PublishScriptFunc: func(_ context.Context, outputURI string, lines []domain.ScriptLine) (string, error) {
+				PublishScriptFunc: func(_ context.Context, outputURI string, script domain.Script) (string, error) {
 					publishCalled = true
 					if outputURI != req.OutputURI {
 						t.Fatalf("unexpected outputURI: %s", outputURI)
 					}
-					if len(lines) != 1 || lines[0].Text != "generated script" {
-						t.Fatalf("unexpected lines: %+v", lines)
+					if len(script.Lines) != 1 || script.Lines[0].Text != "generated script" {
+						t.Fatalf("unexpected lines: %+v", script.Lines)
 					}
 					return "https://example.com/script.json", nil
 				},
-				RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+				RunFunc: func(_ context.Context, _ string, _ domain.Script) (string, error) {
 					t.Fatal("generate なのに音声合成が呼ばれた")
 					return "", nil
 				},
@@ -164,8 +164,8 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockScriptStep{
-				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
-					return nil, expectedErr
+				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
+					return domain.Script{}, expectedErr
 				},
 			},
 			&MockPublishStep{},
@@ -201,8 +201,8 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockScriptStep{
-				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
-					return nil, nil
+				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
+					return domain.Script{}, nil
 				},
 			},
 			&MockPublishStep{},
@@ -232,12 +232,12 @@ func TestPipelineExecute(t *testing.T) {
 
 		p := NewPipeline(
 			&MockScriptStep{
-				RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
-					return sampleLines, nil
+				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
+					return domain.Script{Title: "テスト台本", Lines: sampleLines}, nil
 				},
 			},
 			&MockPublishStep{
-				PublishScriptFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+				PublishScriptFunc: func(_ context.Context, _ string, _ domain.Script) (string, error) {
 					return "", expectedErr
 				},
 			},
@@ -284,14 +284,14 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 
 	p := NewPipeline(
 		&MockScriptStep{
-			RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+			RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 				generateCalled = true
-				return nil, errors.New("generator must not be called")
+				return domain.Script{}, errors.New("generator must not be called")
 			},
 		},
 		&MockPublishStep{
-			RunFunc: func(_ context.Context, _ string, lines []domain.ScriptLine) (string, error) {
-				published = lines
+			RunFunc: func(_ context.Context, _ string, script domain.Script) (string, error) {
+				published = script.Lines
 				return "", nil
 			},
 		},
@@ -348,13 +348,13 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 			failureNotified := false
 			p := NewPipeline(
 				&MockScriptStep{
-					RunFunc: func(_ context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+					RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 						touched = true
-						return nil, nil
+						return domain.Script{}, nil
 					},
 				},
 				&MockPublishStep{
-					RunFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) (string, error) {
+					RunFunc: func(_ context.Context, _ string, _ domain.Script) (string, error) {
 						touched = true
 						return "", nil
 					},
@@ -432,10 +432,10 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 
 	p := NewPipeline(
 		&MockScriptStep{
-			RunFunc: func(ctx context.Context, _ domain.Request) ([]domain.ScriptLine, error) {
+			RunFunc: func(ctx context.Context, _ domain.Request) (domain.Script, error) {
 				// 上限を超えるまで待ちます。実際の合成が長引いた状態の代わりです。
 				<-ctx.Done()
-				return nil, ctx.Err()
+				return domain.Script{}, ctx.Err()
 			},
 		},
 		&MockPublishStep{},

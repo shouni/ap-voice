@@ -36,12 +36,17 @@ func (r *recordingNotifier) last(t *testing.T) notify.Message {
 // newTestAdapter は記録用 Notifier を差し込んだアダプターを返します。
 func newTestAdapter() (*SlackAdapter, *recordingNotifier) {
 	rec := &recordingNotifier{}
-	return &SlackAdapter{pipeline: notify.NewPipeline(rec, slackTitles)}, rec
+	return &SlackAdapter{
+		pipeline:   notify.NewPipeline(rec, slackTitles),
+		serviceURL: "https://ap-voice.example.run.app",
+	}, rec
 }
 
 // testRequest はテストで使う共通のリクエストです。
 func testRequest() domain.Request {
 	return domain.Request{
+		Command:   domain.CommandGenerate,
+		JobID:     "job-1",
 		InputURI:  "gs://in/article.txt",
 		OutputURI: "gs://out/voice.wav",
 		Mode:      "dialogue",
@@ -102,9 +107,16 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 		t.Errorf("Title = %q, want %q", msg.Title, slackTitles.Success)
 	}
 
-	want := "**公開URL:** [https://example.com/voice.wav](https://example.com/voice.wav)\n" +
+	// リンクの表示名は署名付き URL ではなく gs:// のパスです。署名付き URL は
+	// クエリだけで 1000 文字を超え、本文が URL で埋まるためです。
+	// 出力は**ファイル名まで出しません**。generate の時点では音声がまだ無く、
+	// audio.wav を示すと存在しないものを案内することになります。
+	want := "**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
+		"**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
+		"**処理:** `generate`\n" +
+		"**ジョブID:** `job-1`\n" +
 		"**入力URI:** `gs://in/article.txt`\n" +
-		"**出力URI:** `gs://out/voice.wav`\n" +
+		"**出力先:** `gs://out/`\n" +
 		"**モード:** `dialogue`\n" +
 		"**モデル:** `gemini-3-pro`"
 	if msg.Body != want {
@@ -112,8 +124,9 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 	}
 }
 
-// TestNotifyOmitsPublicURLWhenEmpty は、公開URLが無い場合に行ごと省かれることを
-// 検証します。ローカル出力では署名付きURLが生成されないため通る経路です。
+// TestNotifyOmitsPublicURLWhenEmpty は、音声が無い場合に行ごと省かれることを検証します。
+// **generate はここを通ります。** 台本しか作らないため署名付き URL を返さず、
+// 存在しない audio.wav のリンクを配らないようにしています。
 func TestNotifyOmitsPublicURLWhenEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -123,11 +136,12 @@ func TestNotifyOmitsPublicURLWhenEmpty(t *testing.T) {
 	}
 
 	body := rec.last(t).Body
-	if strings.Contains(body, "公開URL") {
-		t.Errorf("Body = %q, 公開URL の行が残っています", body)
+	if strings.Contains(body, "**音声:**") {
+		t.Errorf("Body = %q, 音声の行が残っています", body)
 	}
-	if !strings.HasPrefix(body, "**入力URI:**") {
-		t.Errorf("Body = %q, want 入力URI から始まること", body)
+	// generate は台本までなので、この経路が既定です。詳細画面が入口になります。
+	if !strings.HasPrefix(body, "**詳細:**") {
+		t.Errorf("Body = %q, want 詳細 から始まること", body)
 	}
 }
 
