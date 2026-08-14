@@ -24,7 +24,7 @@ type detailView struct {
 	baseView
 	JobID string
 	// Script は保存済みの台本です。ここで内容を確認してから音声を作ります。
-	Script []domain.ScriptLine
+	Script domain.Script
 	// HasAudio は音声が既にあるかです。無ければ「音声を作成」だけを出します。
 	HasAudio bool
 	Message  string
@@ -74,6 +74,25 @@ func (h *Handler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderDetail(w, r, http.StatusAccepted, "音声の作成を受け付けました。完了すると通知が届きます。", "")
+}
+
+// Delete は、1 つのジョブの成果物をまとめて消します。
+//
+// 消す側が中身を知らずに済むよう、プレフィックス配下をまとめて対象にします。
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	if err := jobid.Validate(jobID); err != nil {
+		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.repo.Delete(r.Context(), jobID); err != nil {
+		http.Error(w, "削除に失敗しました", http.StatusBadGateway)
+		return
+	}
+
+	// 消した先の詳細は開けないため、一覧へ戻します。
+	http.Redirect(w, r, "/history", http.StatusSeeOther)
 }
 
 // Audio は、音声の署名付き URL へ転送します。

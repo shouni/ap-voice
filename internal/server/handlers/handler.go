@@ -44,7 +44,8 @@ type Handler struct {
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
 	List(ctx context.Context, limit int) ([]repository.Job, error)
-	Load(ctx context.Context, jobID string) ([]domain.ScriptLine, error)
+	Load(ctx context.Context, jobID string) (domain.Script, error)
+	Delete(ctx context.Context, jobID string) error
 }
 
 // signedURLExpiry は音声の署名付き URL の有効期限です。

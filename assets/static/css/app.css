@@ -47,12 +47,37 @@ body {
     border-color: var(--app-border-color);
 }
 
-/* ナビは Bootstrap の navbar-dark を前提に、地の色だけテーマへ寄せます。 */
-.navbar {
-    background-color: var(--zunda-green);
+/* ナビは Bootstrap の navbar-dark を前提に、地の色だけテーマへ寄せます。
+   以下は ap-comp の app.css と同じ指定です。 */
+.nav-link {
+    color: rgba(255, 255, 255, 0.85) !important;
+    transition: all 0.2s;
 }
 
-.navbar .nav-link.active {
-    color: #fff !important;
+.nav-link:hover {
+    color: white !important;
+    transform: translateY(-1px);
+}
+
+.nav-link.active {
+    color: white !important;
+    font-weight: bold;
+    border-bottom: 2px solid white;
+}
+
+/* 台本の表。話者とスタイルは折り返さず、テキストに幅を譲ります。 */
+.script-table th {
+    color: var(--app-muted-text);
     font-weight: 600;
+    white-space: nowrap;
+}
+
+.script-table td.speaker,
+.script-table td.style {
+    white-space: nowrap;
+    width: 1%;
+}
+
+.script-table td.style {
+    color: var(--app-muted-text);
 }

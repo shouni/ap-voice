@@ -9,6 +9,9 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-utils/jobid"
@@ -21,32 +24,40 @@ import (
 // 書き込みは PublishStep が担い、ここは読むだけです。**成果物がジョブ ID ごとの
 // プレフィックスにまとまっている**ため、一覧も削除も中身を知らずに行えます。
 type Repository struct {
-	reader remoteio.InputReader
-	bucket string
-	layout domain.StorageLayout
+	reader  remoteio.InputReader
+	remover remoteio.Remover
+	bucket  string
+	layout  domain.StorageLayout
 }
 
+// titleFetchParallelism は題名を読むときの同時実行数です。
+// 1 件ずつ読むと件数分の往復になるため並べますが、GCS を叩きすぎない程度に抑えます。
+const titleFetchParallelism = 8
+
 // NewRepository は Repository を構築します。
-func NewRepository(reader remoteio.InputReader, bucket string) (*Repository, error) {
+func NewRepository(reader remoteio.InputReader, remover remoteio.Remover, bucket string) (*Repository, error) {
 	if reader == nil {
-		return nil, fmt.Errorf("InputReader が指定されていません")
+		return nil, fmt.Errorf("読み出しクライアントが指定されていません")
+	}
+	if remover == nil {
+		return nil, fmt.Errorf("削除クライアントが指定されていません")
 	}
 	if bucket == "" {
 		return nil, fmt.Errorf("バケットが指定されていません")
 	}
-	return &Repository{reader: reader, bucket: bucket, layout: domain.NewStorageLayout()}, nil
+	return &Repository{reader: reader, remover: remover, bucket: bucket, layout: domain.NewStorageLayout()}, nil
 }
 
 // Load は、保存済みの台本を読み出します。domain.ScriptStore を満たします。
-func (r *Repository) Load(ctx context.Context, jobID string) ([]domain.ScriptLine, error) {
+func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, error) {
 	// ジョブ ID はフォームからも来るため、パスへ埋める前に必ず検証します。
 	if err := jobid.Validate(jobID); err != nil {
-		return nil, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+		return domain.Script{}, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
 
 	stream, err := r.reader.Open(ctx, r.uri(r.layout.ScriptPath(jobID)))
 	if err != nil {
-		return nil, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
 	}
 	defer func() {
 		if closeErr := stream.Close(); closeErr != nil {
@@ -56,19 +67,25 @@ func (r *Repository) Load(ctx context.Context, jobID string) ([]domain.ScriptLin
 
 	body, err := io.ReadAll(stream)
 	if err != nil {
-		return nil, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
 	}
 
-	var lines []domain.ScriptLine
-	if err := json.Unmarshal(body, &lines); err != nil {
-		return nil, fmt.Errorf("台本のJSONデコードに失敗しました: %w", err)
+	var script domain.Script
+	if err := json.Unmarshal(body, &script); err != nil {
+		return domain.Script{}, fmt.Errorf("台本のJSONデコードに失敗しました: %w", err)
 	}
-	return lines, nil
+	return script, nil
 }
 
 // Job は履歴一覧の 1 件です。
 type Job struct {
 	ID string
+	// Title は台本の題名です。**読めなければジョブ ID を入れます。**
+	// 台本が壊れていても音声だけは残っていることがあり、一覧から消えると
+	// 消す手段まで失われるためです。
+	Title string
+	// CreatedAt はジョブ ID から復元した作成時刻です。
+	CreatedAt time.Time
 	// HasAudio は音声が既に作られているかです。台本だけの段階と区別します。
 	HasAudio bool
 }
@@ -89,7 +106,8 @@ func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
 		}
 		job, exists := seen[jobID]
 		if !exists {
-			job = &Job{ID: jobID}
+			created, _ := jobid.CreatedAt(jobID)
+			job = &Job{ID: jobID, Title: jobID, CreatedAt: created}
 			seen[jobID] = job
 		}
 		if strings.HasSuffix(object, ".wav") {
@@ -105,6 +123,8 @@ func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
 	for _, job := range seen {
 		jobs = append(jobs, *job)
 	}
+
+	r.fillTitles(ctx, jobs)
 	sort.Slice(jobs, func(i, j int) bool {
 		return jobid.SortKey(jobs[i].ID) > jobid.SortKey(jobs[j].ID)
 	})
@@ -113,6 +133,62 @@ func (r *Repository) List(ctx context.Context, limit int) ([]Job, error) {
 		jobs = jobs[:limit]
 	}
 	return jobs, nil
+}
+
+// fillTitles は各ジョブの台本を読んで題名を埋めます。
+//
+// **1 件ずつ順に読むと件数分の往復になる**ため並列に読みます。読めなかったものは
+// ジョブ ID のままにして一覧には載せます（台本が壊れていても音声は残っていることがあり、
+// 一覧から消えると消す手段まで失われます）。
+func (r *Repository) fillTitles(ctx context.Context, jobs []Job) {
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(titleFetchParallelism)
+
+	for i := range jobs {
+		g.Go(func() error {
+			script, err := r.Load(gCtx, jobs[i].ID)
+			if err != nil {
+				slog.DebugContext(gCtx, "台本を読めないジョブIDのまま一覧に載せます", "job_id", jobs[i].ID, "error", err)
+				return nil
+			}
+			if title := strings.TrimSpace(script.Title); title != "" {
+				jobs[i].Title = title
+			}
+			return nil
+		})
+	}
+	// 個々の失敗は上で握りつぶしているため、ここでエラーは返りません。
+	_ = g.Wait()
+}
+
+// Delete は、1 つのジョブの成果物をまとめて消します。
+//
+// **プレフィックス配下を一覧して消します。** 何が置かれたかを呼び出し側が知らなくても
+// 消せるのが、ジョブ ID ごとにまとめている理由です。
+func (r *Repository) Delete(ctx context.Context, jobID string) error {
+	if err := jobid.Validate(jobID); err != nil {
+		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+	}
+
+	var paths []string
+	prefix := r.uri(r.layout.VoiceJobPrefix(jobID))
+	if err := r.reader.List(ctx, prefix, func(path string) error {
+		paths = append(paths, path)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("削除対象の一覧取得に失敗しました (%s): %w", jobID, err)
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("ジョブが見つかりません (%s)", jobID)
+	}
+
+	for _, path := range paths {
+		if err := r.remover.Delete(ctx, path); err != nil {
+			return fmt.Errorf("削除に失敗しました (%s): %w", path, err)
+		}
+	}
+	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(paths))
+	return nil
 }
 
 // splitJobPath は、オブジェクトのパスからジョブ ID とファイル名を取り出します。
