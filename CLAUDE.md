@@ -159,7 +159,14 @@ assets/         embedded prompt templates and the speaker roster (go:embed)
 - **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
   `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
   `mode` with no code change** (the directory already says they are prompts, so filenames carry
-  no prefix — same as the sibling apps). The mode string travels from `Request.Mode` straight to
+  no prefix — same as the sibling apps). Each file opens with a YAML front matter block
+  (`label` / `direction` / `use_when`) that supplies the form's option text and the description
+  under the select — the same arrangement as ap-comp, so **the explanation lives next to the
+  prompt it explains** rather than in a list the form owns. `assets/modes.go` splits it:
+  `LoadModes` reads the metadata, and **`LoadPrompts` returns the body only** — leaving the front
+  matter in would slip YAML into the top of the instruction text, and the run would still
+  succeed, so nothing would flag it. A prompt with no front matter still appears, labelled by its
+  key. The mode string travels from `Request.Mode` straight to
   `PromptAdapter.Generate` and is never validated against a list. The one exception is `promo`,
   named in `adapters/prompt.go` because it is the only mode whose *input type* differs: it reads
   ap-comp's `recipe.json` and decodes it into a `music.Recipe` before rendering.

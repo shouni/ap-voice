@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"html/template"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,19 @@ func testBaseView(path string) baseView {
 	return baseView{CSRFToken: "test-csrf-token", Path: path, DefaultModel: "gemini-test"}
 }
 
+// testModes はフォームに出すモードです。表示名を持つものと持たないものを 1 つずつ
+// 混ぜて、front matter が無いプロンプトでも選択肢が消えないことを見ます。
+func testModes() []assets.Mode {
+	return []assets.Mode{
+		{Key: "promo", ModeMetadata: assets.ModeMetadata{
+			Label:     "楽曲紹介（春日部つむぎ × ずんだもん）",
+			Direction: "楽曲レシピから作る宣伝ナレーション",
+			UseWhen:   "recipe.json のとき",
+		}},
+		{Key: "solo"},
+	}
+}
+
 // TestTemplatesRender は、3 画面が実際の View 構造体で描画できることを検証します。
 func TestTemplatesRender(t *testing.T) {
 	t.Parallel()
@@ -59,7 +73,7 @@ func TestTemplatesRender(t *testing.T) {
 			template: "home.html",
 			view: formView{
 				baseView: testBaseView("/"),
-				Modes:    []string{"solo", "promo"},
+				Modes:    testModes(),
 				Models:   []string{"gemini-test"},
 				Message:  "受け付けました",
 				// 投入後の再描画では入力内容が残ります。空に戻すと
@@ -74,8 +88,11 @@ func TestTemplatesRender(t *testing.T) {
 			want: []string{
 				`value="test-csrf-token"`,
 				`value="gs://bucket/recipe.json"`,
-				// 選択中のモードとモデルが選ばれた状態で戻ること。
-				`value="promo" selected`,
+				// 選択肢の表示名と説明は front matter 由来です。
+				"楽曲紹介",
+				`data-usewhen="recipe.json のとき"`,
+				// 表示名が無いモードはキーで出ます（説明の書き忘れで消えない）。
+				">solo<",
 				`value="gemini-test" selected`,
 				"受け付けました",
 			},
@@ -144,6 +161,42 @@ func TestTemplatesRender(t *testing.T) {
 	}
 }
 
+// optionPattern は、指定した value を持つ <option> の開始タグを取り出します。
+// 属性は複数行に分かれて出るため、行をまたいで拾います。
+func optionPattern(value string) *regexp.Regexp {
+	return regexp.MustCompile(`(?s)<option value="` + regexp.QuoteMeta(value) + `".*?>`)
+}
+
+// TestFormKeepsSelectedMode は、投入済みのモードが選択された状態で戻ることを検証します。
+//
+// 選択肢の中身が front matter 由来になったことで、value（キー）と表示名が別物に
+// なりました。**selected が付くのはキーの一致で決まる**ので、表示名を変えても
+// 選択状態が外れないことをここで押さえます。
+func TestFormKeepsSelectedMode(t *testing.T) {
+	t.Parallel()
+
+	tmpl := parseTemplates(t)
+
+	var buf strings.Builder
+	err := tmpl.ExecuteTemplate(&buf, "home.html", formView{
+		baseView: testBaseView("/"),
+		Modes:    testModes(),
+		Models:   []string{"gemini-test"},
+		Form:     domain.Request{Command: domain.CommandGenerate, Mode: "promo"},
+	})
+	if err != nil {
+		t.Fatalf("home.html の描画に失敗しました: %v", err)
+	}
+
+	got := buf.String()
+	if tag := optionPattern("promo").FindString(got); !strings.Contains(tag, "selected") {
+		t.Errorf("promo が選択されていません: %q", tag)
+	}
+	if tag := optionPattern("solo").FindString(got); strings.Contains(tag, "selected") {
+		t.Errorf("solo まで選択されています: %q", tag)
+	}
+}
+
 // TestTemplatesIncludeCSRFTokenInForms は、POST するフォームすべてに
 // CSRF トークンの hidden があることを検証します。
 //
@@ -157,7 +210,7 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 	views := map[string]any{
 		"home.html": formView{
 			baseView: testBaseView("/"),
-			Modes:    []string{"solo"},
+			Modes:    testModes(),
 			Models:   []string{"gemini-test"},
 			Form:     domain.Request{Command: domain.CommandGenerate},
 		},

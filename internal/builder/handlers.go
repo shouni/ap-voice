@@ -101,13 +101,10 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 
 	// フォームの選択肢は生成時と同じ埋め込みから取ります。別の一覧を持つと、
 	// 画面に出したモードが worker に無い、という食い違いが起こり得ます。
-	prompts, err := assets.LoadPrompts()
+	// 表示名と説明も同じファイルの front matter から来ます。
+	modes, err := assets.LoadModes()
 	if err != nil {
-		return fmt.Errorf("プロンプトの読み込みに失敗しました: %w", err)
-	}
-	modes := make([]string, 0, len(prompts))
-	for mode := range prompts {
-		modes = append(modes, mode)
+		return fmt.Errorf("生成モードの読み込みに失敗しました: %w", err)
 	}
 
 	webHandler, err := handlers.NewHandler(handlers.HandlerOptions{
