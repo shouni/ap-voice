@@ -14,10 +14,13 @@ import (
 )
 
 // slackTitles はパイプラインの結果ごとの見出しです。
+//
+// 「音声生成」と書かないのは、generate が台本までで終わるためです。何をしたかは
+// 本文の「処理」で分かります。
 var slackTitles = notify.Titles{
-	Success: "✅ 音声生成パイプラインが完了しました。",
-	Failure: "❌ 音声生成パイプラインに失敗しました。",
-	Skipped: "ℹ️ 音声生成パイプラインをスキップしました。",
+	Success: "✅ 処理が完了しました。",
+	Failure: "❌ 処理に失敗しました。",
+	Skipped: "ℹ️ 処理をスキップしました。",
 }
 
 // SlackAdapter は、Slack Webhook を介してパイプラインの結果を通知するアダプタです。
@@ -63,7 +66,9 @@ func (s *SlackAdapter) Notify(ctx context.Context, req domain.Request, publicURL
 		return nil
 	}
 
-	body := notify.NewBody().Link("公開URL", publicURL, publicURL)
+	// リンクの表示名には署名付き URL をそのまま使いません。クエリだけで 1000 文字を
+	// 超えるため、本文が URL で埋まって他の項目が読めなくなります。
+	body := notify.NewBody().Link("音声", publicURL, req.OutputURI)
 	s.writeCommonMetadata(body, req)
 
 	if err := s.pipeline.Success(ctx, body); err != nil {
@@ -122,7 +127,19 @@ func (s *SlackAdapter) writeCommonMetadata(body *notify.Body, req domain.Request
 		Code("処理", string(req.Command)).
 		Code("ジョブID", req.JobID).
 		Code("入力URI", req.InputURI).
-		Code("出力URI", req.OutputURI).
+		// **ファイル名まで出しません。** generate の時点では音声がまだ無く、
+		// audio.wav を出力先として示すと存在しないものを案内することになります。
+		// 何が置かれたかは詳細画面が示します。
+		Code("出力先", outputPrefix(req.OutputURI)).
 		Code("モード", req.Mode).
 		Code("モデル", req.AIModel)
+}
+
+// outputPrefix は出力先のジョブ単位のプレフィックスを返します。
+// 成果物はここにまとまるため、どの段階でも案内として正しくなります。
+func outputPrefix(outputURI string) string {
+	if idx := strings.LastIndex(outputURI, "/"); idx >= 0 {
+		return outputURI[:idx+1]
+	}
+	return outputURI
 }

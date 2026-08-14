@@ -41,7 +41,10 @@ func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, lines
 	}
 	slog.InfoContext(ctx, "台本の保存が完了しました。", "output_path", outputURI)
 
-	return r.publicURLOrEmpty(ctx, outputURI), nil
+	// **署名付き URL は返しません。** 署名は対象の存在を確かめないため、まだ作っていない
+	// 音声の URL を署名でき、通知に載せると 404 のリンクを配ることになります。
+	// この段階で見るべきものは台本で、それは詳細画面が表示します。
+	return "", nil
 }
 
 // Run は音声を合成して保存します。台本も隣に書き直します。
