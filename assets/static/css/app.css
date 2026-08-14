@@ -65,7 +65,7 @@ body {
     border-bottom: 2px solid white;
 }
 
-/* 台本の表。話者とスタイルは折り返さず、テキストに幅を譲ります。 */
+/* 台本の表。話者とスタイルは折り返さず、本文に幅を譲ります。 */
 .script-table th {
     color: var(--app-muted-text);
     font-weight: 600;
@@ -78,6 +78,17 @@ body {
     width: 1%;
 }
 
-.script-table td.style {
-    color: var(--app-muted-text);
+/* **セルの中身が select になったので下限が要ります。** width:1% はセルを
+   内容の幅まで縮めますが、Bootstrap の .form-select は width:100% を持つため
+   セルに従って潰れ、選択中の文字が見えなくなります（表示していた頃は
+   文字そのものが幅を決めていました）。
+   最長は話者が「ナースロボ＿タイプＴ」、スタイルが「人間（怒り）ver.」です。 */
+.script-table td.speaker .form-select,
+.script-table td.style .form-select {
+    min-width: 11rem;
+}
+
+/* 本文は残り幅をすべて使います。狭いと 1 行が何度も折り返して読めません。 */
+.script-table td .form-control {
+    min-width: 16rem;
 }
