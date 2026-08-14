@@ -59,7 +59,6 @@ func (m *MockPublishStep) Run(ctx context.Context, outputURI string, script doma
 type MockNotifier struct {
 	NotifyFunc        func(ctx context.Context, req domain.Request, publicURL string) error
 	NotifyFailureFunc func(ctx context.Context, req domain.Request, err error) error
-	NotifySkippedFunc func(ctx context.Context, req domain.Request, reason error) error
 }
 
 func (m *MockNotifier) Notify(ctx context.Context, req domain.Request, publicURL string) error {
@@ -74,13 +73,6 @@ func (m *MockNotifier) NotifyFailure(ctx context.Context, req domain.Request, er
 		return nil
 	}
 	return m.NotifyFailureFunc(ctx, req, err)
-}
-
-func (m *MockNotifier) NotifySkipped(ctx context.Context, req domain.Request, reason error) error {
-	if m.NotifySkippedFunc == nil {
-		return nil
-	}
-	return m.NotifySkippedFunc(ctx, req, reason)
 }
 
 func TestPipelineExecute(t *testing.T) {
@@ -394,31 +386,6 @@ func TestPipelineNotifications(t *testing.T) {
 		p.notifySuccess(ctx, req, "")
 	})
 
-	t.Run("notifySkipped: 正しくNotifySkippedが呼ばれること", func(t *testing.T) {
-		t.Parallel()
-
-		called := false
-		reason := errors.New("skip reason")
-		p := &Pipeline{
-			notifier: &MockNotifier{
-				NotifySkippedFunc: func(_ context.Context, got domain.Request, gotReason error) error {
-					called = true
-					if !reflect.DeepEqual(got, req) {
-						t.Fatalf("unexpected request: %+v", got)
-					}
-					if !errors.Is(gotReason, reason) {
-						t.Fatalf("unexpected reason: %v", gotReason)
-					}
-					return nil
-				},
-			},
-		}
-
-		p.notifySkipped(ctx, req, reason)
-		if !called {
-			t.Fatal("NotifySkipped was not called")
-		}
-	})
 }
 
 // 上限を超えたら打ち切り、**失敗通知はその外側で送ります。**
@@ -428,7 +395,11 @@ func TestPipelineNotifications(t *testing.T) {
 func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	t.Parallel()
 
-	notified := make(chan context.Context, 1)
+	type failure struct {
+		ctx context.Context
+		err error
+	}
+	notified := make(chan failure, 1)
 
 	p := NewPipeline(
 		&MockScriptStep{
@@ -440,8 +411,8 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 		},
 		&MockPublishStep{},
 		&MockNotifier{
-			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, _ error) error {
-				notified <- ctx
+			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, err error) error {
+				notified <- failure{ctx: ctx, err: err}
 				return nil
 			},
 		},
@@ -459,9 +430,15 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	}
 
 	select {
-	case gotCtx := <-notified:
-		if gotCtx.Err() != nil {
-			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", gotCtx.Err())
+	case got := <-notified:
+		if got.ctx.Err() != nil {
+			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctx.Err())
+		}
+		// **通知側が打ち切りだと判別できること。** ここが切れていると、
+		// SlackAdapter は時間切れを普通の失敗として出してしまいます。
+		// 途中の 1 箇所でも %w を %v に変えると落ちます。
+		if !errors.Is(got.err, context.DeadlineExceeded) {
+			t.Errorf("通知に渡ったエラーから打ち切りを判別できません: %v", got.err)
 		}
 	default:
 		t.Fatal("失敗通知が呼ばれていない")

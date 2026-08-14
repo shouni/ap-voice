@@ -47,10 +47,22 @@ func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, scrip
 	return "", nil
 }
 
-// Run は音声を合成して保存します。台本も隣に書き直します。
+// Run は台本を保存してから音声を合成します。
+//
+// **順序が逆だと、合成の時間切れで台本ごと失われます。** 台本と音声をまとめて作る
+// 経路では、生成した台本はまだどこにも保存されていません。音声を先に作ると、
+// 合成が上限に達した時点で Gemini の生成結果が消え、やり直すしかなくなります。
+// 先に保存しておけば、詳細画面から合成だけをやり直せます。
+//
+// 台本を毎回書き直すのは、修正済みの台本を渡された場合に、保存されている台本と
+// 実際に喋った内容がずれないようにするためです。
 func (r *PublishStep) Run(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if outputURI == "" {
 		return "", errors.New("出力先パス(outputURI)が指定されていません")
+	}
+
+	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
+		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
 	}
 
 	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
@@ -58,12 +70,6 @@ func (r *PublishStep) Run(ctx context.Context, outputURI string, script domain.S
 		return "", fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
 	}
 	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
-
-	// 台本も書き直します。API から修正済みの台本を渡された場合、保存されている
-	// 台本と実際に喋った内容がずれてしまうためです。
-	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
-		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
-	}
 
 	return r.publicURLOrEmpty(ctx, outputURI), nil
 }

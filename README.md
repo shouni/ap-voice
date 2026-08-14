@@ -2,7 +2,7 @@
 
 [![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-WIP-orange)](#)
+[![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](#)
 
 ## 💡 概要 (About)
 
@@ -58,8 +58,8 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | --- | --- |
 | `SERVICE_URL` / `PORT` | 公開 URL と待ち受けポート (Default: `http://localhost:8080` / `8080`)。 |
 | `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
-| `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**エンジンがメモリ不足になったらここを vCPU 数まで下げます。** |
-| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**スループットを決めているのはこの値です。** |
+| `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**スループットを縛っているのはこの値です。** 代償はエンジンのメモリで、OOM が出たら下げます。ピークは台本の長さでは上がりません（同時数で頭打ちのため）。 |
+| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**実測では8倍の余裕があり、調整つまみとして機能していません**（12セグメントの実効 0.24 件/秒 に対し、許容 2.0 件/秒）。エンジンを叩きすぎないための保険です。 |
 | `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
 | `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
@@ -87,7 +87,7 @@ go run .        # SERVER_ROLE が必須
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
-`POST /history/{jobID}/synthesize`（音声を作る）、`POST /history/{jobID}/delete`（削除）、
+`POST /history/{jobID}/script`（台本を保存して音声を作る）、`POST /history/{jobID}/delete`（削除）、
 `GET /history/{jobID}/audio`（署名付き URL へ 302）です。
 
 `POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
@@ -101,14 +101,15 @@ go run .        # SERVER_ROLE が必須
 | --- | --- | --- |
 | `generate` | 入力ソースから台本を作る。**音声は作りません** | `input_uri`, `output_uri` |
 | `synthesize` | 台本から音声を作る（Gemini を呼ばない） | `output_uri` と、`script` または `job_id` |
+| `generate_and_synthesize` | 台本を作ってそのまま音声まで作る。**確認を挟みません** | `input_uri`, `output_uri` |
 
 | フィールド | 説明 |
 | --- | --- |
-| `command` | `generate` / `synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
+| `command` | `generate` / `synthesize` / `generate_and_synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
 | `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
 | `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |
-| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<mode>.md` を置けばモードが増えます**（現在は `solo` / `dialogue` / `duet` / `promo`）。表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。 |
+| `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<ジャンル>_<形式>.md` を置けばモードが増えます。** 表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。<br>技術: `tech_solo`（ひとり語り）/ `tech_dialogue`（対話）/ `tech_duet`（交互）/ `tech_howto`（手順）<br>その他: `news_anchor`（ニュース）/ `story_reading`（朗読）/ `music_promo`（楽曲紹介） |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
 | `script` | 台本の行（`ScriptLine` の配列）。`synthesize` で `job_id` を省くときに必須。保存された `audio.json` の `lines` がそのまま入ります。 |
 
@@ -117,7 +118,7 @@ go run .        # SERVER_ROLE が必須
   "command": "generate",
   "input_uri": "https://example.com/tech-news",
   "output_uri": "gs://my-bucket/audio/tech-news.wav",
-  "mode": "dialogue"
+  "mode": "tech_dialogue"
 }
 ```
 
@@ -166,22 +167,23 @@ sequenceDiagram
     Tasks->>Worker: POST /tasks/generate (OIDC)
     Worker->>Store: 入力を読む (gs:// のとき)
     Worker->>Gemini: 台本を生成 (スキーマ強制)
-    Gemini-->>Worker: []ScriptLine
+    Gemini-->>Worker: Script（title + lines）
     Worker->>Store: audio.json を書く
     Note right of Worker: **音声はまだ作りません**
     Worker->>Slack: 完了通知（詳細画面のリンク付き）
 
-    Note over User, Slack: 2. 台本を確認する
+    Note over User, Slack: 2. 台本を確認・修正する
     User->>Web: GET /history
     Web->>Store: ジョブを一覧
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
-    Web-->>User: 台本を表示
+    Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
 
     Note over User, Slack: 3. 音声を作る (command=synthesize)
-    User->>Web: POST /history/{jobID}/synthesize
+    User->>Web: POST /history/{jobID}/script （必要なら直してから）
+    Web->>Store: 直した audio.json を保存
     Web->>Tasks: enqueue(Request{JobID})
-    Note right of Web: 台本は載せません（1MB 上限）
+    Note right of Web: 台本は載せません（1MB 上限）。先に保存して ID だけ渡します
     Tasks->>Worker: POST /tasks/generate (OIDC)
     Worker->>Store: audio.json を読む
     loop セグメントごと（並列・レート制限あり）

@@ -75,13 +75,19 @@ is easy to break by editing.
   or `auth.TaskVerifier` is fail-closed, so `BuildHandlers` refuses to start rather than let
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_MAX_PARALLEL_SEGMENTS` / `VOICEVOX_SEGMENT_RATE_LIMIT` / `VOICEVOX_SEGMENT_TIMEOUT` —
-  optional; `8`, `500ms`, `120s`. **Throughput is set by the rate limit**, not the parallelism:
-  `min(1/rate, parallel ÷ time-per-segment)`. Lowering the parallelism below that ratio makes
-  runs *slower*, and raising it past the engine's vCPU count only lengthens the queue — what it
-  actually costs is engine memory, since each in-flight synthesis holds buffers. They are env
-  vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
+  optional; `8`, `500ms`, `120s`. Throughput is `min(1/rate, parallel ÷ time-per-segment)`, and
+  **measurement says the second term is the binding one**: a 12-segment job took 50s at 0.24
+  segments/sec while the limiter allowed 2.0/sec, so the rate limit never came into play and is
+  not a usable knob today. CPU did not saturate either (2.31 of 5 allocated vCPU, memory 0.94 of
+  4 GiB), so the limit sits inside the engine and **neither raising nor lowering the parallelism
+  has a predictable effect — measure before changing it.** What parallelism does cost is engine
+  memory, and note that the peak does not grow with script length: the in-flight count is capped,
+  so a 200-line script has the same memory peak as a 12-line one and only runs longer. They are
+  env vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
   throttling to fit it should not need a rebuild. Note this is **unrelated** to Cloud Run's
   `max_instance_request_concurrency = 1`, which counts *jobs* per instance, not segments per job.
+  go-voicevox logs per-segment avg/min/max at the end of each batch — read that before touching
+  any of the three.
 - `PIPELINE_TIMEOUT` / `TASK_DISPATCH_DEADLINE` — optional; default to `25m` and `30m`. These are
   the top two rungs of the fleet's timeout ladder
   (`PIPELINE_TIMEOUT` < dispatch deadline <= Cloud Run timeout). **The smallest wins**, so the
@@ -90,7 +96,11 @@ is easy to break by editing.
   is simply lost. `ValidateEssentialConfig` rejects a configuration that inverts them.
   `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
   for notifications** — reusing the timed-out one would silence the very notification the ladder
-  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`).
+  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`). That test also pins the
+  error chain: the failure handed to the notifier must still satisfy
+  `errors.Is(err, context.DeadlineExceeded)`, because `SlackAdapter` gives a timeout its own
+  heading and guidance. One `%v` where a `%w` belongs, anywhere between the engine and the
+  pipeline, silently turns a timeout back into an ordinary failure.
 
 Per-run values (command, job ID, input, output, mode, model, script) are **not** environment
 variables — they are a `domain.Request`, built by the web form or posted as the JSON body of a
@@ -142,9 +152,23 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **`internal/repository` serves the history screens** — `List` (with titles filled concurrently,
-  falling back to the job ID when a script will not parse, so a broken job can still be deleted),
-  `Load`, and `Delete`, which removes the whole job prefix rather than a fixed list of names.
+- **The detail screen edits the script, it does not just show it.** That is what makes the
+  two-command split pay: the reason given for it is fixing a reading without regenerating, and
+  until the form existed there was no way to fix anything, so review could only choose between
+  synthesizing and deleting. Saving and synthesizing are one button — with the script editable,
+  a re-synthesis that skips the save would only ever reproduce the same audio.
+  **The edited script is not put in the task.** `UpdateScript` writes it to GCS and enqueues the
+  job ID alone, so a long script cannot reach Cloud Tasks' 1MB limit and the worker keeps using
+  the stored-script path it already had. Speaker and style come from the registry and are
+  re-checked on submit: the browser offers only valid pairs, but the form accepts anything, and
+  an impossible pair is not rejected downstream — `getStyleID` silently falls back.
+- **`internal/repository` serves the history screens** — `List`, `Load`, `Save`, `HasAudio`, and
+  `Delete`, which removes the whole job prefix rather than a fixed list of names. `List` sorts
+  and truncates **before** filling in titles, so a page of 50 costs 50 object reads no matter how
+  many jobs exist; doing it the other way round made every page view scale with the bucket.
+  A script that will not parse leaves the job listed under its ID, so a broken job can still be
+  deleted. `HasAudio` asks storage whether the object exists rather than searching a listing —
+  the listing is capped, so any job past the cap reported no audio and lost its player.
 - **Templates are only evaluated at request time.** A renamed view field still compiles, so
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).
@@ -161,18 +185,27 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   whatever enqueues it.
 - **`Pipeline.Execute` is the only orchestration point**: validate → resolve script → publish
   (WAV + script upload + optional signed URL) → notify. Notification fires from a single `defer`,
-  so failure paths do not have to remember to notify.
+  so failure paths do not have to remember to notify. **There are two outcomes, not three** — the
+  sibling apps notify a "skipped" case for input that has not changed, and ap-voice carried the
+  whole path (port method, pipeline helper, Slack title) with nothing able to trigger it. Note
+  `deadcode` reports such a path as live, because its tests count as callers.
 - **Script generation and synthesis are separate commands**, and `Pipeline.Execute` branches on
   `Command` twice — once in `resolveScript`, once in `publish`:
   - `generate` — reads the source, calls Gemini, and stops at `PublishStep.PublishScript`, which
     writes the script only. **It produces no audio and returns no signed URL**, deliberately:
     signing does not check that the object exists, so signing a WAV that was never made hands out
     a 404 link in the Slack notification.
+  - `generate_and_synthesize` — the same as `generate` followed by `synthesize`, for when there
+    is nothing to fix. **It needs no new branching**: `resolveScript` treats anything that is not
+    `synthesize` as a generation, and `publish` treats anything that is not `generate` as going
+    all the way to audio, so the third value lands on the wanted side of both.
   - `synthesize` — never touches Gemini. It uses `Request.Script` when present and otherwise
     loads the stored script by `JobID` (`domain.ScriptStore`). The web face always takes the
     second path: **the script is not carried in the task payload**, because a long one can reach
-    Cloud Tasks' 1MB limit. `PublishStep.Run` writes the WAV *and* rewrites the script, so an
-    edited script cannot drift from the audio that was actually spoken.
+    Cloud Tasks' 1MB limit. `PublishStep.Run` rewrites the script *and* writes the WAV, so an
+    edited script cannot drift from the audio that was actually spoken. **The script goes
+    first**: in the combined command it exists only in memory until then, so writing audio first
+    would lose a generated script to a synthesis timeout, leaving nothing to retry from.
 
   `Request.Command` has **no default**: an empty command is an error, because silently treating it
   as `generate` would discard a caller's `script` and bill them for generation. `Request.Validate`
@@ -181,25 +214,35 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **`domain.StorageLayout` owns every object name**, and artifacts live under one prefix per job
   (`voice/<jobID>/audio.wav`, `.../audio.json`). Callers never choose paths — the web form has no
   output field, and `Handler.Enqueue` derives the URI from the job ID. That is what lets
-  `repository` list and delete a job without knowing what it contains. `ScriptPath` must stay the
-  audio name with a swapped extension: `VoiceAdapter` writes the script by replacing the output's
-  extension, so renaming one side alone would save to a path nothing reads.
+  `repository` list and delete a job without knowing what it contains. The script's location is
+  the audio name with a swapped extension, and **`ScriptURIFor` is the only place that rule
+  lives** — the writer derives it from the audio URI, the reader from the job ID, and both go
+  through it. They used to compute it separately, which would have saved to a path nothing reads
+  if either changed (`TestScriptPathAndScriptURIForAgree`).
 - **A signed URL is only ever a bonus.** It is generated when the RemoteIO's `URLSigner` is
   non-nil (GCS); local output never gets one and that is a soft failure (logged, not returned).
 - **Prompt modes are file-driven.** `assets/assets.go` embeds `prompts/*.md` and
   `go-prompt-kit` keys them by filename, so **dropping in `assets/prompts/<mode>.md` adds a
   `mode` with no code change** (the directory already says they are prompts, so filenames carry
-  no prefix — same as the sibling apps). Each file opens with a YAML front matter block
+  a genre prefix so the list groups itself: `tech_*`, `news_*`, `story_*`, `music_*`).
+  Each file opens with a YAML front matter block
   (`label` / `direction` / `use_when`) that supplies the form's option text and the description
   under the select — the same arrangement as ap-comp, so **the explanation lives next to the
   prompt it explains** rather than in a list the form owns. `assets/modes.go` splits it:
   `LoadModes` reads the metadata, and **`LoadPrompts` returns the body only** — leaving the front
   matter in would slip YAML into the top of the instruction text, and the run would still
   succeed, so nothing would flag it. A prompt with no front matter still appears, labelled by its
-  key. The mode string travels from `Request.Mode` straight to
-  `PromptAdapter.Generate` and is never validated against a list. The one exception is `promo`,
-  named in `adapters/prompt.go` because it is the only mode whose *input type* differs: it reads
-  ap-comp's `recipe.json` and decodes it into a `music.Recipe` before rendering.
+  key. **Files beginning with `_` are partials, not modes** — `_writing` (the rules every
+  spoken script obeys), `_length` and `_input` — so the seven prompts state only what is
+  particular to them. `go-prompt-kit` already excludes that prefix from `Build`, and `LoadModes`
+  filters on `prompts.DefaultPartialPrefix` so the same rule is not written twice; `LoadPrompts`
+  keeps them, since the bodies reference them.
+  The mode string travels from `Request.Mode` straight to
+  `PromptAdapter.Generate` and is never validated against a list. The one exception is
+  `music_promo`, named in `adapters/prompt.go` because it is the only mode whose *input type*
+  differs: it reads ap-comp's `recipe.json` and decodes it into a `music.Recipe` before
+  rendering. **That constant is the only place a mode name appears in code**, so renaming a
+  prompt file means touching it.
 - **`assets/speakers.json` is the speaker vocabulary**, and it is this app's file, not
   go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
   updates produce a readable diff); refresh it with the curl in `assets/assets.go`. `builder`

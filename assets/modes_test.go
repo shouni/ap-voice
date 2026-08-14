@@ -23,7 +23,10 @@ func TestLoadPromptsStripsFrontMatter(t *testing.T) {
 	}
 
 	for mode, body := range prompts {
-		if strings.HasPrefix(body, frontMatterDelim) {
+		// 区切り「---」ではなく、**front matter のブロック**が残っていないかを見ます。
+		// 部品 _input.md の本文は "--- 元文章 ---" で始まるため、
+		// 単に "---" 始まりを禁じると正しい部品まで落ちます。
+		if strings.HasPrefix(body, frontMatterDelim+"\n") {
 			t.Errorf("%s: front matter が本文に残っています", mode)
 		}
 		for _, key := range []string{"label:", "direction:", "use_when:"} {
@@ -96,12 +99,54 @@ func TestLoadModesMatchesPrompts(t *testing.T) {
 		t.Fatalf("LoadPrompts() error = %v", err)
 	}
 
-	if len(modes) != len(prompts) {
-		t.Fatalf("モード %d 件に対しプロンプトは %d 件です", len(modes), len(prompts))
+	// 部品はモードになりません。数を突き合わせるのは部品を除いた分です。
+	var bodies int
+	for key := range prompts {
+		if !isPartial(key) {
+			bodies++
+		}
+	}
+	if len(modes) != bodies {
+		t.Fatalf("モード %d 件に対しプロンプトは %d 件です", len(modes), bodies)
 	}
 	for _, mode := range modes {
 		if _, ok := prompts[mode.Key]; !ok {
 			t.Errorf("%s に対応するプロンプトがありません", mode.Key)
+		}
+	}
+}
+
+// TestPartialsAreLoadedButNotOffered は、共通部品が**ビルダーには渡り、
+// 選択肢には出ない**ことを検証します。
+//
+// どちらか片方でも間違うと壊れ方が違います。モードに混ざれば利用者に
+// 「_writing」という選択肢が見え、ビルダーに渡らなければ本文の
+// {{template "_writing" .}} が解決できず生成が落ちます。
+func TestPartialsAreLoadedButNotOffered(t *testing.T) {
+	t.Parallel()
+
+	prompts, err := LoadPrompts()
+	if err != nil {
+		t.Fatalf("LoadPrompts() error = %v", err)
+	}
+	modes, err := LoadModes()
+	if err != nil {
+		t.Fatalf("LoadModes() error = %v", err)
+	}
+
+	var partials int
+	for key := range prompts {
+		if isPartial(key) {
+			partials++
+		}
+	}
+	if partials == 0 {
+		t.Fatal("共通部品が 1 つも読み込まれていません")
+	}
+
+	for _, mode := range modes {
+		if isPartial(mode.Key) {
+			t.Errorf("部品が選択肢に出ています: %s", mode.Key)
 		}
 	}
 }

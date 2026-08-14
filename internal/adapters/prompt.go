@@ -24,7 +24,9 @@ type TemplateData struct {
 //
 // モードは prompts/<mode>.md を置くだけで増える仕組みなので、ここに名前が要るのは
 // 「入力の型が違う」モードだけです。文章を渡すモードを足すときはここを触りません。
-const promoMode = "promo"
+//
+// **ファイル名を変えたらここも変わります。** モード名がコードに現れる唯一の場所です。
+const promoMode = "music_promo"
 
 // promptBuilder は、フォーマット済みのプロンプトを作成するためのインターフェースです。
 type promptBuilder interface {

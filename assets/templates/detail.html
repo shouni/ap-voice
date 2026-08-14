@@ -12,34 +12,63 @@
 {{ template "nav" . }}
 
 <main class="container main-content">
-  <h1 class="h5 mb-1">{{ with .Script.Title }}{{ . }}{{ else }}{{ $.JobID }}{{ end }}</h1>
-  <p class="text-secondary small"><code>{{ .JobID }}</code></p>
+  <p class="text-secondary small mb-3"><code>{{ .JobID }}</code></p>
 
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
   {{ if .HasAudio }}
-    {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。
-         ap-comp の audio_player.js は一覧に複数並ぶときの同期用なので、
-         プレイヤーが 1 本のこの画面では要りません。 */}}
+    {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。 */}}
     <audio controls src="/history/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
   {{ end }}
 
-  <h2 class="h6">台本（{{ len .Script.Lines }} 行）</h2>
-  <table class="table table-sm align-middle script-table">
-    <thead>
-      <tr><th>話者</th><th>スタイル</th><th>テキスト</th></tr>
-    </thead>
-    <tbody>
-      {{ range .Script.Lines }}
-        <tr>
-          <td class="speaker">{{ .Speaker }}</td>
-          <td class="style">{{ .Style }}</td>
-          <td>{{ .Text }}</td>
-        </tr>
-      {{ end }}
-    </tbody>
-  </table>
+  {{/* 台本は読むだけでなく直せます。**直せることが、分けた工程の理由です** —
+       1 行の読みを直すために生成からやり直すと、直したかった行以外まで変わります。
+       送信先が /script なのは、編集内容をタスクに載せないためです。先に保存して
+       ジョブ ID だけを渡すので、長い台本が Cloud Tasks の 1MB 上限に当たりません。 */}}
+  <form method="post" action="/history/{{ .JobID }}/script" id="script-form">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold" for="title">タイトル</label>
+      <input class="form-control" type="text" id="title" name="title" value="{{ .Script.Title }}"
+             maxlength="60" placeholder="{{ .JobID }}">
+      <div class="form-text">履歴の一覧に出ます。60 文字以内。</div>
+    </div>
+
+    <h2 class="h6">台本（{{ len .Script.Lines }} 行）</h2>
+    <div class="form-text mb-2">
+      本文を空にした行は保存時に削除されます。スタイルの選択肢は話者に応じて変わります。
+    </div>
+
+    <table class="table table-sm align-middle script-table">
+      <thead>
+        <tr><th>話者</th><th>スタイル</th><th>テキスト</th></tr>
+      </thead>
+      <tbody>
+        {{ range .Script.Lines }}
+          <tr>
+            <td class="speaker">
+              <select class="form-select form-select-sm js-speaker" name="speaker">
+                {{ $current := .Speaker }}
+                {{ range $.Speakers }}<option value="{{ . }}" {{ if eq . $current }}selected{{ end }}>{{ . }}</option>{{ end }}
+              </select>
+            </td>
+            <td class="style">
+              {{/* 初期表示は保存済みの値だけを入れ、読み込み後に JS が話者ぶんへ広げます。
+                   ここで全スタイルを出すと、話者が持たない組み合わせを選べてしまいます。 */}}
+              <select class="form-select form-select-sm js-style" name="style" data-selected="{{ .Style }}">
+                <option value="{{ .Style }}" selected>{{ .Style }}</option>
+              </select>
+            </td>
+            <td>
+              <textarea class="form-control form-control-sm js-text" name="text" rows="2">{{ .Text }}</textarea>
+            </td>
+          </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </form>
 
   {{/* 操作はまとめて末尾に置きます。ap-comp の詳細画面と同じで、戻るを左、
        実行と削除を右に寄せます。台本を読んでから押すものなので、表の手前に
@@ -48,12 +77,11 @@
     <a class="btn btn-link text-secondary text-decoration-none" href="/history">← 履歴一覧へ戻る</a>
 
     <div class="d-flex gap-2 flex-wrap justify-content-end">
-      <form method="post" action="/history/{{ .JobID }}/synthesize">
-        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-        <button class="btn btn-primary" type="submit">
-          {{ if .HasAudio }}音声を作り直す{{ else }}音声を作成{{ end }}
-        </button>
-      </form>
+      {{/* 保存と合成は 1 つの操作です。編集していなければ同じ内容を書き戻すだけなので、
+           「保存せず合成だけ」というボタンを別に置いても同じ音声しか作れません。 */}}
+      <button class="btn btn-primary" type="submit" form="script-form">
+        {{ if .HasAudio }}保存して音声を作り直す{{ else }}保存して音声を作成{{ end }}
+      </button>
 
       {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。 */}}
       <form method="post" action="/history/{{ .JobID }}/delete"
@@ -64,8 +92,10 @@
     </div>
   </div>
 </main>
+<script>window.apVoiceStyles = {{ .StylesJSON }};</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
         crossorigin="anonymous"></script>
+<script src="/static/js/script_edit.js"></script>
 </body>
 </html>{{ end }}

@@ -115,6 +115,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Bucket:    appCtx.Config.Storage.GCSBucket,
 		Repo:      appCtx.Repository,
 		Signer:    appCtx.RemoteIO.Signer,
+		Speakers:  appCtx.Speakers,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)

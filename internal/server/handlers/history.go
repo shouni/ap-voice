@@ -1,7 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-utils/jobid"
@@ -23,12 +29,105 @@ type historyView struct {
 type detailView struct {
 	baseView
 	JobID string
-	// Script は保存済みの台本です。ここで内容を確認してから音声を作ります。
+	// Script は保存済みの台本です。ここで内容を確認・修正してから音声を作ります。
 	Script domain.Script
 	// HasAudio は音声が既にあるかです。無ければ「音声を作成」だけを出します。
 	HasAudio bool
-	Message  string
-	Error    string
+	// Speakers は話者名の一覧、StylesJSON は話者ごとの実在スタイルです。
+	// 後者は選択肢を話者に応じて絞るために JS へ渡します。
+	Speakers   []string
+	StylesJSON template.JS
+	Message    string
+	Error      string
+}
+
+// maxScriptLines は 1 つの台本で受け付ける行数の上限です。
+// フォームから任意の行数を組み立てられるため、上限が無いと 1 リクエストで
+// 際限なく合成を積めます。プロンプトの目安（最大 80 発言）より広く取ります。
+const maxScriptLines = 200
+
+// UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
+//
+// **台本はタスクに載せません。** 先に保存してから JobID だけを渡すことで、
+// Cloud Tasks の 1MB 上限に台本の長さが当たらず、Worker 側も
+// 「保存済み台本を読む」既存の経路をそのまま使えます。
+func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	if err := jobid.Validate(jobID); err != nil {
+		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		h.renderDetail(w, r, http.StatusBadRequest, "", "フォームの解析に失敗しました")
+		return
+	}
+
+	script, err := h.scriptFromForm(r)
+	if err != nil {
+		h.renderDetail(w, r, http.StatusBadRequest, "", err.Error())
+		return
+	}
+
+	if err := h.repo.Save(r.Context(), jobID, script); err != nil {
+		h.renderDetail(w, r, http.StatusBadGateway, "", "台本の保存に失敗しました")
+		return
+	}
+
+	req := domain.Request{
+		Command:   domain.CommandSynthesize,
+		JobID:     jobID,
+		OutputURI: h.layout.AudioURI(h.bucket, jobID),
+	}
+	if err := h.queue.Enqueue(r.Context(), req); err != nil {
+		h.renderDetail(w, r, http.StatusBadGateway, "", err.Error())
+		return
+	}
+
+	h.renderDetail(w, r, http.StatusAccepted, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
+}
+
+// scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
+//
+// **話者とスタイルは一覧に載っているものだけを通します。** 画面は選択肢で出しますが、
+// フォームは何でも送れるためです。実在しない組み合わせは合成時に既定スタイルへ
+// 黙って落ちるので、保存する前に弾きます。
+func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
+	speakers := r.Form["speaker"]
+	styles := r.Form["style"]
+	texts := r.Form["text"]
+
+	if len(speakers) != len(styles) || len(speakers) != len(texts) {
+		return domain.Script{}, errors.New("台本の項目数が揃っていません")
+	}
+	if len(speakers) == 0 {
+		return domain.Script{}, errors.New("台本が空です")
+	}
+	if len(speakers) > maxScriptLines {
+		return domain.Script{}, fmt.Errorf("台本が長すぎます（%d 行、上限 %d 行）", len(speakers), maxScriptLines)
+	}
+
+	lines := make([]domain.ScriptLine, 0, len(speakers))
+	for i := range speakers {
+		text := strings.TrimSpace(texts[i])
+		if text == "" {
+			// 空にした行は削除の意思表示として落とします。
+			continue
+		}
+		valid, ok := h.speakers.StylesFor(speakers[i])
+		if !ok {
+			return domain.Script{}, fmt.Errorf("%d 行目: 話者 %q は一覧にありません", i+1, speakers[i])
+		}
+		if !slices.Contains(valid, styles[i]) {
+			return domain.Script{}, fmt.Errorf("%d 行目: %q に %q というスタイルはありません", i+1, speakers[i], styles[i])
+		}
+		lines = append(lines, domain.ScriptLine{Speaker: speakers[i], Style: styles[i], Text: text})
+	}
+	if len(lines) == 0 {
+		return domain.Script{}, errors.New("本文のある行がありません")
+	}
+
+	return domain.Script{Title: strings.TrimSpace(r.FormValue("title")), Lines: lines}, nil
 }
 
 // History は、これまでのジョブを新しい順に並べます。
@@ -45,35 +144,6 @@ func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 // Detail は、1 件のジョブの台本を表示します。ここから音声の作成を指示します。
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 	h.renderDetail(w, r, http.StatusOK, "", "")
-}
-
-// Synthesize は、保存済みの台本から音声を作るよう指示します。
-//
-// 台本そのものは載せません。Cloud Tasks のペイロードは 1MB が上限で、長い台本は
-// そこに当たりうるためです。Worker 側が JobID で読み出します。
-func (h *Handler) Synthesize(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
-		return
-	}
-
-	req := domain.Request{
-		Command:   domain.CommandSynthesize,
-		JobID:     jobID,
-		OutputURI: h.layout.AudioURI(h.bucket, jobID),
-	}
-	if err := req.Validate(); err != nil {
-		h.renderDetail(w, r, http.StatusBadRequest, "", err.Error())
-		return
-	}
-
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderDetail(w, r, http.StatusBadGateway, "", err.Error())
-		return
-	}
-
-	h.renderDetail(w, r, http.StatusAccepted, "音声の作成を受け付けました。完了すると通知が届きます。", "")
 }
 
 // Delete は、1 つのジョブの成果物をまとめて消します。
@@ -129,25 +199,39 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 
-	jobs, err := h.repo.List(r.Context(), historyLimit)
+	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 	if err != nil {
-		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
+		http.Error(w, "音声の有無を確認できませんでした", http.StatusBadGateway)
 		return
 	}
-	hasAudio := false
-	for _, job := range jobs {
-		if job.ID == jobID {
-			hasAudio = job.HasAudio
-			break
-		}
+
+	stylesJSON, err := json.Marshal(h.stylesBySpeaker())
+	if err != nil {
+		http.Error(w, "話者一覧の組み立てに失敗しました", http.StatusInternalServerError)
+		return
 	}
 
 	h.renderTemplate(w, status, "detail.html", detailView{
-		baseView: h.base(r),
-		JobID:    jobID,
-		Script:   script,
-		HasAudio: hasAudio,
-		Message:  message,
-		Error:    errMsg,
+		baseView:   h.base(r),
+		JobID:      jobID,
+		Script:     script,
+		HasAudio:   hasAudio,
+		Speakers:   h.speakers.SpeakerNames(),
+		StylesJSON: template.JS(stylesJSON),
+		Message:    message,
+		Error:      errMsg,
 	})
+}
+
+// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を返します。
+// 画面側はこれを見て、話者を変えたときにスタイルの選択肢を差し替えます。
+func (h *Handler) stylesBySpeaker() map[string][]string {
+	names := h.speakers.SpeakerNames()
+	out := make(map[string][]string, len(names))
+	for _, name := range names {
+		if styles, ok := h.speakers.StylesFor(name); ok {
+			out[name] = styles
+		}
+	}
+	return out
 }
