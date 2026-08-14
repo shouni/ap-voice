@@ -9,6 +9,7 @@ import (
 
 	"github.com/shouni/gcp-kit/tasks"
 	"github.com/shouni/go-http-kit/httpkit"
+	"github.com/shouni/go-job-kit/jobstatus"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 	"github.com/shouni/go-voicevox/speaker"
@@ -75,7 +76,9 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}
 
 	appCtx := &app.Container{
-		Config:     cfg,
+		Config: cfg,
+		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
+		JobStatus:  jobstatus.NewRecorder[jobstatus.Status](repo),
 		Speakers:   speakers,
 		Repository: repo,
 		RemoteIO:   rio,

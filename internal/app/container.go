@@ -9,6 +9,7 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-http-kit/httpkit"
+	"github.com/shouni/go-job-kit/jobstatus"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
 
@@ -30,6 +31,9 @@ type Container struct {
 	// External Adapters
 	HTTPClient httpkit.Requester
 	Notifier   domain.Notifier
+	// JobStatus はジョブの進行状況を記録します。Web 面が queued を、
+	// Worker 面が running / succeeded / failed を書きます。
+	JobStatus *jobstatus.Recorder[jobstatus.Status]
 	// Business Logic
 	Pipeline domain.Pipeline
 	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。

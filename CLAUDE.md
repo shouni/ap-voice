@@ -152,13 +152,35 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **`/modes` is the catalog**, in the shape ap-comp uses: a table of every mode with its label,
-  what it makes and when to pick it, then each prompt as it is actually assembled — partials
-  expanded, through the same builder the worker uses, so the page cannot describe something
-  different from what Gemini receives. It feeds a placeholder input and, when a mode refuses
-  plain text, retries with a sample recipe; that avoids naming the recipe-input mode a second
-  time, which would leave two places to update. One mode failing to assemble is reported in its
-  own row rather than failing the page.
+- **Job state lives in `go-job-kit`**, as it does in the siblings: `jobstatus.Status` written by
+  `UnderJobDir` to `voice/<jobID>/status.json`, so deleting a job's prefix takes its state with
+  it. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
+  **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
+  and the worker reads state before it works, so the reverse order lets a stale record overwrite
+  a live one; ap-story hit exactly this. Failure is recorded on the un-cancelled notification
+  context for the same reason the notification is: a timed-out context records nothing.
+  `Repository` satisfies `jobstatus.StatusStore`, which is why the bucket and prefix are assembled
+  in one place. Listing uses `paging.LoadPage`, so page maths and `PageMeta`'s JSON match the
+  siblings and a page costs only its own rows.
+- **`/api/*` is the same surface for machines**, under the same middleware: `ProtectedMiddleware`
+  tries an OIDC bearer first and falls back to session + CSRF, so one route serves a browser and
+  an agent — the arrangement ap-comp, ap-mv and ap-story already use. `ALLOWED_M2M_SERVICE_ACCOUNTS`
+  is optional; unset, verification always fails and everything falls through to the session, so
+  the failure mode of forgetting it is "the agent gets redirected to login".
+  **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
+  ずんだもん has eight, an impossible pair is rejected on save, and a client with no way to read
+  the list can only guess. `PUT /api/jobs/{id}/script` saves without synthesizing, since an agent
+  may revise several times before spending the minutes once; the browser folds the two into one
+  button because a person editing has already decided. Both go through `validateScript` — one
+  loose path is enough to store a pair that silently becomes the speaker's default at synthesis.
+- **`/modes` lists, `/modes/{mode}` shows one**, the split ap-comp uses. The index carries only
+  front matter and **assembles no prompts**: the seven bodies come to more than 10k characters,
+  so building them for a page that may only be scanned is waste, and a reader — or an MCP client
+  — that wants the index should not pay for the bodies. The detail assembles through the same
+  builder the worker uses, partials expanded, so the page cannot describe something different
+  from what Gemini receives. It feeds a placeholder input and retries with a sample recipe when a
+  mode refuses plain text, which avoids naming the recipe-input mode a second time; a key that is
+  not in the list is a 404 rather than an assembly error.
 - **The detail screen edits the script, it does not just show it.** That is what makes the
   two-command split pay: the reason given for it is fixing a reading without regenerating, and
   until the form existed there was no way to fix anything, so review could only choose between

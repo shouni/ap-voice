@@ -3,6 +3,7 @@ package builder
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"html/template"
 	"net/url"
@@ -35,6 +36,10 @@ type AppHandlers struct {
 	// TaskAuth は Cloud Tasks からの OIDC を検証します。OAuth 設定を必要としないため、
 	// Web 面を持たない Worker プロセスでも構築できます。
 	TaskAuth *auth.TaskVerifier
+	// M2M は、ブラウザではなく機械（ap-mcp など）からの OIDC を検証します。
+	// **未設定でも nil にはしません。** 検証が常に失敗する verifier を渡しておくと、
+	// ProtectedMiddleware はセッション認証へ落として動き続けます。
+	M2M *auth.M2MVerifier
 }
 
 // Validate は、組み立て結果が役割として筋の通った形になっていることを確かめます。
@@ -125,13 +130,22 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Signer:    appCtx.RemoteIO.Signer,
 		Speakers:  appCtx.Speakers,
 		Renderer:  renderer,
+		JobStatus: appCtx.JobStatus,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)
 	}
 
+	// audience は自分自身の公開 URL です。呼び出し側は「この URL 宛て」の
+	// トークンを取るため、ここがずれると全て 401 になります。
+	m2m := auth.NewM2MVerifier(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts)
+	if !m2m.Configured() {
+		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS が未設定のため、API は機械からの呼び出しを受け付けません。")
+	}
+
 	h.Auth = authHandler
 	h.Web = webHandler
+	h.M2M = m2m
 	return nil
 }
 
