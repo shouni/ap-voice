@@ -12,15 +12,15 @@
       <ul class="navbar-nav me-auto align-items-lg-center">
         <li class="nav-item">
           <a class="nav-link{{ if eq .Path "/" }} active{{ end }}"
-             {{ if eq .Path "/" }}aria-current="page" {{ end }}href="/">Home</a>
+             {{ if eq .Path "/" }}aria-current="page" {{ end }}href="/"><i class="bi bi-house me-1" aria-hidden="true"></i>Home</a>
         </li>
         <li class="nav-item">
           <a class="nav-link{{ if eq .Path "/history" }} active{{ end }}"
-             {{ if eq .Path "/history" }}aria-current="page" {{ end }}href="/history">History</a>
+             {{ if eq .Path "/history" }}aria-current="page" {{ end }}href="/history"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>History</a>
         </li>
         <li class="nav-item">
           <a class="nav-link{{ if eq .Path "/modes" }} active{{ end }}"
-             {{ if eq .Path "/modes" }}aria-current="page" {{ end }}href="/modes">Modes</a>
+             {{ if eq .Path "/modes" }}aria-current="page" {{ end }}href="/modes"><i class="bi bi-sliders me-1" aria-hidden="true"></i>Modes</a>
         </li>
       </ul>
       {{/* 既定モデルは設定（GEMINI_MODELS）から出します。モデル ID は Google の都合で
