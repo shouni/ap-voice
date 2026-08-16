@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -251,8 +252,12 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 // まだ動いているのか失敗したのかを区別できません。書式は go-job-kit の
 // jobstatus.Status で、御三家と同じ形です。
 //
-// 記録が無い場合は 404 です。ap-mcp 側はこれを unknown として扱い、
+// 記録が無い場合（ErrNotFound）は 404 です。ap-mcp 側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
+//
+// **読めなかっただけの場合は 404 と混ぜません。** 権限や GCS 障害（ErrUnavailable）
+// まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
+// ポーリング側が unknown として静かに受け入れてしまいます。
 func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.apiJobID(w, r)
 	if !ok {
@@ -260,8 +265,13 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status, err := h.repo.Get(r.Context(), jobID)
-	if err != nil {
+	switch {
+	case errors.Is(err, jobstatus.ErrNotFound):
 		writeErrorJSON(w, http.StatusNotFound, "ジョブ状態が見つかりません")
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
+		writeErrorJSON(w, http.StatusBadGateway, "ジョブ状態を読めませんでした")
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
