@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"sort"
+	"sync"
 
 	"github.com/shouni/go-prompt-kit/frontmatter"
 	"github.com/shouni/go-prompt-kit/prompts"
@@ -97,6 +98,29 @@ func (m Mode) DisplayName() string {
 	return m.Key
 }
 
+// promptSet は、埋め込みプロンプトの本文と front matter を分けて保持します。
+type promptSet struct {
+	bodies map[string]string
+	fronts map[string]string
+}
+
+// loadPromptSet は、プロンプトの読み込みと front matter の切り離しを最初の呼び出しで
+// 1度だけ行います。本文（LoadPrompts）と説明（LoadModes）は別の入口ですが、
+// 出どころは同じディレクトリです。記憶しないと、アダプターと画面の組み立てで
+// 同じファイルを何度も読み直すことになります。
+//
+// 返す promptSet の中のマップは共有されるため、書き換えないでください
+// （LoadPrompts と LoadModes は、いずれも新しい入れ物へ写して使います）。
+var loadPromptSet = sync.OnceValues(func() (promptSet, error) {
+	raw, err := resource.Load(PromptFiles, promptDir)
+	if err != nil {
+		return promptSet{}, err
+	}
+
+	bodies, fronts := frontmatter.SplitMap(raw)
+	return promptSet{bodies: bodies, fronts: fronts}, nil
+})
+
 // LoadPrompts は埋め込まれたプロンプトの**本文だけ**を読み込みます。
 //
 // front matter は説明であってプロンプトではないので、ここで落とします。
@@ -106,13 +130,11 @@ func (m Mode) DisplayName() string {
 // 参照するため、ビルダーには全部渡す必要があります。選択肢に出さないのは
 // LoadModes の役目です。
 func LoadPrompts() (map[string]string, error) {
-	raw, err := resource.Load(PromptFiles, promptDir)
+	set, err := loadPromptSet()
 	if err != nil {
 		return nil, err
 	}
-
-	bodies, _ := frontmatter.SplitMap(raw)
-	return bodies, nil
+	return maps.Clone(set.bodies), nil
 }
 
 // LoadModes は、各プロンプトの front matter を読み、キー順に並べて返します。
@@ -120,13 +142,14 @@ func LoadPrompts() (map[string]string, error) {
 // 並びを固定するのは、map の走査順がそのまま選択肢の順になると、
 // 描画のたびに並びが変わるためです。
 func LoadModes() ([]Mode, error) {
-	raw, err := resource.Load(PromptFiles, promptDir)
+	set, err := loadPromptSet()
 	if err != nil {
 		return nil, err
 	}
 
-	_, fronts := frontmatter.SplitMap(raw)
 	// 部品は選択肢に出さないので、説明の解析対象からも先に外します。
+	// 記憶したマップは共有されるため、削るのではなく別の入れ物へ写します。
+	fronts := maps.Clone(set.fronts)
 	maps.DeleteFunc(fronts, func(key, _ string) bool { return isPartial(key) })
 
 	// **黙って無視しません。** 書き間違えた説明が空欄になるだけだと、
