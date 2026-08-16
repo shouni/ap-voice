@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -458,11 +459,18 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 type memoryStatusStore struct {
 	saved domain.JobStatus
 	found bool
+	// getErr は読み取りの失敗（権限・障害）を再現します。
+	getErr error
 }
 
 func (s *memoryStatusStore) Get(context.Context, string) (domain.JobStatus, error) {
+	if s.getErr != nil {
+		return domain.JobStatus{}, s.getErr
+	}
 	if !s.found {
-		return domain.JobStatus{}, errors.New("記録がありません")
+		// 本物の Store は未記録を ErrNotFound で返します。ここを素のエラーにすると、
+		// 「未記録」と「読めない」を分けて扱う側（再実行ガード）の検証がすり抜けます。
+		return domain.JobStatus{}, fmt.Errorf("%w: 記録がありません", jobstatus.ErrNotFound)
 	}
 	return s.saved, nil
 }
@@ -588,5 +596,151 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 	}
 	if store.saved.ScriptURI == "" || store.saved.AudioURI == "" {
 		t.Errorf("失敗で成果物の在り処が消えています: %+v", store.saved)
+	}
+}
+
+// 完了済みのジョブが再び届いても、合成をやり直さないこと。
+//
+// Cloud Tasks は at-least-once 配信なので、同じタスクが再び届くことがあります。
+// 合成は数分かかるため、素通りさせると同じ音声を作り直します。
+func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStatusStore{
+		found: true,
+		saved: domain.JobStatus{
+			Status:   jobstatus.Status{JobID: "job-1", State: jobstatus.StateSucceeded},
+			AudioURI: "gs://bucket/voice/job-1/audio.wav",
+		},
+	}
+
+	var generated, published, notified int
+	p := NewPipeline(
+		&MockScriptStep{RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
+			generated++
+			return domain.Script{Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
+		}},
+		&MockPublishStep{RunFunc: func(context.Context, string, domain.Script) (string, error) {
+			published++
+			return "", nil
+		}},
+		&MockNotifier{NotifyFunc: func(context.Context, domain.Request, string) error {
+			notified++
+			return nil
+		}},
+		&MockScriptStore{},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandGenerateAndSynthesize, JobID: "job-1",
+		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil（完了済みは正常に打ち切る）", err)
+	}
+
+	if generated != 0 || published != 0 {
+		t.Errorf("完了済みなのに実行している: generate=%d publish=%d", generated, published)
+	}
+	if notified != 0 {
+		t.Errorf("完了済みなのに再通知している: %d 回", notified)
+	}
+	if store.saved.State != jobstatus.StateSucceeded {
+		t.Errorf("State = %q, want succeeded（記録を書き換えない）", store.saved.State)
+	}
+}
+
+// 作り直しの投入は打ち切らないこと。
+//
+// 投入経路はどれも enqueue の前に queued を書くため、同じジョブ ID への 2 度目の
+// 依頼は succeeded ではなく queued として届きます。ここで打ち切ると、台本を直して
+// から合成し直す経路が動かなくなります。
+func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStatusStore{
+		found: true,
+		saved: domain.JobStatus{
+			// 直前の generate は succeeded だったが、投入時に queued へ戻っている。
+			Status:    jobstatus.Status{JobID: "job-1", State: jobstatus.StateQueued},
+			ScriptURI: "gs://bucket/voice/job-1/audio.json",
+		},
+	}
+
+	var published int
+	p := NewPipeline(
+		&MockScriptStep{},
+		&MockPublishStep{RunFunc: func(context.Context, string, domain.Script) (string, error) {
+			published++
+			return "", nil
+		}},
+		&MockNotifier{},
+		&MockScriptStore{LoadFunc: func(context.Context, string) (domain.Script, error) {
+			return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
+		}},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandSynthesize, JobID: "job-1",
+		OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if published != 1 {
+		t.Errorf("合成した回数 = %d, want 1（作り直しは打ち切らない）", published)
+	}
+}
+
+// 状態を読めないときは、判断を返して記録を書き換えないこと。
+//
+// ここで failed を書くと、succeeded だったかもしれない記録を上書きし、次の配信で
+// ガードが効かなくなります。防ぐはずの再実行をガード自身が招くことになります。
+func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStatusStore{
+		found:  true,
+		saved:  domain.JobStatus{Status: jobstatus.Status{JobID: "job-1", State: jobstatus.StateSucceeded}},
+		getErr: fmt.Errorf("%w: storage down", jobstatus.ErrUnavailable),
+	}
+
+	var generated int
+	var notifiedFailure int
+	p := NewPipeline(
+		&MockScriptStep{RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
+			generated++
+			return domain.Script{Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
+		}},
+		&MockPublishStep{},
+		&MockNotifier{NotifyFailureFunc: func(context.Context, domain.Request, error) error {
+			notifiedFailure++
+			return nil
+		}},
+		&MockScriptStore{},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandGenerate, JobID: "job-1",
+		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if !errors.Is(err, jobstatus.ErrUnavailable) {
+		t.Fatalf("Execute() error = %v, want wrapping ErrUnavailable", err)
+	}
+
+	if generated != 0 {
+		t.Errorf("判断できないのに実行している: %d 回", generated)
+	}
+	if store.saved.State != jobstatus.StateSucceeded {
+		t.Errorf("State = %q, want succeeded（読めないだけで記録を潰さない）", store.saved.State)
+	}
+	if notifiedFailure != 0 {
+		t.Errorf("判断を保留しただけで失敗通知を出している: %d 回", notifiedFailure)
 	}
 }

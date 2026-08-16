@@ -157,8 +157,17 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   it. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
   **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
   and the worker reads state before it works, so the reverse order lets a stale record overwrite
-  a live one; ap-story hit exactly this. Failure is recorded on the un-cancelled notification
-  context for the same reason the notification is: a timed-out context records nothing.
+  a live one; ap-story hit exactly this. That ordering is also what makes the re-run guard safe:
+  **`Execute` returns early when the job already reads `succeeded`**, and since every enqueue path
+  rewrites the record to `queued` first, a second command on the same job ID (the `generate` →
+  `synthesize` flow, which deliberately reuses it) arrives as `queued` and runs. Only a
+  redelivery, which never touches a handler, still reads `succeeded`. Without the guard an
+  at-least-once redelivery re-ran the whole synthesis — minutes of VOICEVOX work for audio that
+  already existed. The guard sits **above the deferred failure recorder** on purpose: an
+  unreadable status returns from there, and running the defer would write `failed` over a record
+  that may say `succeeded`, disarming the guard for the next delivery. Failure is recorded on the
+  un-cancelled notification context for the same reason the notification is: a timed-out context
+  records nothing.
   `Repository` satisfies `jobstatus.StatusStore`, which is why the bucket and prefix are assembled
   in one place. Listing uses `paging.LoadPage`, so page maths and `PageMeta`'s JSON match the
   siblings and a page costs only its own rows.
