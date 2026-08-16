@@ -14,6 +14,10 @@ import (
 func TestLoadPromptsStripsFrontMatter(t *testing.T) {
 	t.Parallel()
 
+	// 切り離し自体は go-prompt-kit の frontmatter が担うため、ここで見るのは
+	// 「同梱しているプロンプトに front matter が残っていないか」だけです。
+	const frontMatterDelim = "---"
+
 	prompts, err := LoadPrompts()
 	if err != nil {
 		t.Fatalf("LoadPrompts() error = %v", err)
@@ -176,59 +180,3 @@ func TestModeDisplayName(t *testing.T) {
 }
 
 // TestSplitFrontMatter は、切り出しの境目を検証します。
-func TestSplitFrontMatter(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		content   string
-		wantFront string
-		wantBody  string
-	}{
-		{
-			name:      "front matter がある",
-			content:   "---\nlabel: \"名前\"\n---\n本文です。\n",
-			wantFront: "label: \"名前\"",
-			wantBody:  "本文です。\n",
-		},
-		{
-			name:      "front matter が無い",
-			content:   "本文だけです。\n",
-			wantFront: "",
-			wantBody:  "本文だけです。\n",
-		},
-		{
-			name:      "CRLF でも切り出せる",
-			content:   "---\r\nlabel: \"名前\"\r\n---\r\n本文です。\r\n",
-			wantFront: "label: \"名前\"",
-			wantBody:  "本文です。\n",
-		},
-		{
-			// 見出しとして "---" を使った本文を front matter と誤認しないこと。
-			name:      "途中の区切り線は無視する",
-			content:   "本文です。\n---\nまだ本文です。\n",
-			wantFront: "",
-			wantBody:  "本文です。\n---\nまだ本文です。\n",
-		},
-		{
-			name:      "終端がファイル末尾",
-			content:   "---\nlabel: \"名前\"\n---",
-			wantFront: "label: \"名前\"",
-			wantBody:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			front, body := splitFrontMatter(tt.content)
-			if front != tt.wantFront {
-				t.Errorf("front = %q, want %q", front, tt.wantFront)
-			}
-			if body != tt.wantBody {
-				t.Errorf("body = %q, want %q", body, tt.wantBody)
-			}
-		})
-	}
-}

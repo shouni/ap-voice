@@ -2,25 +2,23 @@ package assets
 
 import (
 	"fmt"
+	"maps"
 	"sort"
-	"strings"
 
+	"github.com/shouni/go-prompt-kit/frontmatter"
 	"github.com/shouni/go-prompt-kit/prompts"
 	"github.com/shouni/go-prompt-kit/resource"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
-
-// frontMatterDelim は front matter の区切りです。
-const frontMatterDelim = "---"
 
 // isPartial は、そのファイルが**モードではなく部品**かどうかを返します。
 //
-// 接頭辞は go-prompt-kit の既定（prompts.DefaultPartialPrefix = "_"）に合わせます。
-// ビルダー側は同じ規則で Build の対象から外すため、**判定を二重に書かない**ために
-// ライブラリの定数を参照します。モード名はジャンル接頭辞（tech_ / news_ …）を
+// **判定を二重に書きません。** ビルダーが Build の対象から外すのと同じ関数を呼びます。
+// 自前で "_" 始まりを見ていた頃は、再帰読み込みで "en/_writing" のようなキーになった
+// 場合にライブラリ側とずれる状態でした。モード名はジャンル接頭辞（tech_ / news_ …）を
 // 持つので、"_" 始まりと衝突しません。
 func isPartial(key string) bool {
-	return strings.HasPrefix(key, prompts.DefaultPartialPrefix)
+	return prompts.IsPartial(key, prompts.DefaultPartialPrefix)
 }
 
 // ModeMetadata は、プロンプト冒頭の front matter に書くモードの説明です。
@@ -108,16 +106,12 @@ func (m Mode) DisplayName() string {
 // 参照するため、ビルダーには全部渡す必要があります。選択肢に出さないのは
 // LoadModes の役目です。
 func LoadPrompts() (map[string]string, error) {
-	raw, err := resource.Load(PromptFiles, promptDir, "")
+	raw, err := resource.Load(PromptFiles, promptDir)
 	if err != nil {
 		return nil, err
 	}
 
-	bodies := make(map[string]string, len(raw))
-	for mode, content := range raw {
-		_, body := splitFrontMatter(content)
-		bodies[mode] = body
-	}
+	bodies, _ := frontmatter.SplitMap(raw)
 	return bodies, nil
 }
 
@@ -126,55 +120,27 @@ func LoadPrompts() (map[string]string, error) {
 // 並びを固定するのは、map の走査順がそのまま選択肢の順になると、
 // 描画のたびに並びが変わるためです。
 func LoadModes() ([]Mode, error) {
-	raw, err := resource.Load(PromptFiles, promptDir, "")
+	raw, err := resource.Load(PromptFiles, promptDir)
 	if err != nil {
 		return nil, err
 	}
 
-	modes := make([]Mode, 0, len(raw))
-	for key, content := range raw {
-		if isPartial(key) {
-			continue
-		}
-		front, _ := splitFrontMatter(content)
+	_, fronts := frontmatter.SplitMap(raw)
+	// 部品は選択肢に出さないので、説明の解析対象からも先に外します。
+	maps.DeleteFunc(fronts, func(key, _ string) bool { return isPartial(key) })
 
-		var meta ModeMetadata
-		if front != "" {
-			// **黙って無視しません。** 書き間違えた説明が空欄になるだけだと、
-			// 画面を開くまで気付けません。
-			if err := yaml.Unmarshal([]byte(front), &meta); err != nil {
-				return nil, fmt.Errorf("prompts/%s.md の front matter が読めません: %w", key, err)
-			}
-		}
+	// **黙って無視しません。** 書き間違えた説明が空欄になるだけだと、
+	// 画面を開くまで気付けません。
+	metas, err := frontmatter.DecodeMap[ModeMetadata](fronts, yaml.Unmarshal)
+	if err != nil {
+		return nil, fmt.Errorf("prompts の front matter が読めません: %w", err)
+	}
 
+	modes := make([]Mode, 0, len(metas))
+	for key, meta := range metas {
 		modes = append(modes, Mode{Key: key, ModeMetadata: meta})
 	}
 
 	sort.Slice(modes, func(i, j int) bool { return modes[i].Key < modes[j].Key })
 	return modes, nil
-}
-
-// splitFrontMatter は、先頭の "---\nYAML\n---\n" を本文から切り離します。
-// front matter が無ければ front は空文字、body は content そのものになります。
-func splitFrontMatter(content string) (front, body string) {
-	// 改行コードの差でブロックを見失わないよう先に揃えます。
-	normalized := strings.ReplaceAll(content, "\r\n", "\n")
-
-	opening := frontMatterDelim + "\n"
-	if !strings.HasPrefix(normalized, opening) {
-		return "", content
-	}
-
-	rest := normalized[len(opening):]
-	closing := "\n" + frontMatterDelim
-	idx := strings.Index(rest, closing+"\n")
-	if idx < 0 {
-		// 終端がファイル末尾にある場合（本文が空のプロンプト）。
-		if !strings.HasSuffix(rest, closing) {
-			return "", content
-		}
-		return rest[:len(rest)-len(closing)], ""
-	}
-
-	return rest[:idx], strings.TrimPrefix(rest[idx+len(closing):], "\n")
 }

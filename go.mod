@@ -11,13 +11,13 @@ require (
 	github.com/shouni/go-http-kit v1.8.1
 	github.com/shouni/go-job-kit v1.0.5
 	github.com/shouni/go-notify v1.2.3
-	github.com/shouni/go-prompt-kit v1.4.2
+	github.com/shouni/go-prompt-kit v1.5.0
 	github.com/shouni/go-remote-io v1.8.0
 	github.com/shouni/go-utils v1.5.1
 	github.com/shouni/go-voicevox v1.8.2
 	github.com/shouni/go-web-reader v1.3.0
 	github.com/shouni/netarmor v1.2.1
-	gopkg.in/yaml.v3 v3.0.1
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
