@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/shouni/go-job-kit/jobstatus"
@@ -50,8 +51,49 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstat
 	}, apply...)
 }
 
+// alreadySucceeded は、そのジョブが既に完了しているかを返します。
+//
+// 状態を読めなかった場合はエラーを返します。「未完了」に倒すと完了済みのジョブを
+// 作り直してこのガードが防ぐはずの時間を自分で使い、「完了済み」に倒すと未完了の
+// ジョブがタスクごと ACK されて二度と実行されません。どちらへも倒さず、判断を
+// 呼び出し側へ返します。
+func (p *Pipeline) alreadySucceeded(ctx context.Context, req domain.Request) (bool, error) {
+	if p.status == nil || req.JobID == "" {
+		return false, nil
+	}
+
+	done, err := p.status.AlreadySucceeded(ctx, req.JobID)
+	if err != nil {
+		return false, fmt.Errorf("ジョブ状態を読めないため実行を見送ります (%s): %w", req.JobID, err)
+	}
+	return done, nil
+}
+
 // Execute は、すべての依存関係を構築し実行します。
 func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) {
+	// **完了済みのジョブをもう一度受け取ったら、ここで打ち切ります。**
+	// Cloud Tasks は at-least-once 配信なので、同じタスクが再び届くことがあります。
+	// 素通りさせると、数分かかる合成で同じ音声を作り直すことになります。
+	//
+	// 作り直しの投入がここで止まることはありません。投入経路はどれも enqueue の前に
+	// queued を書くため（handlers.recordQueued）、同じジョブ ID への 2 度目の依頼は
+	// succeeded ではなく queued として届きます。succeeded のまま届くのは、
+	// ハンドラーを経由しない再配信だけです。
+	//
+	// **失敗を記録する defer より前に置きます。** あとに置くと、状態を読めなかった
+	// ときの return が failed の記録を呼び、succeeded だったかもしれない記録を
+	// 上書きします。次の配信でこのガードが効かなくなり、防ぐはずの再実行を
+	// ガード自身が招きます。
+	done, guardErr := p.alreadySucceeded(ctx, req)
+	if guardErr != nil {
+		return guardErr
+	}
+	if done {
+		slog.InfoContext(ctx, "完了済みのジョブなので実行しません",
+			"job_id", req.JobID, "command", req.Command)
+		return nil
+	}
+
 	// **通知は打ち切りの外側で送ります。** 下で ctx に上限を掛けるため、期限切れで
 	// 抜けたときには ctx は既にキャンセル済みです。そのまま通知に使うと通知自体が
 	// 送れず、「先に諦めて失敗を知らせる」という目的が達成できません。
