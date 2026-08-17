@@ -221,45 +221,9 @@ func TestNotifySetsLevel(t *testing.T) {
 	}
 }
 
-// TestGCSConsoleURL は、gs:// URI をコンソールの URL に直す規則を検証します。
-//
-// **末尾のスラッシュで行き先が変わります。** プレフィックスはバケットブラウザ、
-// 単体オブジェクトは詳細ページで、取り違えるとコンソールは何も表示しません。
-func TestGCSConsoleURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		uri  string
-		want string
-	}{
-		{
-			name: "プレフィックスはバケットブラウザへ",
-			uri:  "gs://ap-voice/voice/voice-1/",
-			want: "https://console.cloud.google.com/storage/browser/ap-voice/voice/voice-1/",
-		},
-		{
-			name: "オブジェクトは詳細ページへ",
-			uri:  "gs://ap-music/music/comp-1/recipe.json",
-			want: "https://console.cloud.google.com/storage/browser/_details/ap-music/music/comp-1/recipe.json",
-		},
-		// 入力ソースは Web 記事のこともあります。コンソールに対応先が無いので
-		// リンクにせず、素の値として並べます。
-		{name: "http(s) はリンクにしない", uri: "https://example.com/article", want: ""},
-		{name: "空文字", uri: "", want: ""},
-		{name: "スキームだけ", uri: "gs://", want: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := gcsConsoleURL(tt.uri); got != tt.want {
-				t.Errorf("gcsConsoleURL(%q) = %q, want %q", tt.uri, got, tt.want)
-			}
-		})
-	}
-}
+// gs:// URI → Cloud Console URL の変換規則（末尾スラッシュでバケットブラウザと
+// 詳細ページを使い分ける等）は notify.Body.URIField に移管し、go-notify 側の
+// テストが検証します。ここでは通知本文レベルの配線だけを確認します。
 
 // TestNotifyKeepsNonGCSInputAsPlainValue は、コンソールへ飛ばせない入力ソースが
 // リンクではなく素の値として残ることを検証します。
