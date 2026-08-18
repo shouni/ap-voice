@@ -174,6 +174,31 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
+// Script は、保存済みの台本を JSON ファイルとしてダウンロードさせます。
+//
+// **音声と違って署名付き URL へは飛ばしません。** 台本は repo が読み込み済みの
+// 小さな JSON なので、転送でインスタンスを占有する心配がありません。
+//
+// 返すのは保存済みの内容です。詳細画面の表は編集できますが、未保存の編集は
+// GCS にまだ無いため、ここには現れません。
+func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	if err := jobid.Validate(jobID); err != nil {
+		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
+		return
+	}
+
+	script, err := h.repo.Load(r.Context(), jobID)
+	if err != nil {
+		http.Error(w, "台本の取得に失敗しました", http.StatusBadGateway)
+		return
+	}
+
+	// jobid.Validate を通った ID だけがここに来るため、ファイル名に使えます。
+	w.Header().Set("Content-Disposition", `attachment; filename="`+jobID+`.json"`)
+	writeJSON(w, http.StatusOK, script)
+}
+
 // renderDetail は詳細画面を描画します。台本は毎回読み直します。
 func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status int, message, errMsg string) {
 	jobID := chi.URLParam(r, "jobID")

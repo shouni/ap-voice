@@ -107,6 +107,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 			r.Post("/{jobID}/script", h.Web.UpdateScript)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
+			r.Get("/{jobID}/script", h.Web.Script)
 		})
 	})
 
