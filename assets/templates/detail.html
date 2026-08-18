@@ -82,6 +82,10 @@
     <a class="btn btn-link text-secondary text-decoration-none" href="/history">← 履歴一覧へ戻る</a>
 
     <div class="d-flex gap-2 flex-wrap justify-content-end">
+      {{/* 落ちてくるのは保存済みの台本です。表を編集しただけの内容はまだ GCS に無いので、
+           手元に残したい変更があるなら先に保存してください。 */}}
+      <a class="btn btn-outline-secondary" href="/history/{{ .JobID }}/script">台本JSONをダウンロード</a>
+
       {{/* 保存と合成は 1 つの操作です。編集していなければ同じ内容を書き戻すだけなので、
            「保存せず合成だけ」というボタンを別に置いても同じ音声しか作れません。 */}}
       <button class="btn btn-primary" type="submit" form="script-form">
