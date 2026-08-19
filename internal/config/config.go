@@ -27,9 +27,6 @@ const (
 	DefaultSegmentRateLimit = 500 * time.Millisecond
 	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
 	DefaultSegmentTimeout = 120 * time.Second
-	// MaxTaskDispatchDeadline は Cloud Tasks の HTTP ターゲットに指定できる上限です。
-	// **Cloud Tasks の HTTP ターゲットは 30 分が上限**で、そこから先へは伸ばせません。
-	MaxTaskDispatchDeadline = 30 * time.Minute
 	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
 	// ap-infra はフリート全体で asia-northeast1 を使っています。
 	defaultLocationID = "asia-northeast1"
@@ -315,11 +312,6 @@ func (c *Config) ValidateEssentialConfig() error {
 	// 崩れていると片方だけ直しても噛み合いません。
 	if c.Tasks.DispatchDeadline <= 0 {
 		return fmt.Errorf("TASK_DISPATCH_DEADLINE が設定されていません（三段のタイムアウトはデプロイ設定が決めます。例: 30m）")
-	}
-	if c.Tasks.DispatchDeadline > MaxTaskDispatchDeadline {
-		return fmt.Errorf(
-			"TASK_DISPATCH_DEADLINE (%s) が Cloud Tasks の上限 (%s) を超えています。投入時に拒否されます",
-			c.Tasks.DispatchDeadline, MaxTaskDispatchDeadline)
 	}
 
 	if c.Pipeline.Timeout >= c.Tasks.DispatchDeadline {
