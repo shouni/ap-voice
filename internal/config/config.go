@@ -27,9 +27,9 @@ const (
 	DefaultSegmentRateLimit = 500 * time.Millisecond
 	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
 	DefaultSegmentTimeout = 120 * time.Second
-	// DefaultDispatchDeadline は Cloud Tasks がワーカーの応答を待つ上限です。
+	// MaxTaskDispatchDeadline は Cloud Tasks の HTTP ターゲットに指定できる上限です。
 	// **Cloud Tasks の HTTP ターゲットは 30 分が上限**で、そこから先へは伸ばせません。
-	DefaultDispatchDeadline = 30 * time.Minute
+	MaxTaskDispatchDeadline = 30 * time.Minute
 	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
 	// ap-infra はフリート全体で asia-northeast1 を使っています。
 	defaultLocationID = "asia-northeast1"
@@ -252,9 +252,6 @@ func (c *Config) normalize() error {
 		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
 	}
 	c.Tasks.CallerServiceAccountEmail = strings.TrimSpace(c.Tasks.CallerServiceAccountEmail)
-	if c.Tasks.DispatchDeadline <= 0 {
-		c.Tasks.DispatchDeadline = DefaultDispatchDeadline
-	}
 	if c.Pipeline.Timeout <= 0 {
 		c.Pipeline.Timeout = DefaultPipelineTimeout
 	}
@@ -316,6 +313,15 @@ func (c *Config) ValidateEssentialConfig() error {
 	// 三段のうち上二段の関係はどちらのロールでも検査します。web は投入時に
 	// dispatch_deadline を載せ、worker はその内側で PIPELINE_TIMEOUT を使うため、
 	// 崩れていると片方だけ直しても噛み合いません。
+	if c.Tasks.DispatchDeadline <= 0 {
+		return fmt.Errorf("TASK_DISPATCH_DEADLINE が設定されていません（三段のタイムアウトはデプロイ設定が決めます。例: 30m）")
+	}
+	if c.Tasks.DispatchDeadline > MaxTaskDispatchDeadline {
+		return fmt.Errorf(
+			"TASK_DISPATCH_DEADLINE (%s) が Cloud Tasks の上限 (%s) を超えています。投入時に拒否されます",
+			c.Tasks.DispatchDeadline, MaxTaskDispatchDeadline)
+	}
+
 	if c.Pipeline.Timeout >= c.Tasks.DispatchDeadline {
 		return fmt.Errorf(
 			"PIPELINE_TIMEOUT (%v) は TASK_DISPATCH_DEADLINE (%v) より短くしてください。"+

@@ -19,6 +19,7 @@ var managedEnvKeys = []string{
 	"VOICEVOX_API_URL", "VOICEVOX_MAX_PARALLEL_SEGMENTS",
 	"VOICEVOX_SEGMENT_RATE_LIMIT", "VOICEVOX_SEGMENT_TIMEOUT",
 	"SLACK_WEBHOOK_URL", "HTTP_TIMEOUT",
+	"PIPELINE_TIMEOUT", "TASK_DISPATCH_DEADLINE",
 }
 
 // essentialEnv は、どのロールでも要る最低限です。
@@ -26,6 +27,8 @@ var essentialEnv = map[string]string{
 	"GEMINI_MODELS":    "model-a",
 	"GCP_PROJECT_ID":   "proj",
 	"GCS_VOICE_BUCKET": "ap-voice",
+	// 三段のタイムアウトはデプロイ設定が決めるため、アプリは既定値を持ちません。
+	"TASK_DISPATCH_DEADLINE": "30m",
 }
 
 // webEnv は Web 面が起動できる一式を返します。overrides で個別に潰せます。
