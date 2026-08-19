@@ -17,10 +17,6 @@ const (
 	DefaultHTTPTimeout = 60 * time.Second
 	// MinInputContentLength は生成に必要な入力テキストの最小長です。
 	MinInputContentLength = 10
-	// DefaultPipelineTimeout はジョブ 1 件の実行時間の上限のデフォルト値です。
-	// 合成はセグメント数に比例して伸びるため長めに取りますが、上限が無いと
-	// エンジンが応答しなくなった際に Cloud Run のインスタンスを占有し続けます。
-	DefaultPipelineTimeout = 25 * time.Minute
 	// DefaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数の既定です。
 	DefaultMaxParallelSegments = 8
 	// DefaultSegmentRateLimit はセグメントの投入間隔の既定です（秒2件）。
@@ -249,9 +245,6 @@ func (c *Config) normalize() error {
 		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
 	}
 	c.Tasks.CallerServiceAccountEmail = strings.TrimSpace(c.Tasks.CallerServiceAccountEmail)
-	if c.Pipeline.Timeout <= 0 {
-		c.Pipeline.Timeout = DefaultPipelineTimeout
-	}
 	c.Tasks.AllowedServiceAccounts = normalizeList(c.Tasks.AllowedServiceAccounts)
 
 	c.Auth.AllowedEmails = normalizeList(c.Auth.AllowedEmails)
@@ -328,6 +321,12 @@ func (c *Config) ValidateEssentialConfig() error {
 	}
 
 	if c.Server.Role.ServesWorker() {
+		// 無制限は許しません。Cloud Tasks が先に打ち切ると、失敗の記録も通知も残らないまま
+		// 再試行もされず、ジョブが running のまま残ります。渡されるのは worker 面だけなので、
+		// 必須なのも worker 面だけです。
+		if c.Pipeline.Timeout <= 0 {
+			return fmt.Errorf("PIPELINE_TIMEOUT が設定されていません（worker では無制限にできません。TASK_DISPATCH_DEADLINE より短い値を設定してください）")
+		}
 		if c.Tasks.TaskAudienceURL == "" {
 			return fmt.Errorf("TASK_AUDIENCE_URL が設定されていません。Cloud Tasks の OIDC 検証に必須です")
 		}

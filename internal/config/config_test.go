@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,10 @@ var essentialEnv = map[string]string{
 	"GCP_PROJECT_ID":   "proj",
 	"GCS_VOICE_BUCKET": "ap-voice",
 	// 三段のタイムアウトはデプロイ設定が決めるため、アプリは既定値を持ちません。
+	// PIPELINE_TIMEOUT が要るのは worker 面だけですが、web 面では無視されるので
+	// ここにまとめて置きます。
 	"TASK_DISPATCH_DEADLINE": "30m",
+	"PIPELINE_TIMEOUT":       "25m",
 }
 
 // webEnv は Web 面が起動できる一式を返します。overrides で個別に潰せます。
@@ -415,5 +419,44 @@ func TestNormalizeGCSBucketStripsURIForm(t *testing.T) {
 		if got := normalizeGCSBucket(tt.in); got != tt.want {
 			t.Errorf("normalizeGCSBucket(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// PIPELINE_TIMEOUT に既定値を持たせないこと。
+//
+// 三段のタイムアウトはデプロイ設定（Terraform）が唯一の出どころです。アプリが既定を
+// 持つと同じ数字が 2 箇所に現れ、設定漏れが「誰も選んでいない値」で動いてしまいます。
+func TestPipelineTimeoutHasNoDefault(t *testing.T) {
+	field, ok := reflect.TypeOf(PipelineConfig{}).FieldByName("Timeout")
+	if !ok {
+		t.Fatal("PipelineConfig.Timeout not found")
+	}
+	if got := field.Tag.Get("envDefault"); got != "" {
+		t.Errorf("envDefault = %q, 既定値を持たせないでください", got)
+	}
+}
+
+// worker では未設定を落とすこと。無制限だと Cloud Tasks が先に打ち切り、
+// 失敗の記録も通知も残らないまま再試行もされません。
+func TestPipelineTimeoutRequiredOnWorker(t *testing.T) {
+	envs := map[string]string{
+		"SERVER_ROLE":                   "worker",
+		"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
+		"ALLOWED_TASK_SERVICE_ACCOUNTS": "web-runner@example.iam.gserviceaccount.com",
+		"PIPELINE_TIMEOUT":              "",
+	}
+	for k, v := range essentialEnv {
+		if k != "PIPELINE_TIMEOUT" {
+			envs[k] = v
+		}
+	}
+	cfg := loadFor(t, envs)
+
+	err := cfg.ValidateEssentialConfig()
+	if err == nil {
+		t.Fatal("未設定が素通りしました")
+	}
+	if !strings.Contains(err.Error(), "PIPELINE_TIMEOUT") {
+		t.Errorf("エラーに変数名がありません: %v", err)
 	}
 }
