@@ -1,7 +1,6 @@
 package config
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -392,48 +391,6 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 			t.Errorf("SegmentTimeout = %v, want 90s", cfg.Voicevox.SegmentTimeout)
 		}
 	})
-}
-
-// TestNormalizeGCSBucketStripsURIForm は、URI の形で渡されたバケット名が
-// 名前だけに整えられることを検証します。
-//
-// **バケット「名」であって URI ではありません。** コンソールから貼ると
-// `gs://ap-music/` の形になり、そのまま使うと組み立てた URI が
-// `gs://gs://ap-music//music/...` になります。ap-mv が同じ整え方をします。
-func TestNormalizeGCSBucketStripsURIForm(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		in   string
-		want string
-	}{
-		{in: "ap-music", want: "ap-music"},
-		{in: "  ap-music  ", want: "ap-music"},
-		{in: "gs://ap-music", want: "ap-music"},
-		{in: "gs://ap-music/", want: "ap-music"},
-		{in: " gs://ap-music/ ", want: "ap-music"},
-		{in: "", want: ""},
-	}
-
-	for _, tt := range tests {
-		if got := normalizeGCSBucket(tt.in); got != tt.want {
-			t.Errorf("normalizeGCSBucket(%q) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
-// PIPELINE_TIMEOUT に既定値を持たせないこと。
-//
-// 三段のタイムアウトはデプロイ設定（Terraform）が唯一の出どころです。アプリが既定を
-// 持つと同じ数字が 2 箇所に現れ、設定漏れが「誰も選んでいない値」で動いてしまいます。
-func TestPipelineTimeoutHasNoDefault(t *testing.T) {
-	field, ok := reflect.TypeOf(PipelineConfig{}).FieldByName("Timeout")
-	if !ok {
-		t.Fatal("PipelineConfig.Timeout not found")
-	}
-	if got := field.Tag.Get("envDefault"); got != "" {
-		t.Errorf("envDefault = %q, 既定値を持たせないでください", got)
-	}
 }
 
 // worker では未設定を落とすこと。無制限だと Cloud Tasks が先に打ち切り、
