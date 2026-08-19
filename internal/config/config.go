@@ -8,6 +8,8 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	"github.com/shouni/gcp-kit/serverrole"
+	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-utils/strlist"
 )
 
 const (
@@ -245,11 +247,11 @@ func (c *Config) normalize() error {
 		c.Tasks.TaskAudienceURL = c.Server.ServiceURL
 	}
 	c.Tasks.CallerServiceAccountEmail = strings.TrimSpace(c.Tasks.CallerServiceAccountEmail)
-	c.Tasks.AllowedServiceAccounts = normalizeList(c.Tasks.AllowedServiceAccounts)
+	c.Tasks.AllowedServiceAccounts = strlist.Normalize(c.Tasks.AllowedServiceAccounts)
 
-	c.Auth.AllowedEmails = normalizeList(c.Auth.AllowedEmails)
-	c.Auth.AllowedDomains = normalizeList(c.Auth.AllowedDomains)
-	c.Auth.AllowedM2MServiceAccounts = normalizeList(c.Auth.AllowedM2MServiceAccounts)
+	c.Auth.AllowedEmails = strlist.Normalize(c.Auth.AllowedEmails)
+	c.Auth.AllowedDomains = strlist.Normalize(c.Auth.AllowedDomains)
+	c.Auth.AllowedM2MServiceAccounts = strlist.Normalize(c.Auth.AllowedM2MServiceAccounts)
 
 	c.GCP.ProjectID = strings.TrimSpace(c.GCP.ProjectID)
 	c.GCP.LocationID = strings.TrimSpace(c.GCP.LocationID)
@@ -258,11 +260,11 @@ func (c *Config) normalize() error {
 	}
 
 	// env はカンマで分割するだけなので、前後の空白と重複はここで落とします。
-	c.AI.GeminiModels = normalizeList(c.AI.GeminiModels)
+	c.AI.GeminiModels = strlist.Normalize(c.AI.GeminiModels)
 	c.AI.GeminiModel = firstModel(c.AI.GeminiModels)
 
-	c.Storage.GCSBucket = normalizeGCSBucket(c.Storage.GCSBucket)
-	c.Storage.MusicBucket = normalizeGCSBucket(c.Storage.MusicBucket)
+	c.Storage.GCSBucket = remoteio.NormalizeBucketName(c.Storage.GCSBucket)
+	c.Storage.MusicBucket = remoteio.NormalizeBucketName(c.Storage.MusicBucket)
 	c.Voicevox.APIURL = strings.TrimSpace(c.Voicevox.APIURL)
 	if c.Voicevox.MaxParallelSegments <= 0 {
 		c.Voicevox.MaxParallelSegments = DefaultMaxParallelSegments
@@ -282,98 +284,6 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// ValidateEssentialConfig はアプリケーション実行に不可欠な設定を検証します。
-// 検証範囲は SERVER_ROLE に従います。担当しない面の設定まで要求すると、
-// 使わない権限や認証情報を配ることになるためです。
-func (c *Config) ValidateEssentialConfig() error {
-	if len(c.AI.GeminiModels) == 0 {
-		return fmt.Errorf("GEMINI_MODELS が設定されていません（カンマ区切りで複数指定すると、先頭が既定モデルになります）")
-	}
-
-	if c.GCP.ProjectID == "" {
-		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
-	}
-
-	// **両ロールで要ります。** web は履歴の一覧と出力先の組み立てに、worker は
-	// synthesize が保存済み台本を読むために使います。
-	if c.Storage.GCSBucket == "" {
-		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")
-	}
-
-	// 三段のうち上二段の関係はどちらのロールでも検査します。web は投入時に
-	// dispatch_deadline を載せ、worker はその内側で PIPELINE_TIMEOUT を使うため、
-	// 崩れていると片方だけ直しても噛み合いません。
-	if c.Tasks.DispatchDeadline <= 0 {
-		return fmt.Errorf("TASK_DISPATCH_DEADLINE が設定されていません（三段のタイムアウトはデプロイ設定が決めます。例: 30m）")
-	}
-
-	if c.Pipeline.Timeout >= c.Tasks.DispatchDeadline {
-		return fmt.Errorf(
-			"PIPELINE_TIMEOUT (%v) は TASK_DISPATCH_DEADLINE (%v) より短くしてください。"+
-				"逆だと Cloud Tasks が先に打ち切り、失敗通知を出せないままジョブが失われます",
-			c.Pipeline.Timeout, c.Tasks.DispatchDeadline)
-	}
-
-	if c.Server.Role.ServesWeb() {
-		if err := c.validateWebConfig(); err != nil {
-			return err
-		}
-	}
-
-	if c.Server.Role.ServesWorker() {
-		// 無制限は許しません。Cloud Tasks が先に打ち切ると、失敗の記録も通知も残らないまま
-		// 再試行もされず、ジョブが running のまま残ります。渡されるのは worker 面だけなので、
-		// 必須なのも worker 面だけです。
-		if c.Pipeline.Timeout <= 0 {
-			return fmt.Errorf("PIPELINE_TIMEOUT が設定されていません（worker では無制限にできません。TASK_DISPATCH_DEADLINE より短い値を設定してください）")
-		}
-		if c.Tasks.TaskAudienceURL == "" {
-			return fmt.Errorf("TASK_AUDIENCE_URL が設定されていません。Cloud Tasks の OIDC 検証に必須です")
-		}
-		// 空だと検証器が fail-closed になり、全タスクが失敗し続けます。
-		if len(c.Tasks.AllowedServiceAccounts) == 0 {
-			return fmt.Errorf("許可する caller SA が 1 件も指定されていません。ALLOWED_TASK_SERVICE_ACCOUNTS を設定してください")
-		}
-	}
-
-	return nil
-}
-
-// validateWebConfig は Web 面（OAuth ログインとセッション、タスク投入）に必要な設定を検証します。
-//
-// Worker 面には要求しません。担当しない面の設定まで求めると、使わない認証情報への
-// アクセス権を配ることになります。
-func (c *Config) validateWebConfig() error {
-	// タスクを投入するのは Web 面だけなので、キュー名も Web 面の要件です。
-	if c.Tasks.QueueID == "" {
-		return fmt.Errorf("CLOUD_TASKS_QUEUE_ID が設定されていません")
-	}
-	if c.Tasks.WorkerURL == "" {
-		return fmt.Errorf("WORKER_URL が設定されていません")
-	}
-	// caller SA はタスクを投入する側＝ Web 面の要件です。worker が受け付ける許可リストは
-	// ALLOWED_TASK_SERVICE_ACCOUNTS で別に指定します。
-	if c.Tasks.CallerServiceAccountEmail == "" {
-		return fmt.Errorf("TASK_CALLER_SERVICE_ACCOUNT_EMAIL が設定されていません")
-	}
-
-	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {
-		return fmt.Errorf("OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SECRET）が不足しています")
-	}
-	if len(c.Auth.AllowedEmails) == 0 && len(c.Auth.AllowedDomains) == 0 {
-		return fmt.Errorf("許可されたメールアドレスまたはドメインが一つも設定されていません（認可リストが空です）")
-	}
-	if c.Auth.SessionEncryptKey == "" {
-		return fmt.Errorf("SESSION_ENCRYPT_KEY が設定されていません")
-	}
-	// AES の要件。長さが違うとセッションの暗号化に失敗します。
-	if n := len(c.Auth.SessionEncryptKey); n != 16 && n != 24 && n != 32 {
-		return fmt.Errorf("SESSION_ENCRYPT_KEY の長さが不正です (%d バイト)。16, 24, 32 のいずれかにしてください", n)
-	}
-
-	return nil
-}
-
 // firstModel は一覧の先頭（＝既定として使うモデル）を返します。
 // 一覧が空になるのは設定漏れのときだけで、その値は使われる前に起動時検証で弾かれます。
 func firstModel(models []string) string {
@@ -381,37 +291,4 @@ func firstModel(models []string) string {
 		return ""
 	}
 	return models[0]
-}
-
-// normalizeGCSBucket は、バケット名の表記ゆれを整えます。
-//
-// **バケット「名」であって URI ではありません。** `gs://ap-music/` のように
-// コンソールから貼った形で渡されることがあり、そのまま使うと
-// `gs://gs://ap-music//music/...` という URI を組み立ててしまいます。
-// ap-mv の同名の関数と同じ規則です — 同じバケットを読む側が 2 つある以上、
-// 受け取り方まで揃えておかないと、片方だけ動く設定が生まれます。
-func normalizeGCSBucket(bucket string) string {
-	bucket = strings.TrimSpace(bucket)
-	bucket = strings.TrimPrefix(bucket, "gs://")
-	return strings.Trim(bucket, "/")
-}
-
-// normalizeList は env が分割しただけのカンマ区切り値を整えます。
-// 前後の空白を落とし、空要素と重複を捨て、順序は保ちます。
-// 既定値で埋めることはせず、空なら空のまま返します。
-func normalizeList(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	normalized := make([]string, 0, len(values))
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		normalized = append(normalized, v)
-	}
-	return normalized
 }
