@@ -2,8 +2,8 @@
 package app
 
 import (
-	"errors"
 	"io"
+	"log/slog"
 
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -37,6 +37,8 @@ type Container struct {
 	// Business Logic
 	Pipeline domain.Pipeline
 	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。
+	// Close が個々のフィールドを見ないのは、資源が増えたときに builder が append
+	// するだけで済ませるためです。
 	Closers []io.Closer
 }
 
@@ -48,23 +50,16 @@ type Container struct {
 type RemoteIO = remoteio.Bundle
 
 // Close は、Container が保持するすべての外部接続リソースを安全に解放します。
-func (c *Container) Close() error {
-	if c == nil {
-		return nil
-	}
-	var errs error
+//
+// エラーを返さないのは、呼び出し元が server.Run の defer 1 箇所きりで、返したところで
+// slog.Error 以外の行き先が無いためです。
+func (c *Container) Close() {
 	for _, closer := range c.Closers {
 		if closer == nil {
 			continue
 		}
 		if err := closer.Close(); err != nil {
-			errs = errors.Join(errs, err)
+			slog.Error("failed to close resource", "error", err)
 		}
 	}
-	if c.RemoteIO != nil {
-		if err := c.RemoteIO.Close(); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-	return errs
 }

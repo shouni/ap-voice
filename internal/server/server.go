@@ -23,9 +23,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 	defer func() {
 		slog.Info("♻️ Closing application context...")
-		if closeErr := appCtx.Close(); closeErr != nil {
-			slog.Error("failed to close application context", "error", closeErr)
-		}
+		appCtx.Close()
 	}()
 
 	h, err := builder.BuildHandlers(appCtx)
