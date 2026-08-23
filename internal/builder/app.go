@@ -84,6 +84,10 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		RemoteIO:   rio,
 		HTTPClient: httpClient,
 		Notifier:   notifier,
+		// rio は成功後の storage の所有者です（Bundle.Close が factory を閉じます）。
+		// 組み立てに失敗したときは resources 側が storage を直接閉じるため、
+		// Closers は成功して返ったあとの解放だけを受け持ちます。
+		Closers: []io.Closer{rio},
 	}
 
 	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで
