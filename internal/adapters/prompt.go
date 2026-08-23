@@ -42,7 +42,10 @@ func NewPromptAdapter() (*PromptAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	builder, err := prompts.NewBuilder(templates)
+	// WithTrimPartials を付けるのは、partial を本文の途中から参照しているためです。
+	// ファイル末尾の改行がそのまま残ると、差し込んだ位置に空行が入り、続きの
+	// 箇条書きが別のリストとして切れます（_writing / _length / _title が該当）。
+	builder, err := prompts.NewBuilder(templates, prompts.WithTrimPartials())
 	if err != nil {
 		return nil, fmt.Errorf("ビルダーの構築に失敗: %w", err)
 	}
