@@ -154,7 +154,13 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   perfectly normal page until someone submits it.
 - **Job state lives in `go-job-kit`**, as it does in the siblings: `jobstatus.Status` written by
   `UnderJobDir` to `voice/<jobID>/status.json`, so deleting a job's prefix takes its state with
-  it. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
+  it. The record also carries `mode`, which **nothing else preserves**: a finished script only
+  reveals the speaker line-up, so a one-speaker script cannot be told apart as `tech_solo` or
+  `tech_howto`, and revising a mode's length or tone from real output needs to know which mode
+  produced what. `synthesize` carries no mode (the script already exists), so
+  `JobStatus.CarryFrom` brings it forward along with the artifact URIs — **one method for every
+  value a later write cannot re-derive**, since the web face and the pipeline both rebuild the
+  record from scratch and used to carry it in two separate places. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
   **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
   and the worker reads state before it works, so the reverse order lets a stale record overwrite
   a live one; ap-story hit exactly this. That ordering is also what makes the re-run guard safe:
@@ -183,7 +189,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   button because a person editing has already decided. Both go through `validateScript` — one
   loose path is enough to store a pair that silently becomes the speaker's default at synthesis.
 - **`/modes` lists, `/modes/{mode}` shows one**, the split ap-comp uses. The index carries only
-  front matter and **assembles no prompts**: the seven bodies come to more than 10k characters,
+  front matter and **assembles no prompts**: the eight bodies come to more than 10k characters,
   so building them for a page that may only be scanned is waste, and a reader — or an MCP client
   — that wants the index should not pay for the bodies. The detail assembles through the same
   builder the worker uses, partials expanded, so the page cannot describe something different
@@ -264,23 +270,37 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `mode` with no code change** (the directory already says they are prompts, so filenames carry
   a genre prefix so the list groups itself: `tech_*`, `news_*`, `story_*`, `music_*`).
   Each file opens with a YAML front matter block
-  (`label` / `direction` / `use_when`) that supplies the form's option text and the description
-  under the select — the same arrangement as ap-comp, so **the explanation lives next to the
-  prompt it explains** rather than in a list the form owns. `assets/modes.go` splits it:
+  (`order` / `label` / `direction` / `use_when`) that supplies the form's option text and the
+  description under the select — the same arrangement as ap-comp, so **the explanation lives next
+  to the prompt it explains** rather than in a list the form owns. `order` (numbered in tens, so a
+  mode can be inserted without renumbering) decides the option order, and it lives in front matter
+  rather than in a numeric filename prefix **because the filename is the mode key**: it is the
+  value carried in `Request.Mode`, the `/modes/{mode}` URL and what `list_voice_modes` hands an
+  agent, so a rename for presentation's sake would strand every stored job and outside caller.
+  A mode with no `order` sorts last (key order breaks ties), the same shape of fallback as an
+  absent `label`. `assets/modes.go` splits it:
   `LoadModes` reads the metadata, and **`LoadPrompts` returns the body only** — leaving the front
   matter in would slip YAML into the top of the instruction text, and the run would still
   succeed, so nothing would flag it. A prompt with no front matter still appears, labelled by its
-  key. **Files beginning with `_` are partials, not modes** — `_writing` (the rules every
-  spoken script obeys), `_length` and `_input` — so the seven prompts state only what is
-  particular to them. `go-prompt-kit` already excludes that prefix from `Build`, and `LoadModes`
+  key. **Files beginning with `_` are partials, not modes** — `_writing` (how to spell a line so
+  the engine speaks it), `_clarity` (how to write a line the ear can follow), `_length`, `_title`
+  and `_input` — so the eight prompts state only what is particular to them. `_writing` and
+  `_clarity` are deliberately two files: one is about notation, the other about comprehension, and
+  a mode can want the first without the second. **`_clarity` is included by six modes, not eight.**
+  `story_reading` leaves it out because rewriting a demonstrative or spelling out a term is exactly
+  the rewriting a reading must not do, and `comedy_manzai` because its "言い換えて紛れを避ける" rule
+  is the opposite of what a homophone gag needs — both carry their own listener rules instead. `go-prompt-kit` already excludes that prefix from `Build`, and `LoadModes`
   filters on `prompts.DefaultPartialPrefix` so the same rule is not written twice; `LoadPrompts`
   keeps them, since the bodies reference them.
   The mode string travels from `Request.Mode` straight to
-  `PromptAdapter.Generate` and is never validated against a list. The one exception is
-  `music_promo`, named in `adapters/prompt.go` because it is the only mode whose *input type*
-  differs: it reads ap-comp's `recipe.json` and decodes it into a `music.Recipe` before
-  rendering. **That constant is the only place a mode name appears in code**, so renaming a
-  prompt file means touching it.
+  `PromptAdapter.Generate` and is never validated against a list. The one mode whose *input type*
+  differs — `music_promo`, which reads ap-comp's `recipe.json` and decodes it into a
+  `music.Recipe` before rendering — **is not named in code either**: `NewPromptAdapter` collects
+  the recipe modes from the same `input: "recipe"` front matter the form's tabs read, so the
+  answer to "which modes take a recipe" does not live in two places.
+  **No mode name appears anywhere in Go code**, which is what keeps adding one to a file drop.
+  `TestPromptAdapterBuildsEveryMode` assembles every mode through the real builder, since a
+  mistyped `{{template "_clarity" .}}` compiles fine and only fails when someone picks that mode.
 - **`assets/speakers.json` is the speaker vocabulary**, and it is this app's file, not
   go-voicevox's. It is the engine's `/speakers` response saved verbatim (pretty-printed so engine
   updates produce a readable diff); refresh it with the curl in `assets/assets.go`. `builder`
@@ -299,10 +319,16 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   so the enum's width does not matter in practice. If you change `ScriptLine`'s fields, update the
   schema in lockstep.
 - **The prompts carry all the expressive work.** With one fixed style, nothing about the audio
-  varies except the words, so each prompt says so and asks for short sentences, restatement and
-  questions instead. They also spell out what a TTS script needs and a written one does not:
-  katakana for acronyms, no symbols or bullet lists, unambiguous numbers. If you loosen the style
-  rule, drop the compensating instructions with it — otherwise the two pull against each other.
+  varies except the words, so `_writing` says exactly that and asks for short sentences,
+  restatement and reordering instead. It also spells out what a TTS script needs and a written one
+  does not: katakana for acronyms, no symbols or bullet lists, unambiguous numbers, kana for a word
+  with two readings. If you loosen the style rule, drop the compensating instructions with it —
+  otherwise the two pull against each other.
+- **`_clarity` is about the listener, not the engine.** A line the engine pronounces correctly can
+  still be unfollowable: a demonstrative pointing three sentences back, a dropped subject, a term
+  explained later, a homophone. **None of that shows up in the audio as a defect** — it sounds
+  fine and simply fails to land — so it has to be instructed rather than caught. The rules assume
+  the listener cannot rewind, which is the one thing separating this from ordinary editing.
 - **There is no `direction` field.** It was an emotion tag for downstream video production that
   nothing ever read — not the engine, not any sibling app. Styles now carry the emotion and
   actually change the audio, so the tag was removed rather than left as a field the AI spends

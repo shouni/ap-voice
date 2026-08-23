@@ -21,4 +21,36 @@ type JobStatus struct {
 	AudioURI string `json:"audio_uri,omitempty"`
 	// ScriptURI は台本の保存先（gs://）です。generate の時点から入ります。
 	ScriptURI string `json:"script_uri,omitempty"`
+	// Mode は台本を作ったときの形式（tech_solo など）です。
+	//
+	// **状態に残さないと、後から振り返る手段がありません。** 出来上がった台本から
+	// 分かるのは話者の組み合わせまでで、ずんだもん 1 人の台本が tech_solo だったか
+	// tech_howto だったかは区別できません。長さや口調の目安を実測で見直すには、
+	// どのモードが何を作ったかが要ります。
+	Mode string `json:"mode,omitempty"`
+}
+
+// CarryFrom は、前回の記録から**今回の組み立てでは分からない値**を引き継ぎます。
+//
+// ワーカーは状態が変わるたびにタスクから状態を組み立て直すため、これが無いと
+// running を書いた時点で前回の在り処が消えます。**モードも同じです** —
+// synthesize は台本がすでにある前提のコマンドなのでモードを持たず、
+// 引き継がないと generate → synthesize と二段で進めたジョブだけがモードを失います
+// （画面から作った場合は必ずこの経路です）。
+//
+// 埋まっている値は上書きしません。今回の組み立てで分かったことのほうが新しく、
+// 合成し直しで在り処が変わったのに古い値へ戻されては困ります。
+func (s *JobStatus) CarryFrom(prev *JobStatus) {
+	if prev == nil {
+		return
+	}
+	if s.AudioURI == "" {
+		s.AudioURI = prev.AudioURI
+	}
+	if s.ScriptURI == "" {
+		s.ScriptURI = prev.ScriptURI
+	}
+	if s.Mode == "" {
+		s.Mode = prev.Mode
+	}
 }

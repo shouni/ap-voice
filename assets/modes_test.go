@@ -69,6 +69,9 @@ func TestLoadModesHasMetadata(t *testing.T) {
 		if mode.UseWhen == "" {
 			t.Errorf("%s: use_when がありません", mode.Key)
 		}
+		if mode.Order == 0 {
+			t.Errorf("%s: order がありません", mode.Key)
+		}
 	}
 }
 
@@ -83,9 +86,37 @@ func TestLoadModesIsSorted(t *testing.T) {
 	}
 
 	for i := 1; i < len(modes); i++ {
-		if modes[i-1].Key >= modes[i].Key {
-			t.Errorf("並びが昇順ではありません: %s の次に %s", modes[i-1].Key, modes[i].Key)
+		prev, cur := modes[i-1], modes[i]
+		if prev.sortOrder() > cur.sortOrder() {
+			t.Errorf("order が昇順ではありません: %s(%d) の次に %s(%d)",
+				prev.Key, prev.Order, cur.Key, cur.Order)
 		}
+		// order が重複していても、並びは毎回同じでなければなりません。
+		if prev.sortOrder() == cur.sortOrder() && prev.Key >= cur.Key {
+			t.Errorf("同順位の並びが安定していません: %s の次に %s", prev.Key, cur.Key)
+		}
+	}
+}
+
+// TestLoadModesOrderIsUnique は、同梱するモードの order が重なっていないことを検証します。
+//
+// 重なってもキー順で決まるので画面は壊れませんが、**それは書き間違いの受け皿**であって、
+// 意図した並びではありません。番号を振り直した拍子の重複はここで気付けます。
+func TestLoadModesOrderIsUnique(t *testing.T) {
+	t.Parallel()
+
+	modes, err := LoadModes()
+	if err != nil {
+		t.Fatalf("LoadModes() error = %v", err)
+	}
+
+	seen := make(map[int]string, len(modes))
+	for _, mode := range modes {
+		if prev, ok := seen[mode.Order]; ok {
+			t.Errorf("order %d が %s と %s で重複しています", mode.Order, prev, mode.Key)
+			continue
+		}
+		seen[mode.Order] = mode.Key
 	}
 }
 
