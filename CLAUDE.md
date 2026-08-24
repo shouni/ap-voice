@@ -75,12 +75,33 @@ is easy to break by editing.
   or `auth.TaskVerifier` is fail-closed, so `BuildHandlers` refuses to start rather than let
   every task 401. `TASK_AUDIENCE_URL` falls back to `SERVICE_URL` when unset.
 - `VOICEVOX_MAX_PARALLEL_SEGMENTS` / `VOICEVOX_SEGMENT_RATE_LIMIT` / `VOICEVOX_SEGMENT_TIMEOUT` —
-  optional; `8`, `500ms`, `120s`. Throughput is `min(1/rate, parallel ÷ time-per-segment)`, and
+  optional; `4`, `100ms`, `120s`. Throughput is `min(1/rate, parallel ÷ time-per-segment)`, and
   **measurement says the second term is the binding one**: a 12-segment job took 50s at 0.24
-  segments/sec while the limiter allowed 2.0/sec, so the rate limit never came into play and is
-  not a usable knob today. CPU did not saturate either (2.31 of 5 allocated vCPU, memory 0.94 of
+  segments/sec while the limiter (then 500ms) allowed 2.0/sec, so the rate limit never came into
+  play in that job. **It is not free while it fails to bind, though** — the limiter's burst is 1,
+  so `(parallel - 1) x rate` lands on the head of every batch: 3.5s at the old 500ms with 8
+  parallel. And "it never binds" turned out to hold only for long scripts. 90 days of the
+  worker's own batch logs (29 batches, `segment_duration_*` against the elapsed time) put a
+  segment anywhere between 1.0s and 35.3s; **13 of the 29 contained a segment under the 4s
+  threshold and 4 averaged under it** — all of them 4-segment jobs that took 4.5-6.4s wall clock
+  for 2.0-3.2s of synthesis. It was cut to `100ms` for that reason, and the gain lands on short
+  scripts, where the stagger was the larger half of the job. Keep it small enough to be invisible: its only job is to
+  avoid opening every connection at once, and lengthening it also widens the window in which a
+  `PIPELINE_TIMEOUT` cancellation lands on segments that never started (go-voicevox counts those
+  as failures, by design). CPU did not saturate either (2.31 of 5 allocated vCPU, memory 0.94 of
   4 GiB), so the limit sits inside the engine and **neither raising nor lowering the parallelism
-  has a predictable effect — measure before changing it.** What parallelism does cost is engine
+  has a predictable effect — measure before changing it.** **That has since been measured, and
+  parallelism was the knob that moved.** Per-segment progress logs carry both a rune count and a
+  duration, so cost per character can be read off at each effective concurrency: ~4 gives
+  233 ms/char (17.2 chars/sec), 8 gives 430 ms/char (18.6 chars/sec) — **throughput flat, latency
+  doubled**, with 430 ≈ 233 x 2 matching the 8/4 ratio, and CPU p99 at 3.7 of 5 vCPU (the engine
+  holds 4 of those). Synthesis is CPU-bound, so 4 vCPU saturate at 4 in flight; the default is now
+  `4`. The low-concurrency side is only 7 samples (progress logs fire every 5th segment plus the
+  last) and those small batches may have caught `startup_cpu_boost`, which would flatter them —
+  that bias runs against the change, so if elapsed times worsen, put `8` back through the env and
+  measure again. **The env var exists for that reversal, not for infra to tune**: ap-infra sets
+  none of these three, deliberately — it owns the engine's size, the app owns how to feed it.
+  What parallelism does cost is engine
   memory, and note that the peak does not grow with script length: the in-flight count is capped,
   so a 200-line script has the same memory peak as a 12-line one and only runs longer. They are
   env vars rather than constants because the engine's size is decided in `ap-infra`, not here, so

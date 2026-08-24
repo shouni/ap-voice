@@ -14,7 +14,7 @@ require (
 	github.com/shouni/go-prompt-kit v1.5.2
 	github.com/shouni/go-remote-io v1.9.0
 	github.com/shouni/go-utils v1.6.0
-	github.com/shouni/go-voicevox v1.8.3
+	github.com/shouni/go-voicevox v1.9.0
 	github.com/shouni/go-web-reader v1.3.2
 	github.com/shouni/netarmor v1.2.4
 	go.yaml.in/yaml/v3 v3.0.5
