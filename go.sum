@@ -165,8 +165,8 @@ github.com/shouni/go-remote-io v1.9.0 h1:soOCs80UMvAC/wbyess4sn+WafKJZxdOArNsXeC
 github.com/shouni/go-remote-io v1.9.0/go.mod h1:eH/rBfJFQy+hylTq5eLzyj/5NDvvDGjNxEStRXsCw9s=
 github.com/shouni/go-utils v1.6.0 h1:euvfrBtceIQtqbQfDuRL21KoQy+d7wVYQj6eD+QVUB4=
 github.com/shouni/go-utils v1.6.0/go.mod h1:B0zH+ss8KU51qiCL/jPDO3JsdvTSJ+DaEjZy5MadEQg=
-github.com/shouni/go-voicevox v1.8.3 h1:oiDeXvVao0FkxbFO8uuju34+Kwr5v9AsRx9nc1NevJA=
-github.com/shouni/go-voicevox v1.8.3/go.mod h1:TShCehQ1Nue6ggXQgeZEWSpUzLUMEkv8x1c451pCFIA=
+github.com/shouni/go-voicevox v1.9.0 h1:jQw0GywVK7JFCds/jkTM3IryyeZJw4jv6e9LfoNVJcM=
+github.com/shouni/go-voicevox v1.9.0/go.mod h1:TShCehQ1Nue6ggXQgeZEWSpUzLUMEkv8x1c451pCFIA=
 github.com/shouni/go-web-reader v1.3.2 h1:CzkmMoELOUmLZu76N8KeDRNa3rsCAB8H6p/24LfvFYU=
 github.com/shouni/go-web-reader v1.3.2/go.mod h1:LrfDVIMJ+j5N6NiH7fkc3vaZCkCcHsS26ekYcycR268=
 github.com/shouni/netarmor v1.2.4 h1:4XYB72XSbxoSF4Sa6BzTFXR604bIN7hVX+n7dh1WV0g=
