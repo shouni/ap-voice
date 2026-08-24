@@ -8,14 +8,14 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.2.3
 	github.com/shouni/gcp-kit v1.10.3
-	github.com/shouni/go-gemini-client v1.17.5
+	github.com/shouni/go-gemini-client v1.18.1
 	github.com/shouni/go-http-kit v1.8.4
-	github.com/shouni/go-job-kit v1.1.0
+	github.com/shouni/go-job-kit v1.1.1
 	github.com/shouni/go-notify v1.2.5
 	github.com/shouni/go-prompt-kit v1.5.2
 	github.com/shouni/go-remote-io v1.9.0
 	github.com/shouni/go-utils v1.6.0
-	github.com/shouni/go-voicevox v1.9.0
+	github.com/shouni/go-voicevox v1.9.1
 	github.com/shouni/go-web-reader v1.3.2
 	github.com/shouni/netarmor v1.2.4
 	go.yaml.in/yaml/v3 v3.0.5
