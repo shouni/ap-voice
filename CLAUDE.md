@@ -329,6 +329,15 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   explained later, a homophone. **None of that shows up in the audio as a defect** — it sounds
   fine and simply fails to land — so it has to be instructed rather than caught. The rules assume
   the listener cannot rewind, which is the one thing separating this from ordinary editing.
+  **Every clarity rule needs a counterweight, or it buys legibility with content.** The first
+  version ended the "open every term" rule with "a term you cannot open is better left out", and
+  one run on the same source article as an earlier one showed the price: distinct technical terms
+  fell from 36 to 16, SSRF became "server attacks", "the SDK's types" became "dedicated tools",
+  and the twelve-panels-redraw-panel-three example vanished. Facing "open every term" against "one
+  idea per line", the model dropped the names rather than explain them — and kept every topic, so
+  the script covered the same ground at half the resolution. Hence two rules that read as
+  redundant but are not: **opening a term is name-plus-explanation, never a generic substitute**,
+  and in `_length`, **shortening means fewer topics, not the same topics at lower resolution**.
 - **There is no `direction` field.** It was an emotion tag for downstream video production that
   nothing ever read — not the engine, not any sibling app. Styles now carry the emotion and
   actually change the audio, so the tag was removed rather than left as a field the AI spends
