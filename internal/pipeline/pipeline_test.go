@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/shouni/go-job-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -104,8 +104,8 @@ func TestPipelineExecute(t *testing.T) {
 			&MockScriptStep{
 				RunFunc: func(_ context.Context, got domain.Request) (domain.Script, error) {
 					generateCalled = true
-					if !reflect.DeepEqual(got, req) {
-						t.Fatalf("unexpected request: %+v", got)
+					if diff := cmp.Diff(req, got); diff != "" {
+						t.Fatalf("unexpected request (-want +got):\n%s", diff)
 					}
 					return domain.Script{Title: "テスト台本", Lines: sampleLines}, nil
 				},
@@ -130,8 +130,8 @@ func TestPipelineExecute(t *testing.T) {
 			&MockNotifier{
 				NotifyFunc: func(_ context.Context, got domain.Request, publicURL string) error {
 					notifyCalled = true
-					if !reflect.DeepEqual(got, req) {
-						t.Fatalf("unexpected request: %+v", got)
+					if diff := cmp.Diff(req, got); diff != "" {
+						t.Fatalf("unexpected request (-want +got):\n%s", diff)
 					}
 					if publicURL != "https://example.com/script.json" {
 						t.Fatalf("unexpected publicURL: %s", publicURL)
@@ -168,8 +168,8 @@ func TestPipelineExecute(t *testing.T) {
 			&MockNotifier{
 				NotifyFailureFunc: func(_ context.Context, got domain.Request, err error) error {
 					failureNotified = true
-					if !reflect.DeepEqual(got, req) {
-						t.Fatalf("unexpected request: %+v", got)
+					if diff := cmp.Diff(req, got); diff != "" {
+						t.Fatalf("unexpected request (-want +got):\n%s", diff)
 					}
 					if !errors.Is(err, expectedErr) {
 						t.Fatalf("unexpected error: %v", err)
@@ -306,8 +306,8 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 	if generateCalled {
 		t.Fatal("synthesize なのに台本生成が呼ばれた")
 	}
-	if !reflect.DeepEqual(published, script) {
-		t.Fatalf("渡した台本が公開処理へ届いていない: %+v", published)
+	if diff := cmp.Diff(script, published); diff != "" {
+		t.Fatalf("渡した台本が公開処理へ届いていない (-want +got):\n%s", diff)
 	}
 }
 

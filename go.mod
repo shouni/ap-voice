@@ -5,6 +5,7 @@ go 1.26.6
 require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.2
+	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.2.3
 	github.com/shouni/gcp-kit v1.10.3
 	github.com/shouni/go-gemini-client v1.17.5
@@ -62,7 +63,6 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.21 // indirect
