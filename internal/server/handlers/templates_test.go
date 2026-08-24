@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"html"
 	"html/template"
 	"regexp"
@@ -25,14 +26,15 @@ import (
 // **必ず本物の View 構造体を使います。** それがフィールド名の改名を検知する条件です。
 
 // parseTemplates は builder/handlers.go と同じ手順でテンプレートを読みます。
-func parseTemplates(t *testing.T) *template.Template {
+// 画面ごとに独立したセットになります（キーは "history.html" などのファイル名）。
+func parseTemplates(t *testing.T) map[string]*template.Template {
 	t.Helper()
 
-	tmpl, err := template.ParseFS(assets.Templates, "templates/*.html")
+	pages, err := assets.ParsePages()
 	if err != nil {
 		t.Fatalf("テンプレートの読み込みに失敗しました: %v", err)
 	}
-	return tmpl
+	return pages
 }
 
 // testBaseView は全画面共通の値です。ナビが .Path と .DefaultModel を見ます。
@@ -169,7 +171,7 @@ func TestTemplatesRender(t *testing.T) {
 			t.Parallel()
 
 			var buf strings.Builder
-			if err := tmpl.ExecuteTemplate(&buf, tt.template, tt.view); err != nil {
+			if err := renderInto(&buf, tmpl, tt.template, tt.view); err != nil {
 				t.Fatalf("%s の描画に失敗しました: %v", tt.template, err)
 			}
 
@@ -200,7 +202,7 @@ func TestFormKeepsSelectedMode(t *testing.T) {
 	tmpl := parseTemplates(t)
 
 	var buf strings.Builder
-	err := tmpl.ExecuteTemplate(&buf, "home.html", formView{
+	err := renderInto(&buf, tmpl, "home.html", formView{
 		baseView:    testBaseView("/"),
 		TextModes:   assets.FilterModes(testModes(), assets.InputText),
 		RecipeModes: assets.FilterModes(testModes(), assets.InputRecipe),
@@ -252,7 +254,7 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 			t.Parallel()
 
 			var buf strings.Builder
-			if err := tmpl.ExecuteTemplate(&buf, name, view); err != nil {
+			if err := renderInto(&buf, tmpl, name, view); err != nil {
 				t.Fatalf("%s の描画に失敗しました: %v", name, err)
 			}
 
@@ -278,7 +280,7 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 			t.Parallel()
 
 			var buf strings.Builder
-			if err := tmpl.ExecuteTemplate(&buf, "nav", testBaseView(path)); err != nil {
+			if err := tmpl["home.html"].ExecuteTemplate(&buf, "nav", testBaseView(path)); err != nil {
 				t.Fatalf("ナビの描画に失敗しました: %v", err)
 			}
 
@@ -336,7 +338,7 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 			t.Parallel()
 
 			var buf strings.Builder
-			if err := tmpl.ExecuteTemplate(&buf, "detail.html", tt.view); err != nil {
+			if err := renderInto(&buf, tmpl, "detail.html", tt.view); err != nil {
 				t.Fatalf("描画に失敗しました: %v", err)
 			}
 			match := regexp.MustCompile(`data-styles="([^"]*)"`).FindStringSubmatch(buf.String())
@@ -350,4 +352,14 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 			}
 		})
 	}
+}
+
+// renderInto は 1 画面を buf へ描きます。失敗の扱いは呼び出し側に任せるため、
+// executePage と違って t.Fatalf せずエラーを返します。
+func renderInto(buf *strings.Builder, pages map[string]*template.Template, name string, view any) error {
+	tmpl, ok := pages[name]
+	if !ok {
+		return fmt.Errorf("画面テンプレートが見つかりません: %s", name)
+	}
+	return tmpl.ExecuteTemplate(buf, assets.PageTemplate, view)
 }

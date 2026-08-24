@@ -1,16 +1,6 @@
-{{ define "modes.html" }}<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>生成モード | AP Voice</title>
-  <link rel="stylesheet" href="/static/vendor/bootstrap-5.3.8/bootstrap.min.css">
-  <link rel="stylesheet" href="/static/vendor/bootstrap-icons-1.13.1/bootstrap-icons.css">
-  <link rel="stylesheet" href="/static/css/app.css">
-</head>
-<body>
-{{ template "nav" . }}
+{{ define "title" }}生成モード | AP Voice{{ end }}
 
+{{ define "content" }}
 <main class="container main-content">
   <h1 class="h5 mb-1">生成モード</h1>
   <p class="text-secondary">
@@ -46,15 +36,7 @@
   </div>
 
 </main>
-<script src="/static/vendor/bootstrap-5.3.8/bootstrap.bundle.min.js"></script>
-</body>
-</html>{{ end }}
-
-{{/* 入力の型のバッジ。カタログと詳細で同じ見た目にします。 */}}
-{{ define "input_badge" }}
-  {{ if .NeedsRecipe }}
-    <span class="badge text-bg-warning"><i class="bi bi-music-note-beamed me-1"></i>楽曲レシピ</span>
-  {{ else }}
-    <span class="badge text-bg-secondary"><i class="bi bi-file-text me-1"></i>テキスト</span>
-  {{ end }}
 {{ end }}
+
+{{/* この画面は固有の JS を読み込みません。 */}}
+{{ define "scripts" }}{{ end }}

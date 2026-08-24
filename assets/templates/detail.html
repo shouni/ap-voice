@@ -1,16 +1,6 @@
-{{ define "detail.html" }}<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ .JobID }} | AP Voice</title>
-  <link rel="stylesheet" href="/static/vendor/bootstrap-5.3.8/bootstrap.min.css">
-  <link rel="stylesheet" href="/static/vendor/bootstrap-icons-1.13.1/bootstrap-icons.css">
-  <link rel="stylesheet" href="/static/css/app.css">
-</head>
-<body>
-{{ template "nav" . }}
+{{ define "title" }}{{ .JobID }} | AP Voice{{ end }}
 
+{{ define "content" }}
 <main class="container main-content">
   <p class="text-secondary small mb-3"><code>{{ .JobID }}</code></p>
 
@@ -104,7 +94,8 @@
      CSP の script-src を 'self' だけにできません。空のときは {} を入れて、
      画面側が JSON.parse に失敗しないようにします。 */}}
 <div id="voice-styles" data-styles="{{ if .StylesJSON }}{{ .StylesJSON }}{{ else }}{}{{ end }}" hidden></div>
-<script src="/static/vendor/bootstrap-5.3.8/bootstrap.bundle.min.js"></script>
+{{ end }}
+
+{{ define "scripts" }}
 <script src="/static/js/script_edit.js"></script>
-</body>
-</html>{{ end }}
+{{ end }}

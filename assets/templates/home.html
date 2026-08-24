@@ -1,16 +1,6 @@
-{{ define "home.html" }}<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AP Voice</title>
-  <link rel="stylesheet" href="/static/vendor/bootstrap-5.3.8/bootstrap.min.css">
-  <link rel="stylesheet" href="/static/vendor/bootstrap-icons-1.13.1/bootstrap-icons.css">
-  <link rel="stylesheet" href="/static/css/app.css">
-</head>
-<body>
-{{ template "nav" . }}
+{{ define "title" }}AP Voice{{ end }}
 
+{{ define "content" }}
 <main class="container main-content">
   <p class="text-secondary">
     ドキュメントから<strong>ナレーション台本</strong>を作ります。台本は履歴に並び、
@@ -150,10 +140,12 @@
     </div>
   </div>
 </main>
-<script src="/static/vendor/bootstrap-5.3.8/bootstrap.bundle.min.js"></script>
+{{ end }}
+
+{{ define "scripts" }}
 <script src="/static/js/mode_desc.js"></script>
-</body>
-</html>{{ end }}
+{{ end }}
+
 {{ define "create_buttons" }}
   <div class="form-text mb-3">
     出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。

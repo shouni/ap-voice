@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"html/template"
 	"net/url"
 
 	"github.com/shouni/gcp-kit/auth"
@@ -100,7 +99,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		return fmt.Errorf("認証ハンドラーの初期化に失敗しました: %w", err)
 	}
 
-	tmpl, err := template.ParseFS(assets.Templates, "templates/*.html")
+	tmpl, err := assets.ParsePages()
 	if err != nil {
 		return fmt.Errorf("テンプレートの読み込みに失敗しました: %w", err)
 	}

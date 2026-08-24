@@ -112,3 +112,67 @@ func TestTemplateLocalAssetsExist(t *testing.T) {
 		}
 	}
 }
+
+// TestPagesUseTheSharedLayout は、画面が外枠を自前で持たないことを保証します。
+//
+// 2026-08-24 まで 5 つの画面がそれぞれ <!doctype html> から </html> まで丸ごと持っており、
+// head の違いは <title> だけでした。Bootstrap を CDN から自前配信へ移したとき同じ 3 行を
+// 5 ファイル直すことになり、1 つ直し漏らせばその画面だけスタイルが崩れる状態でした。
+// 外枠は layout.html だけが持ちます。
+func TestPagesUseTheSharedLayout(t *testing.T) {
+	t.Parallel()
+
+	const layout = "templates/layout.html"
+
+	for _, name := range templateNames(t) {
+		if name == layout || strings.HasPrefix(name, "templates/partials/") || name == "templates/nav.html" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			body, err := Templates.ReadFile(name)
+			if err != nil {
+				t.Fatalf("読めない: %v", err)
+			}
+			text := string(body)
+
+			if strings.Contains(strings.ToLower(text), "<!doctype") {
+				t.Error("画面が外枠を自前で持っています（layout.html に寄せてください）")
+			}
+			// layout.html は title / content / scripts を呼びます。1 つでも欠けると
+			// その画面だけ描画時に落ちます（他の画面は無事なので気付きにくい）。
+			for _, block := range []string{"title", "content", "scripts"} {
+				if !strings.Contains(text, `{{ define "`+block+`" }}`) {
+					t.Errorf("%q を define していません", block)
+				}
+			}
+		})
+	}
+}
+
+// TestParsePagesCoversEveryScreen は、画面テンプレートが 1 枚残らず組み立てられることを見ます。
+// 共通部品を片方の画面にだけ置くと、もう片方のセットから引けず描画時に落ちます
+// （input_badge を modes.html に置いたまま mode_detail.html から呼んで実際に踏みました）。
+func TestParsePagesCoversEveryScreen(t *testing.T) {
+	t.Parallel()
+
+	pages, err := ParsePages()
+	if err != nil {
+		t.Fatalf("ParsePages() error = %v", err)
+	}
+
+	for _, name := range templateNames(t) {
+		if name == "templates/layout.html" || name == "templates/nav.html" ||
+			strings.HasPrefix(name, "templates/partials/") {
+			continue
+		}
+		base := path.Base(name)
+		tmpl, ok := pages[base]
+		if !ok {
+			t.Errorf("%s のテンプレートセットがありません", base)
+			continue
+		}
+		if tmpl.Lookup(PageTemplate) == nil {
+			t.Errorf("%s のセットに %s がありません", base, PageTemplate)
+		}
+	}
+}
