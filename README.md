@@ -62,7 +62,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `SERVICE_URL` / `PORT` | 公開 URL と待ち受けポート (Default: `http://localhost:8080` / `8080`)。 |
 | `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
 | `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `8`)。**スループットを縛っているのはこの値です。** 代償はエンジンのメモリで、OOM が出たら下げます。ピークは台本の長さでは上がりません（同時数で頭打ちのため）。 |
-| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `500ms` = 秒2件)。**実測では8倍の余裕があり、調整つまみとして機能していません**（12セグメントの実効 0.24 件/秒 に対し、許容 2.0 件/秒）。エンジンを叩きすぎないための保険です。 |
+| `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `100ms`)。**スループットのつまみではありません**（実測の実効 0.24 件/秒 に対し、100ms は 10 件/秒 を許容）。起動時にエンジンを一斉に叩かないための保険で、同時実行数を縛るのは `VOICEVOX_MAX_PARALLEL_SEGMENTS` です。 |
 | `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
 | `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |

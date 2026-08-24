@@ -7,7 +7,7 @@ import (
 )
 
 // scriptTextMaxLength は、Gemini に対する目安の文字数上限です。
-// 実際の安全策は go-voicevox 側の SplitByCharLimit による強制分割です。
+// 実際の安全策は go-voicevox 側の 200 文字での強制分割です（内部実装なので名前は当てにしません）。
 const scriptTextMaxLength = 200
 
 // scriptTitleMaxLength は、履歴の一覧に収まる長さの目安です。
