@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"html/template"
 	"net/http"
 	"strconv"
 
@@ -45,8 +44,11 @@ type detailView struct {
 	HasAudio bool
 	// Speakers は話者名の一覧、StylesJSON は話者ごとの実在スタイルです。
 	// 後者は選択肢を話者に応じて絞るために JS へ渡します。
-	Speakers   []string
-	StylesJSON template.JS
+	Speakers []string
+	// StylesJSON は data 属性へ入れるため素の string です。template.JS にすると
+	// html/template が素通しし、値に </script> が入ったときブレイクアウトを許します。
+	// 属性コンテキストなら確実にエスケープされ、画面側は dataset から読み戻せます。
+	StylesJSON string
 	Message    string
 	Error      string
 }
@@ -231,7 +233,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		Script:     script,
 		HasAudio:   hasAudio,
 		Speakers:   h.speakers.SpeakerNames(),
-		StylesJSON: template.JS(stylesJSON),
+		StylesJSON: string(stylesJSON),
 		Message:    message,
 		Error:      errMsg,
 	})

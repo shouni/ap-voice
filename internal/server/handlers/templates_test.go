@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"html"
 	"html/template"
 	"regexp"
 	"strings"
@@ -129,7 +131,7 @@ func TestTemplatesRender(t *testing.T) {
 				Script:     script,
 				HasAudio:   true,
 				Speakers:   []string{"ずんだもん", "四国めたん"},
-				StylesJSON: template.JS(`{"ずんだもん":["ノーマル"]}`),
+				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
 			},
 			want: []string{
 				"保存して音声を作り直す",
@@ -292,12 +294,15 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 	}
 }
 
-// TestDetailAlwaysEmitsValidStylesScript は、話者→スタイルの対応表が空でも
-// 壊れた JavaScript を吐かないことを検証します。
+// TestDetailAlwaysEmitsParsableStyles は、話者→スタイルの対応表が空でも
+// 画面側が JSON.parse に失敗しないことを検証します。
 //
-// `window.apVoiceStyles = {{ .StylesJSON }};` を素で埋めると、値が空のときに
-// `= ;` になります。**構文エラーはその行で止まらず、以降の読み込みごと壊します。**
-func TestDetailAlwaysEmitsValidStylesScript(t *testing.T) {
+// 以前はインラインスクリプトで `window.apVoiceStyles = {{ .StylesJSON }};` と埋めており、
+// 値が空だと `= ;` になって**その行だけでなく以降の読み込みごと壊れて**いました。
+// CSP の script-src を 'self' だけにするためインラインをやめ、data 属性へ移しています
+// （template.JS は </script> を素通しするので、属性コンテキストの方が安全でもあります）。
+// 壊れ方は変わりましたが、「空でも妥当な値を吐く」という守るべき性質は同じです。
+func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 	t.Parallel()
 
 	tmpl := parseTemplates(t)
@@ -312,7 +317,7 @@ func TestDetailAlwaysEmitsValidStylesScript(t *testing.T) {
 				baseView:   testBaseView("/history/voice-1"),
 				JobID:      "voice-1",
 				Speakers:   []string{"ずんだもん"},
-				StylesJSON: template.JS(`{"ずんだもん":["ノーマル"]}`),
+				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
 			},
 		},
 		{
@@ -334,8 +339,14 @@ func TestDetailAlwaysEmitsValidStylesScript(t *testing.T) {
 			if err := tmpl.ExecuteTemplate(&buf, "detail.html", tt.view); err != nil {
 				t.Fatalf("描画に失敗しました: %v", err)
 			}
-			if got := buf.String(); strings.Contains(got, "apVoiceStyles = ;") {
-				t.Error("空の代入を吐いています（JS が構文エラーになります）")
+			match := regexp.MustCompile(`data-styles="([^"]*)"`).FindStringSubmatch(buf.String())
+			if match == nil {
+				t.Fatal("data-styles が出ていません（画面側が対応表を読めません）")
+			}
+			// 属性値は HTML エスケープされて出るので、読み戻してから解析します。
+			var styles map[string][]string
+			if err := json.Unmarshal([]byte(html.UnescapeString(match[1])), &styles); err != nil {
+				t.Errorf("data-styles が JSON として読めません: %v (値: %s)", err, match[1])
 			}
 		})
 	}
