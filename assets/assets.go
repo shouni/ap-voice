@@ -33,7 +33,7 @@ var SpeakersJSON []byte
 
 // Templates は Web 面の HTML テンプレートです。
 //
-//go:embed templates/*.html
+//go:embed templates/*.html templates/partials/*.html
 var Templates embed.FS
 
 // StaticFiles は Web 面の静的ファイルです。ディレクトリごと埋め込むので、

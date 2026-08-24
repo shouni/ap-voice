@@ -4,12 +4,23 @@
 // ずんだもんは 8 種類）。全部を一律に並べると、その話者が持たない組み合わせを
 // 選べてしまい、合成時に既定スタイルへ黙って落ちて指示が無視されます。
 //
-// 対応表はサーバーが埋め込みます（window.apVoiceStyles）。**画面側は一覧を持ちません。**
+// 対応表はサーバーが埋め込みます（#voice-styles の data-styles）。**画面側は一覧を持ちません。**
 // 話者一覧は assets/speakers.json が唯一の出所で、ここに写すと必ずずれます。
 (function () {
     'use strict';
 
-    var stylesBySpeaker = window.apVoiceStyles || {};
+    // 属性から読み戻します。インラインスクリプトで window へ置く形はやめました
+    // （CSP の script-src を 'self' だけにするため）。壊れた値で画面全体を止めない
+    // よう、解析に失敗したら選択肢の差し替えだけを諦めます。
+    var stylesBySpeaker = {};
+    var stylesHolder = document.getElementById('voice-styles');
+    if (stylesHolder) {
+        try {
+            stylesBySpeaker = JSON.parse(stylesHolder.dataset.styles || '{}');
+        } catch (error) {
+            console.warn('話者スタイルの対応表を読めませんでした:', error);
+        }
+    }
 
     // fillStyles は、選ばれている話者のスタイルで select を組み直します。
     // 直前に選ばれていた値が新しい話者にもあれば、それを保ちます。
@@ -53,3 +64,12 @@
         });
     });
 })();
+
+// 送信前の確認は data-confirm で宣言します。onsubmit 属性のままだと CSP の
+// script-src に 'unsafe-inline' が必要になり、インラインスクリプト禁止が無意味になります。
+document.addEventListener('submit', function (event) {
+    var form = event.target.closest('form[data-confirm]');
+    if (form && !window.confirm(form.dataset.confirm)) {
+        event.preventDefault();
+    }
+});

@@ -1,0 +1,10 @@
+{{/* 入力種別のバッジ。modes.html と mode_detail.html の両方が使うため、
+     どちらか一方のファイルに置くと、画面ごとにテンプレートセットを分けた時点で
+     もう片方から引けなくなります（実際に一度そうなりました）。 */}}
+{{ define "input_badge" }}
+  {{ if .NeedsRecipe }}
+    <span class="badge text-bg-warning"><i class="bi bi-music-note-beamed me-1"></i>楽曲レシピ</span>
+  {{ else }}
+    <span class="badge text-bg-secondary"><i class="bi bi-file-text me-1"></i>テキスト</span>
+  {{ end }}
+{{ end }}

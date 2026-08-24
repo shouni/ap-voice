@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,10 +35,7 @@ func formHandler(t *testing.T, queue domain.TaskQueue, repo ScriptRepository) *H
 	if err != nil {
 		t.Fatalf("NewRegistry() error = %v", err)
 	}
-	tmpl, err := template.ParseFS(assets.Templates, "templates/*.html")
-	if err != nil {
-		t.Fatalf("ParseFS() error = %v", err)
-	}
+	tmpl := parseTemplates(t)
 	modes, err := assets.LoadModes()
 	if err != nil {
 		t.Fatalf("LoadModes() error = %v", err)

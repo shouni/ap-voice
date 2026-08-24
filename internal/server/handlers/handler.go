@@ -2,9 +2,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -26,7 +28,7 @@ const jobIDPrefix = "voice"
 // Handler は Web 面のハンドラーです。
 type Handler struct {
 	queue     domain.TaskQueue
-	templates *template.Template
+	templates map[string]*template.Template
 	// modes は投入フォームに出す生成モードです。**生成時と同じ埋め込みテンプレートから
 	// 取ります。** フォーム側が別の一覧を持つと、画面に出したモードが worker に無い、
 	// という食い違いが起こり得ます。表示名と説明はプロンプトの front matter です。
@@ -86,8 +88,11 @@ const signedURLExpiry = time.Hour
 
 // HandlerOptions は Handler の依存です。
 type HandlerOptions struct {
-	Queue     domain.TaskQueue
-	Templates *template.Template
+	Queue domain.TaskQueue
+	// Templates は画面ごとのテンプレートセットです（キーは "history.html" などの
+	// ファイル名）。全画面を 1 セットに入れられないのは、各画面が同じ名前で
+	// content / title / scripts を define するためです。assets.ParsePages を使います。
+	Templates map[string]*template.Template
 	Modes     []assets.Mode
 	Models    []string
 	Bucket    string
@@ -107,7 +112,7 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 	if opts.Queue == nil {
 		return nil, errors.New("TaskQueue が指定されていません")
 	}
-	if opts.Templates == nil {
+	if len(opts.Templates) == 0 {
 		return nil, errors.New("テンプレートが指定されていません")
 	}
 	if len(opts.Modes) == 0 {
@@ -200,12 +205,26 @@ func (h *Handler) defaultModel() string {
 	return h.models[0]
 }
 
-// renderTemplate は指定のテンプレートを描画します。
+// renderTemplate は指定の画面を描画します。name は画面のファイル名です。
+//
+// 描き始める前にバッファへ書き出します。途中で失敗したときヘッダーは送信済みで
+// ステータスを変えられず、壊れた HTML が残ってしまうためです。
 func (h *Handler) renderTemplate(w http.ResponseWriter, status int, name string, view any) {
+	tmpl, ok := h.templates[name]
+	if !ok {
+		slog.Error("画面テンプレートが見つかりません", "page", name)
+		http.Error(w, "画面の描画に失敗しました", http.StatusInternalServerError)
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, assets.PageTemplate, view); err != nil {
+		slog.Error("画面の描画に失敗しました", "page", name, "error", err)
+		http.Error(w, "画面の描画に失敗しました", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := h.templates.ExecuteTemplate(w, name, view); err != nil {
-		// ヘッダーは送信済みなので、ここでステータスは変えられません。
-		http.Error(w, "画面の描画に失敗しました", http.StatusInternalServerError)
-	}
+	_, _ = buf.WriteTo(w)
 }
