@@ -373,16 +373,17 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 		}
 	})
 
-	// OOM が出たときにエンジンの vCPU 数まで絞る、という操作が env だけで済むこと。
-	t.Run("絞れる", func(t *testing.T) {
+	// 実測が覆ったときに再ビルド無しで戻す、という操作が env だけで済むこと。
+	// **既定と違う値を置きます。** 既定と同じ値だと、env が無視されていても通ります。
+	t.Run("上書きできる", func(t *testing.T) {
 		cfg := loadFor(t, map[string]string{
-			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "4",
+			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "8",
 			"VOICEVOX_SEGMENT_RATE_LIMIT":    "1s",
 			"VOICEVOX_SEGMENT_TIMEOUT":       "90s",
 		})
 
-		if cfg.Voicevox.MaxParallelSegments != 4 {
-			t.Errorf("MaxParallelSegments = %d, want 4", cfg.Voicevox.MaxParallelSegments)
+		if cfg.Voicevox.MaxParallelSegments != 8 {
+			t.Errorf("MaxParallelSegments = %d, want 8", cfg.Voicevox.MaxParallelSegments)
 		}
 		if cfg.Voicevox.SegmentRateLimit != time.Second {
 			t.Errorf("SegmentRateLimit = %v, want 1s", cfg.Voicevox.SegmentRateLimit)
