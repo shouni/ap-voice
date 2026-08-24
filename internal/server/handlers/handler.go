@@ -185,11 +185,10 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 			Command: string(req.Command),
 			State:   jobstatus.StateQueued,
 		},
+		Mode: req.Mode,
 	}, func(next, prev *domain.JobStatus) {
-		// 作り直しでは、前回の成果物の在り処を残します。
-		if prev != nil {
-			next.AudioURI, next.ScriptURI = prev.AudioURI, prev.ScriptURI
-		}
+		// 作り直しでは、前回の成果物の在り処とモードを残します。
+		next.CarryFrom(prev)
 	})
 }
 

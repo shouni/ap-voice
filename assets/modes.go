@@ -3,6 +3,7 @@ package assets
 import (
 	"fmt"
 	"maps"
+	"math"
 	"sort"
 	"sync"
 
@@ -29,6 +30,15 @@ func isPartial(key string) bool {
 // 済む仕組みだからです。説明を別ファイルに分けると、モードを足した人が説明を
 // 書き忘れても誰も気付かず、選択肢だけが増えていきます。
 type ModeMetadata struct {
+	// Order は選択肢に出す並び順です。1 から **10 刻み**で振ります（間へ挿すときに
+	// 前後を振り直さずに済みます）。
+	//
+	// **ファイル名に番号を付けない理由がここです。** ファイル名はそのままモードのキー、
+	// つまり Request.Mode に載る値であり /modes/{mode} の URL でもあります。並べ替えの
+	// ためにリネームすると、保存済みのジョブや外の呼び出し側（MCP の list_voice_modes が
+	// 返すキー）が一斉に指し先を失います。**並び順は表示の都合なので、識別子ではなく
+	// label と同じ場所に置きます。**
+	Order int `yaml:"order"`
 	// Label は選択肢に出す名前です。キー（ファイル名）は英字で、誰が喋るのかまでは
 	// 読み取れないため、日本語の表示名を別に持ちます。
 	Label string `yaml:"label"`
@@ -87,6 +97,18 @@ type Mode struct {
 	ModeMetadata
 }
 
+// sortOrder は並べ替えに使う順位です。**order が無いモードは末尾へ回します。**
+//
+// 先頭ではなく末尾なのは、order を書き忘れたモードが既存の並びの先頭へ割り込むより、
+// 後ろに足されるほうが被害が小さいためです。DisplayName がキーで代替するのと同じで、
+// 書き忘れても選択肢自体は消えません。
+func (m Mode) sortOrder() int {
+	if m.Order == 0 {
+		return math.MaxInt
+	}
+	return m.Order
+}
+
 // DisplayName は選択肢に表示する名前です。
 //
 // front matter が無いプロンプトを置いてもキーで表示され、**選択肢自体は消えません。**
@@ -137,10 +159,10 @@ func LoadPrompts() (map[string]string, error) {
 	return maps.Clone(set.bodies), nil
 }
 
-// LoadModes は、各プロンプトの front matter を読み、キー順に並べて返します。
+// LoadModes は、各プロンプトの front matter を読み、order 順に並べて返します。
 //
 // 並びを固定するのは、map の走査順がそのまま選択肢の順になると、
-// 描画のたびに並びが変わるためです。
+// 描画のたびに並びが変わるためです。order が同じものはキー順にします。
 func LoadModes() ([]Mode, error) {
 	set, err := loadPromptSet()
 	if err != nil {
@@ -164,6 +186,13 @@ func LoadModes() ([]Mode, error) {
 		modes = append(modes, Mode{Key: key, ModeMetadata: meta})
 	}
 
-	sort.Slice(modes, func(i, j int) bool { return modes[i].Key < modes[j].Key })
+	sort.Slice(modes, func(i, j int) bool {
+		if oi, oj := modes[i].sortOrder(), modes[j].sortOrder(); oi != oj {
+			return oi < oj
+		}
+		// order が並びを決めきれないときの最後の拠り所です。ここを外すと、
+		// order を書き忘れたモード同士の順が描画のたびに入れ替わります。
+		return modes[i].Key < modes[j].Key
+	})
 	return modes, nil
 }

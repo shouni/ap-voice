@@ -48,6 +48,7 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstat
 			Command: string(req.Command),
 			State:   state,
 		},
+		Mode: req.Mode,
 	}, apply...)
 }
 
@@ -117,7 +118,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 				next.Error = err.Error()
 				// **前回までの成果物は残ります。** 合成に失敗しても台本は既に
 				// 保存されているので、在り処を消すと詳細画面からやり直せません。
-				carryArtifacts(next, prev)
+				next.CarryFrom(prev)
 			})
 			p.notifyFailure(notifyCtx, req, err)
 		}
@@ -126,7 +127,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	// 試行回数を進めます。2 以上なら再配信されたということです。
 	p.record(ctx, req, jobstatus.StateRunning, func(next, prev *domain.JobStatus) {
 		next.Attempts++
-		carryArtifacts(next, prev)
+		next.CarryFrom(prev)
 	})
 
 	if err = req.Validate(); err != nil {
@@ -148,7 +149,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 
 	p.record(notifyCtx, req, jobstatus.StateSucceeded, func(next, prev *domain.JobStatus) {
 		next.Title = script.Title
-		carryArtifacts(next, prev)
+		next.CarryFrom(prev)
 
 		// **成果物の在り処を状態に載せます。** 「できた」だけでは、投入した側が
 		// 音声へ辿り着けません。台本はどの経路でも保存され、音声は publish が
@@ -162,22 +163,6 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	p.notifySuccess(notifyCtx, req, publicURL)
 
 	return nil
-}
-
-// carryArtifacts は、前回の記録から成果物の在り処を引き継ぎます。
-//
-// ワーカーは毎回タスクから状態を組み立て直すため、これが無いと running を
-// 書いた時点で前回の音声の在り処が消えます。
-func carryArtifacts(next, prev *domain.JobStatus) {
-	if prev == nil {
-		return
-	}
-	if next.AudioURI == "" {
-		next.AudioURI = prev.AudioURI
-	}
-	if next.ScriptURI == "" {
-		next.ScriptURI = prev.ScriptURI
-	}
 }
 
 // publish は、Command に応じて保存する成果物を切り替えます。

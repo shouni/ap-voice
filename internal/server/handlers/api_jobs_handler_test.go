@@ -188,14 +188,19 @@ func TestAPIUpdateScriptRejectsBadJobID(t *testing.T) {
 // recordingStore は、保存の順序を記録する jobstatus.StatusStore です。
 type recordingStore struct {
 	order *[]string
+	// saved は最後に書かれた状態です。中身まで見たいテストだけが渡します。
+	saved *domain.JobStatus
 }
 
 func (s recordingStore) Get(context.Context, string) (domain.JobStatus, error) {
 	return domain.JobStatus{}, errors.New("記録がありません")
 }
 
-func (s recordingStore) Save(context.Context, string, domain.JobStatus) error {
+func (s recordingStore) Save(_ context.Context, _ string, status domain.JobStatus) error {
 	*s.order = append(*s.order, "status")
+	if s.saved != nil {
+		*s.saved = status
+	}
 	return nil
 }
 
@@ -219,8 +224,9 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	t.Parallel()
 
 	var order []string
+	var saved domain.JobStatus
 	h := apiHandler(t, &savingRepo{})
-	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order, saved: &saved})
 	h.queue = recordingQueue{order: &order}
 
 	req := httptest.NewRequest("POST", "/api/jobs",
@@ -245,6 +251,11 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	}
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
+	}
+	// **モードは投入の時点でしか分かりません。** ここで載せ損なうと、
+	// 出来上がった台本から話者の組み合わせを推し量るしかなくなります。
+	if saved.Mode != "tech_solo" {
+		t.Errorf("Mode = %q, want tech_solo", saved.Mode)
 	}
 }
 

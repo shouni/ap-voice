@@ -744,3 +744,82 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 		t.Errorf("判断を保留しただけで失敗通知を出している: %d 回", notifiedFailure)
 	}
 }
+
+// TestPipelineKeepsModeOnSynthesize は、二段で進めたジョブがモードを失わないことを
+// 検証します。
+//
+// **synthesize はモードを持ちません。** 台本がすでにある前提のコマンドだからです。
+// 画面から作ると必ず generate → synthesize と分かれるため、引き継ぎが無いと
+// 「画面から作ったジョブだけモードが空」という、記録として一番使えない形になります。
+func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
+	t.Parallel()
+
+	// generate が書き、投入時に queued へ戻された状態を再現します。
+	store := &memoryStatusStore{
+		found: true,
+		saved: domain.JobStatus{
+			Status:    jobstatus.Status{JobID: "job-1", State: jobstatus.StateQueued},
+			Mode:      "tech_duet",
+			ScriptURI: "gs://bucket/voice/job-1/audio.json",
+		},
+	}
+
+	p := NewPipeline(
+		&MockScriptStep{},
+		&MockPublishStep{},
+		&MockNotifier{},
+		&MockScriptStore{
+			LoadFunc: func(context.Context, string) (domain.Script, error) {
+				return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Text: "本文"}}}, nil
+			},
+		},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	// 合成のリクエストにモードは載りません。
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandSynthesize, JobID: "job-1",
+		OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if store.saved.State != jobstatus.StateSucceeded {
+		t.Fatalf("State = %q, want succeeded", store.saved.State)
+	}
+	if store.saved.Mode != "tech_duet" {
+		t.Errorf("Mode = %q, want tech_duet（合成で失われています）", store.saved.Mode)
+	}
+}
+
+// TestPipelineRecordsMode は、生成のときにモードが状態へ載ることを検証します。
+func TestPipelineRecordsMode(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStatusStore{}
+	p := NewPipeline(
+		&MockScriptStep{
+			RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
+				return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Text: "本文"}}}, nil
+			},
+		},
+		&MockPublishStep{},
+		&MockNotifier{},
+		&MockScriptStore{},
+		jobstatus.NewRecorder[domain.JobStatus](store),
+		0,
+	)
+
+	err := p.Execute(context.Background(), domain.Request{
+		Command: domain.CommandGenerate, JobID: "job-1", Mode: "tech_dialogue",
+		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if store.saved.Mode != "tech_dialogue" {
+		t.Errorf("Mode = %q, want tech_dialogue", store.saved.Mode)
+	}
+}
