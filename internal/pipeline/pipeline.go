@@ -43,26 +43,37 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstat
 	if p.status == nil || req.JobID == "" {
 		return
 	}
-	p.status.Record(ctx, req.JobID, domain.JobStatus{
+	p.status.Record(ctx, req.JobID, p.newStatus(req, state), apply...)
+}
+
+// newStatus は今回の記録ぶんの状態を組み立てます。
+func (p *Pipeline) newStatus(req domain.Request, state jobstatus.State) domain.JobStatus {
+	return domain.JobStatus{
 		JobID:   req.JobID,
 		Command: string(req.Command),
 		State:   state,
 		Mode:    req.Mode,
-	}, apply...)
+	}
 }
 
-// alreadySucceeded は、そのジョブが既に完了しているかを返します。
+// begin は、そのジョブが既に完了していれば true を返し、未完了なら処理開始を記録して
+// false を返します。判定と記録を前回の記録の 1 回の読みで行うので、間に別の配信が
+// 割り込む隙がありません。試行回数はここで 1 つ進みます（2 以上なら再配信されたということです）。
 //
-// 状態を読めなかった場合はエラーを返します。「未完了」に倒すと完了済みのジョブを
-// 作り直してこのガードが防ぐはずの時間を自分で使い、「完了済み」に倒すと未完了の
+// 状態を読めなかった場合はエラーを返し、記録もしません。「未完了」に倒すと完了済みの
+// ジョブを作り直してこのガードが防ぐはずの時間を自分で使い、「完了済み」に倒すと未完了の
 // ジョブがタスクごと ACK されて二度と実行されません。どちらへも倒さず、判断を
 // 呼び出し側へ返します。
-func (p *Pipeline) alreadySucceeded(ctx context.Context, req domain.Request) (bool, error) {
+func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) {
 	if p.status == nil || req.JobID == "" {
 		return false, nil
 	}
 
-	done, err := p.status.AlreadySucceeded(ctx, req.JobID)
+	done, err := p.status.Begin(ctx, req.JobID, p.newStatus(req, jobstatus.StateRunning),
+		func(next, prev *domain.JobStatus) {
+			next.Attempts++
+			next.CarryFrom(prev)
+		})
 	if err != nil {
 		return false, fmt.Errorf("ジョブ状態を読めないため実行を見送ります (%s): %w", req.JobID, err)
 	}
@@ -91,7 +102,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	// ときの return が failed の記録を呼び、succeeded だったかもしれない記録を
 	// 上書きします。次の配信でこのガードが効かなくなり、防ぐはずの再実行を
 	// ガード自身が招きます。
-	done, guardErr := p.alreadySucceeded(ctx, req)
+	done, guardErr := p.begin(ctx, req)
 	if guardErr != nil {
 		return guardErr
 	}
@@ -129,12 +140,6 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 			p.notifyFailure(notifyCtx, req, err)
 		}
 	}()
-
-	// 試行回数を進めます。2 以上なら再配信されたということです。
-	p.record(ctx, req, jobstatus.StateRunning, func(next, prev *domain.JobStatus) {
-		next.Attempts++
-		next.CarryFrom(prev)
-	})
 
 	if err = req.Validate(); err != nil {
 		return err
