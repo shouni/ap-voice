@@ -397,3 +397,7 @@ Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config stru
 
 When touching adapter code the actual behavior often lives in these modules rather than in this
 repo — check `go.mod` for pinned versions before assuming a signature.
+
+## Conventions
+
+- **Error text**: sentinel errors are English with a package prefix (`review: diff is empty`) so a deeply wrapped error still names its origin; the context added by `fmt.Errorf` wrapping is Japanese. Existing English wrap text is not being retrofitted — apply the rule to code you touch.
