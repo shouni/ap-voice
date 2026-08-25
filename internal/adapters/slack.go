@@ -162,8 +162,8 @@ func (s *SlackAdapter) metadata(req domain.Request, publicURL string) *notify.Bo
 // outputPrefix は出力先のジョブ単位のプレフィックスを返します。
 // 成果物はここにまとまるため、どの段階でも案内として正しくなります。
 func outputPrefix(outputURI string) string {
-	if idx := strings.LastIndex(outputURI, "/"); idx >= 0 {
-		return outputURI[:idx+1]
+	if before, _, ok := strings.CutLast(outputURI, "/"); ok {
+		return before + "/"
 	}
 	return outputURI
 }
