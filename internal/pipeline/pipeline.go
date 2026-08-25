@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/pprof"
 	"time"
 
 	"github.com/shouni/go-job-kit/jobstatus"
@@ -70,6 +71,13 @@ func (p *Pipeline) alreadySucceeded(ctx context.Context, req domain.Request) (bo
 
 // Execute は、すべての依存関係を構築し実行します。
 func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) {
+	// pprof のゴルーチンラベルにジョブを載せます。Go 1.27 以降、ラベルは
+	// **パニックのトレースバックの見出し行にも出る**ため、落ちたときにどのジョブ
+	// だったかがスタックだけで分かります。ラベルは子ゴルーチン（セグメントの
+	// 並列合成）へも継承されます。
+	ctx = pprof.WithLabels(ctx, pprof.Labels("job_id", req.JobID, "command", string(req.Command)))
+	pprof.SetGoroutineLabels(ctx)
+
 	// **完了済みのジョブをもう一度受け取ったら、ここで打ち切ります。**
 	// Cloud Tasks は at-least-once 配信なので、同じタスクが再び届くことがあります。
 	// 素通りさせると、数分かかる合成で同じ音声を作り直すことになります。
