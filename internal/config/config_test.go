@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -47,12 +48,8 @@ func webEnv(overrides map[string]string) map[string]string {
 		"SESSION_ENCRYPT_KEY":               "0123456789abcdef",
 		"ALLOWED_EMAILS":                    "someone@example.com",
 	}
-	for k, v := range essentialEnv {
-		envs[k] = v
-	}
-	for k, v := range overrides {
-		envs[k] = v
-	}
+	maps.Copy(envs, essentialEnv)
+	maps.Copy(envs, overrides)
 	return envs
 }
 
@@ -215,9 +212,7 @@ func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 
 	t.Run("worker は許可リストが要る", func(t *testing.T) {
 		envs := map[string]string{"SERVER_ROLE": "worker"}
-		for k, v := range base {
-			envs[k] = v
-		}
+		maps.Copy(envs, base)
 		cfg := loadFor(t, envs)
 
 		err := cfg.ValidateEssentialConfig()
@@ -243,9 +238,7 @@ func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
 			"ALLOWED_TASK_SERVICE_ACCOUNTS": "web-runner@example.iam.gserviceaccount.com",
 		}
-		for k, v := range base {
-			envs[k] = v
-		}
+		maps.Copy(envs, base)
 		cfg := loadFor(t, envs)
 
 		if err := cfg.ValidateEssentialConfig(); err != nil {
@@ -321,9 +314,7 @@ func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
 			"ALLOWED_TASK_SERVICE_ACCOUNTS": "web-runner@example.iam.gserviceaccount.com",
 		}
-		for k, v := range essentialEnv {
-			envs[k] = v
-		}
+		maps.Copy(envs, essentialEnv)
 		cfg := loadFor(t, envs)
 
 		if err := cfg.ValidateEssentialConfig(); err != nil {

@@ -46,10 +46,9 @@ func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 
 	renderer := &stubRenderer{}
 	h := testModesHandler(t, renderer,
-		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{Label: "技術解説・ひとり語り"}},
-		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
-			Label: "楽曲紹介", Input: assets.InputRecipe,
-		}},
+		assets.Mode{Key: "tech_solo", Label: "技術解説・ひとり語り"},
+		assets.Mode{Key: "music_promo",
+			Label: "楽曲紹介", Input: assets.InputRecipe},
 	)
 
 	body := render(t, h.Modes, "/modes")
@@ -76,9 +75,8 @@ func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
 
 	renderer := &stubRenderer{recipeOnly: "music_promo"}
 	h := testModesHandler(t, renderer,
-		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
-			Label: "楽曲紹介", Input: assets.InputRecipe,
-		}},
+		assets.Mode{Key: "music_promo",
+			Label: "楽曲紹介", Input: assets.InputRecipe},
 	)
 
 	body := renderDetailFor(t, h, "music_promo")
@@ -104,10 +102,9 @@ func TestModeDetailShowsTheInputKind(t *testing.T) {
 
 	renderer := &stubRenderer{recipeOnly: "music_promo"}
 	h := testModesHandler(t, renderer,
-		assets.Mode{Key: "music_promo", ModeMetadata: assets.ModeMetadata{
-			Label: "楽曲紹介", Input: assets.InputRecipe,
-		}},
-		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{Label: "ひとり語り"}},
+		assets.Mode{Key: "music_promo",
+			Label: "楽曲紹介", Input: assets.InputRecipe},
+		assets.Mode{Key: "tech_solo", Label: "ひとり語り"},
 	)
 
 	recipe := renderDetailFor(t, h, "music_promo")
@@ -130,9 +127,8 @@ func TestModeDetailShowsFailureWithoutBreakingThePage(t *testing.T) {
 	t.Parallel()
 
 	h := testModesHandler(t, &brokenRenderer{},
-		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{
-			Label: "技術解説・ひとり語り", Direction: "ずんだもんが 1 人で語ります",
-		}},
+		assets.Mode{Key: "tech_solo",
+			Label: "技術解説・ひとり語り", Direction: "ずんだもんが 1 人で語ります"},
 	)
 
 	body := renderDetailFor(t, h, "tech_solo")
@@ -150,7 +146,7 @@ func TestModeDetailRejectsUnknownKey(t *testing.T) {
 	t.Parallel()
 
 	h := testModesHandler(t, &stubRenderer{},
-		assets.Mode{Key: "tech_solo", ModeMetadata: assets.ModeMetadata{Label: "技術解説"}},
+		assets.Mode{Key: "tech_solo", Label: "技術解説"},
 	)
 
 	rec := httptest.NewRecorder()

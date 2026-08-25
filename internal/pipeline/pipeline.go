@@ -43,12 +43,10 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstat
 		return
 	}
 	p.status.Record(ctx, req.JobID, domain.JobStatus{
-		Status: jobstatus.Status{
-			JobID:   req.JobID,
-			Command: string(req.Command),
-			State:   state,
-		},
-		Mode: req.Mode,
+		JobID:   req.JobID,
+		Command: string(req.Command),
+		State:   state,
+		Mode:    req.Mode,
 	}, apply...)
 }
 
