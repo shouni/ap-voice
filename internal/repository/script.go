@@ -195,8 +195,7 @@ func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, paging
 
 	// **ジョブ ID を辞書順に並べません。** 接頭辞付きの形式で、接頭辞の違いが
 	// 時刻より先に効いてしまうためです（jobid.SortKey がそこを吸収します）。
-	return paging.LoadPage(ctx, jobIDs, page, perPage, load,
-		paging.WithSortKey(jobid.SortKey),
+	return paging.LoadPage(ctx, jobIDs, page, perPage, jobid.SortKey, load,
 		paging.WithConcurrency(titleFetchParallelism))
 }
 
