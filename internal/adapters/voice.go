@@ -43,6 +43,11 @@ func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg conf
 		voicevox.WithMaxParallelSegments(cfg.MaxParallelSegments),
 		voicevox.WithSegmentRateLimit(cfg.SegmentRateLimit),
 		voicevox.WithSegmentTimeout(cfg.SegmentTimeout),
+		// 既定だと算用数字がそのまま残り、VOICEVOX が字面どおりに読みます
+		// （8日→ハチニチ、1人→イチニン、20歳→ニジュッサイ）。台本には日付も人数も
+		// 出るので、規則で読ませます。**読みプレビュー（ReadingAdapter）にも同じ設定が
+		// 要ります** — 片方だけだと「合成直前と同じ変換」という前提が崩れます。
+		voicevox.WithNumberReading(),
 	)
 
 	if err != nil {

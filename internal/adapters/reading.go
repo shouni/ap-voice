@@ -34,10 +34,21 @@ func NewReadingAdapter() *ReadingAdapter {
 // 通常は同じ結果になり、超える行では分割の境目だけ差が出ることがあります。
 func (a *ReadingAdapter) ConvertToReading(text string) (string, error) {
 	a.once.Do(func() {
-		a.converter, a.err = phonetic.NewConverter()
+		// **合成側（voicevox.New）と同じ設定にします。** ここが食い違うと、
+		// 確認した読みと実際に合成される読みが別物になり、確認の意味が無くなります。
+		a.converter, a.err = phonetic.NewConverter(readingOptions()...)
 	})
 	if a.err != nil {
 		return "", fmt.Errorf("読み変換の初期化に失敗しました: %w", a.err)
 	}
 	return a.converter.ConvertToReading(text), nil
+}
+
+// readingOptions は、読み変換器に与える設定です。
+//
+// **合成側と共有するための 1 か所です。** go-voicevox には voicevox.Option として
+// 渡し（NewVoiceAdapter）、読みプレビューには phonetic.Option として渡します。
+// 口が違うだけで中身は同じでなければならないので、対応をここに集めます。
+func readingOptions() []phonetic.Option {
+	return []phonetic.Option{phonetic.WithNumberReading()}
 }
