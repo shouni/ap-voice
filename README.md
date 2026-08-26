@@ -281,4 +281,4 @@ ap-voice/
 * 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん、VOICEVOX:春日部つむぎ ほか
   （**使える話者は `assets/speakers.json`** = エンジンの `/speakers` 応答が決めます。
   ライブラリ側は一覧を持ちません）
-* このリポジトリは非公開です。コードは [MIT License](https://opensource.org/licenses/MIT) の条件で提供されます。
+* このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
