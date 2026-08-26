@@ -34,7 +34,7 @@ const (
 )
 
 // ErrUnknownCommand は、未知の Command が指定されたことを表します。
-var ErrUnknownCommand = errors.New("未知の command です")
+var ErrUnknownCommand = errors.New("domain: unknown command")
 
 // Request はパイプライン実行に必要な入力パラメータを保持するモデルです。
 // Cloud Tasks のペイロード（JSON）としてそのまま流れるため、タグが投入側との契約になります。

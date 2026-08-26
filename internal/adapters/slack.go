@@ -62,17 +62,14 @@ func NewSlackAdapter(httpClient httpkit.Requester, webhookURL, serviceURL string
 
 	return &SlackAdapter{
 		pipeline:   notify.NewPipeline(notifier, slackTitles),
-		serviceURL: strings.TrimSuffix(serviceURL, "/"),
+		serviceURL: serviceURL,
 	}, nil
 }
 
 // detailURL は、ジョブの詳細画面の URL を返します。
 // ジョブ ID が無い場合は空を返し、通知側が行ごと省きます。
 func (s *SlackAdapter) detailURL(jobID string) string {
-	if s.serviceURL == "" || jobID == "" {
-		return ""
-	}
-	return s.serviceURL + "/history/" + jobID
+	return notify.JoinURL(s.serviceURL, "/history", jobID)
 }
 
 // Notify は Slack への完了通知を実行します。
@@ -162,8 +159,8 @@ func (s *SlackAdapter) metadata(req domain.Request, publicURL string) *notify.Bo
 // outputPrefix は出力先のジョブ単位のプレフィックスを返します。
 // 成果物はここにまとまるため、どの段階でも案内として正しくなります。
 func outputPrefix(outputURI string) string {
-	if idx := strings.LastIndex(outputURI, "/"); idx >= 0 {
-		return outputURI[:idx+1]
+	if before, _, ok := strings.CutLast(outputURI, "/"); ok {
+		return before + "/"
 	}
 	return outputURI
 }

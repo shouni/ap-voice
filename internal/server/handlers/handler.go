@@ -185,12 +185,10 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 		return
 	}
 	h.status.Record(ctx, req.JobID, domain.JobStatus{
-		Status: jobstatus.Status{
-			JobID:   req.JobID,
-			Command: string(req.Command),
-			State:   jobstatus.StateQueued,
-		},
-		Mode: req.Mode,
+		JobID:   req.JobID,
+		Command: string(req.Command),
+		State:   jobstatus.StateQueued,
+		Mode:    req.Mode,
 	}, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、前回の成果物の在り処とモードを残します。
 		next.CarryFrom(prev)

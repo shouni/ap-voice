@@ -1,23 +1,23 @@
 module github.com/shouni/ap-voice
 
-go 1.26.6
+go 1.27
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/go-cmp v0.7.0
-	github.com/shouni/audio v1.2.3
-	github.com/shouni/gcp-kit v1.10.3
-	github.com/shouni/go-gemini-client v1.18.1
-	github.com/shouni/go-http-kit v1.8.4
-	github.com/shouni/go-job-kit v1.1.1
-	github.com/shouni/go-notify v1.2.5
-	github.com/shouni/go-prompt-kit v1.5.2
-	github.com/shouni/go-remote-io v1.9.0
-	github.com/shouni/go-utils v1.6.0
-	github.com/shouni/go-voicevox v1.9.1
-	github.com/shouni/go-web-reader v1.3.2
-	github.com/shouni/netarmor v1.2.4
+	github.com/shouni/audio v1.3.0
+	github.com/shouni/gcp-kit v1.11.0
+	github.com/shouni/go-gemini-client v1.20.0
+	github.com/shouni/go-http-kit v1.9.0
+	github.com/shouni/go-job-kit v1.2.0
+	github.com/shouni/go-notify v1.3.0
+	github.com/shouni/go-prompt-kit v1.7.0
+	github.com/shouni/go-remote-io v1.10.1
+	github.com/shouni/go-utils v1.7.0
+	github.com/shouni/go-voicevox v1.10.0
+	github.com/shouni/go-web-reader v1.4.1
+	github.com/shouni/netarmor v1.3.0
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -53,8 +53,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.7 // indirect
-	github.com/aws/smithy-go v1.27.9 // indirect
-	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+	github.com/aws/smithy-go v1.27.10 // indirect
+	github.com/cenkalti/backoff/v7 v7.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0 // indirect

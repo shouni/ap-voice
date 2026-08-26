@@ -46,13 +46,12 @@ func testBaseView(path string) baseView {
 // 混ぜて、front matter が無いプロンプトでも選択肢が消えないことを見ます。
 func testModes() []assets.Mode {
 	return []assets.Mode{
-		{Key: "promo", ModeMetadata: assets.ModeMetadata{
+		{Key: "promo",
 			Label:     "楽曲紹介（春日部つむぎ × ずんだもん）",
 			Direction: "楽曲レシピから作る宣伝ナレーション",
 			UseWhen:   "recipe.json のとき",
 			// 入力の型がタブを決めます。promo だけがレシピ入力です。
-			Input: assets.InputRecipe,
-		}},
+			Input: assets.InputRecipe},
 		{Key: "solo"},
 	}
 }
