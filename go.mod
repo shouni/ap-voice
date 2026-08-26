@@ -6,7 +6,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/go-cmp v0.7.0
-	github.com/shouni/audio v1.3.0
+	github.com/shouni/audio v1.4.0
 	github.com/shouni/gcp-kit v1.11.0
 	github.com/shouni/go-gemini-client v1.20.0
 	github.com/shouni/go-http-kit v1.9.0
@@ -15,7 +15,7 @@ require (
 	github.com/shouni/go-prompt-kit v1.7.0
 	github.com/shouni/go-remote-io v1.10.1
 	github.com/shouni/go-utils v1.7.0
-	github.com/shouni/go-voicevox v1.10.0
+	github.com/shouni/go-voicevox v1.10.2
 	github.com/shouni/go-web-reader v1.4.1
 	github.com/shouni/netarmor v1.3.0
 	go.yaml.in/yaml/v3 v3.0.5
