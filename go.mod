@@ -8,7 +8,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.4.0
 	github.com/shouni/gcp-kit v1.11.0
-	github.com/shouni/go-gemini-client v1.20.0
+	github.com/shouni/go-gemini-client v1.21.0
 	github.com/shouni/go-http-kit v1.9.0
 	github.com/shouni/go-job-kit v1.2.0
 	github.com/shouni/go-notify v1.3.0
@@ -94,7 +94,7 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.293.0 // indirect
-	google.golang.org/genai v1.69.0 // indirect
+	google.golang.org/genai v1.70.0 // indirect
 	google.golang.org/genproto v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
