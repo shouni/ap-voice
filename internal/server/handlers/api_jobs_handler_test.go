@@ -333,12 +333,14 @@ func callAudio(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	req := httptest.NewRequest("GET", "/api/jobs/"+jobID+"/audio", nil)
+	// 統合後は Accept が表現を決めます。ap-mcp の baseClient は常に付けています。
+	req.Header.Set("Accept", "application/json")
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("jobID", jobID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 
 	rec := httptest.NewRecorder()
-	h.APIAudio(rec, req)
+	h.Audio(rec, req)
 	return rec
 }
 

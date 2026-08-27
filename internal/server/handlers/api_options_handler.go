@@ -24,15 +24,3 @@ type apiMode struct {
 	Direction string `json:"direction"`
 	UseWhen   string `json:"use_when"`
 }
-
-// APIModes は、選べるモードを返します。mode に何を書けるかの一覧です。
-func (h *Handler) APIModes(w http.ResponseWriter, _ *http.Request) {
-	modes := make([]apiMode, 0, len(h.modes))
-	for _, mode := range h.modes {
-		modes = append(modes, apiMode{
-			Key: mode.Key, Label: mode.DisplayName(),
-			Direction: mode.Direction, UseWhen: mode.UseWhen,
-		})
-	}
-	writeJSON(w, http.StatusOK, modes)
-}

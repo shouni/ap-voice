@@ -7,7 +7,8 @@ import (
 
 	"net/url"
 
-	"github.com/shouni/gcp-kit/auth"
+	"github.com/shouni/gcp-kit/auth/oidc"
+	"github.com/shouni/gcp-kit/auth/session"
 	"github.com/shouni/gcp-kit/worker"
 	"github.com/shouni/netarmor/securenet"
 
@@ -25,7 +26,7 @@ const defaultSessionName = "ap-voice-session"
 // server パッケージはこの構造体を受け取ってルーティングを行います。
 type AppHandlers struct {
 	// Auth は Google OAuth のログインとセッションを扱います。Web 面だけが持ちます。
-	Auth *auth.Handler
+	Auth *session.Handler
 	// Web は投入フォームと実行受付です。
 	Web *handlers.Handler
 	// Worker は Cloud Tasks から届いた domain.Request を実行します。
@@ -34,11 +35,11 @@ type AppHandlers struct {
 	Worker *worker.Handler[domain.Request]
 	// TaskAuth は Cloud Tasks からの OIDC を検証します。OAuth 設定を必要としないため、
 	// Web 面を持たない Worker プロセスでも構築できます。
-	TaskAuth *auth.TaskVerifier
+	TaskAuth *oidc.Verifier
 	// M2M は、ブラウザではなく機械（ap-mcp など）からの OIDC を検証します。
-	// **未設定でも nil にはしません。** 検証が常に失敗する verifier を渡しておくと、
-	// ProtectedMiddleware はセッション認証へ落として動き続けます。
-	M2M *auth.M2MVerifier
+	// 未設定でも nil にはしません。検証が常に失敗する verifier を渡しておくと、
+	// auth.Protected はセッション認証へ落として動き続けます。
+	M2M *oidc.Verifier
 }
 
 // Validate は、組み立て結果が役割として筋の通った形になっていることを確かめます。
@@ -74,7 +75,7 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 	if role.ServesWorker() {
 		// audience と許可する caller SA の両方が揃わないと検証は常に失敗する
 		// （fail-closed）ため、起動時に構成を確かめておきます。
-		taskAuth := auth.NewTaskVerifier(
+		taskAuth := oidc.New(
 			appCtx.Config.Tasks.TaskAudienceURL,
 			appCtx.Config.Tasks.AllowedServiceAccounts,
 		)
@@ -139,7 +140,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 
 	// audience は自分自身の公開 URL です。呼び出し側は「この URL 宛て」の
 	// トークンを取るため、ここがずれると全て 401 になります。
-	m2m := auth.NewM2MVerifier(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts)
+	m2m := oidc.New(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts)
 	if !m2m.Configured() {
 		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS が未設定のため、API は機械からの呼び出しを受け付けません。")
 	}
@@ -151,13 +152,13 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 }
 
 // createAuthHandler は、Google OAuth の認証ハンドラーを初期化します。
-func createAuthHandler(cfg *config.Config) (*auth.Handler, error) {
+func createAuthHandler(cfg *config.Config) (*session.Handler, error) {
 	redirectURL, err := url.JoinPath(cfg.Server.ServiceURL, "/auth/callback")
 	if err != nil {
 		return nil, fmt.Errorf("リダイレクトURLの構築に失敗しました: %w", err)
 	}
 
-	return auth.NewHandler(auth.Config{
+	return session.New(session.Config{
 		ClientID:          cfg.Auth.GoogleClientID,
 		ClientSecret:      cfg.Auth.GoogleClientSecret,
 		RedirectURL:       redirectURL,

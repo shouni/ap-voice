@@ -13,6 +13,7 @@ import (
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
+	"github.com/shouni/gcp-kit/auth"
 )
 
 // NewRouter は、ミドルウェアとルーティングを統合した http.Handler を構築します。
@@ -139,46 +140,48 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		if h.Web == nil {
 			return
 		}
-		// **ブラウザと機械の両方を通します。** ProtectedMiddleware は先に M2M の
-		// OIDC を試し、そうでなければ Middleware(CSRFContextMiddleware(next)) へ
-		// 落とします。CSRF の方を省くとトークンが生成されず、フォームの POST が
-		// 必ず弾かれるため、この 2 つは常に対です。
-		r.Use(h.Auth.ProtectedMiddleware(h.M2M))
+		// ブラウザと機械の両方を通します。先に M2M の OIDC を試し、Bearer が
+		// 無ければセッション認証へ落とします。人向けの方式を最後に置いているのは、
+		// どれも成立しなかったときにログイン画面へ送るためです（JSON を求めて
+		// いる相手には 401 が返ります）。
+		r.Use(auth.Protected(h.M2M, h.Auth))
 
 		r.Get("/", h.Web.Home)
 		r.Post("/", h.Web.Enqueue)
-		r.Route("/modes", func(r chi.Router) {
-			r.Get("/", h.Web.Modes)
-			r.Get("/{mode}", h.Web.ModeDetail)
-		})
-
-		// 機械（ap-mcp など）から使う口です。**画面と同じ認証の下にあります** —
-		// ProtectedMiddleware が OIDC の Bearer とセッションの両方を通すため、
-		// 別のミドルウェアを重ねる必要がありません。
-		r.Route("/api", func(r chi.Router) {
-			r.Get("/speakers", h.Web.APISpeakers)
-			r.Get("/modes", h.Web.APIModes)
-			r.Post("/preview-reading", h.Web.APIPreviewReading)
-			r.Route("/jobs", func(r chi.Router) {
-				r.Get("/", h.Web.APIJobs)
-				r.Post("/", h.Web.APIEnqueue)
-				r.Delete("/{jobID}", h.Web.APIDeleteJob)
-				r.Get("/{jobID}/status", h.Web.APIJobStatus)
-				r.Get("/{jobID}/audio", h.Web.APIAudio)
-				r.Get("/{jobID}/script", h.Web.APIScript)
-				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
-				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
-			})
-		})
+		r.Get("/modes", h.Web.Modes)
+		r.Get("/modes/{mode}", h.Web.ModeDetail)
 
 		// 台本ができたら履歴に並び、詳細から音声を作ります。
+		// ここは人と機械が同じものを見るので、ルートは 1 本です。表現は
+		// Accept で決まります（handlers/negotiated.go）。
 		r.Route("/history", func(r chi.Router) {
-			r.Get("/", h.Web.History)
+			r.Get("/", h.Web.Jobs)
 			r.Get("/{jobID}", h.Web.Detail)
 			r.Post("/{jobID}/script", h.Web.UpdateScript)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
 			r.Get("/{jobID}/script", h.Web.Script)
+		})
+
+		// 機械にしか無い操作です。画面には対応するページがありません。
+		r.Route("/api", func(r chi.Router) {
+			r.Get("/speakers", h.Web.APISpeakers)
+			r.Post("/preview-reading", h.Web.APIPreviewReading)
+			r.Route("/jobs", func(r chi.Router) {
+				r.Post("/", h.Web.APIEnqueue)
+				r.Get("/{jobID}/status", h.Web.APIJobStatus)
+				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
+				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
+
+				// 以下は /history へ統合済みです。ap-mcp が移るまでの別名で、
+				// 実装は同じものを指しています。移行後にこの 4 行を消します。
+				r.Get("/", h.Web.Jobs)
+				r.Delete("/{jobID}", h.Web.Delete)
+				r.Get("/{jobID}/audio", h.Web.Audio)
+				r.Get("/{jobID}/script", h.Web.Script)
+			})
+			// 同上。
+			r.Get("/modes", h.Web.Modes)
 		})
 	})
 
@@ -192,8 +195,9 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 			return
 		}
 
-		// Cloud Tasks からの OIDC トークンを検証 (セッション不要)
-		r.Use(h.TaskAuth.Middleware)
+		// Cloud Tasks からの OIDC トークンを検証 (セッション不要)。
+		// 失敗はセッションへフォールバックせず、その場で止まります。
+		r.Use(auth.Require(h.TaskAuth))
 		r.Method(http.MethodPost, "/tasks/generate", h.Worker)
 	})
 }
