@@ -58,17 +58,6 @@ type detailView struct {
 // 際限なく合成を積めます。プロンプトの目安（最大 80 発言）より広く取ります。
 const maxScriptLines = 200
 
-// History は、これまでのジョブを新しい順に並べます。
-func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
-	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), historyPerPage)
-	if err != nil {
-		http.Error(w, "履歴の取得に失敗しました", http.StatusBadGateway)
-		return
-	}
-
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs, Page: meta})
-}
-
 // Detail は、1 件のジョブの台本を表示します。ここから音声の確認と作成を行います。
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 	h.renderDetail(w, r, http.StatusOK, "", "")
@@ -135,70 +124,6 @@ func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 	}
 
 	return h.validateScript(domain.Script{Title: r.FormValue("title"), Lines: lines})
-}
-
-// Delete は、1 つのジョブの成果物をまとめて消します。
-//
-// 消す側が中身を知らずに済むよう、プレフィックス配下をまとめて対象にします。
-func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.repo.Delete(r.Context(), jobID); err != nil {
-		http.Error(w, "削除に失敗しました", http.StatusBadGateway)
-		return
-	}
-
-	// 消した先の詳細は開けないため、一覧へ戻します。
-	http.Redirect(w, r, "/history", http.StatusSeeOther)
-}
-
-// Audio は、音声の署名付き URL へ転送します。
-//
-// **バイト列はアプリが配信しません。** 音声は数十 MB になりうるため、
-// Cloud Run のインスタンスを転送で占有させる理由がありません。
-func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
-		return
-	}
-
-	url, err := h.signer.GenerateSignedURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
-	if err != nil {
-		http.Error(w, "音声のURL生成に失敗しました", http.StatusBadGateway)
-		return
-	}
-
-	http.Redirect(w, r, url, http.StatusFound)
-}
-
-// Script は、保存済みの台本を JSON ファイルとしてダウンロードさせます。
-//
-// **音声と違って署名付き URL へは飛ばしません。** 台本は repo が読み込み済みの
-// 小さな JSON なので、転送でインスタンスを占有する心配がありません。
-//
-// 返すのは保存済みの内容です。詳細画面の表は編集できますが、未保存の編集は
-// GCS にまだ無いため、ここには現れません。
-func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
-		return
-	}
-
-	script, err := h.repo.Load(r.Context(), jobID)
-	if err != nil {
-		http.Error(w, "台本の取得に失敗しました", http.StatusBadGateway)
-		return
-	}
-
-	// jobid.Validate を通った ID だけがここに来るため、ファイル名に使えます。
-	w.Header().Set("Content-Disposition", `attachment; filename="`+jobID+`.json"`)
-	writeJSON(w, http.StatusOK, script)
 }
 
 // renderDetail は詳細画面を描画します。台本は毎回読み直します。

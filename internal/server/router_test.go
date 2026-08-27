@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shouni/gcp-kit/auth"
+	"github.com/shouni/gcp-kit/auth/oidc"
 	"github.com/shouni/gcp-kit/worker"
 
 	"github.com/shouni/ap-voice/internal/builder"
@@ -74,7 +74,7 @@ func TestRouter_WebRouteAbsentWithoutWebHandler(t *testing.T) {
 func TestRouter_WorkerRouteGuardedByTaskAuth(t *testing.T) {
 	exec := &stubExecutor{}
 	r := NewRouter(&builder.AppHandlers{
-		TaskAuth: auth.NewTaskVerifier("https://worker.example.run.app",
+		TaskAuth: oidc.New("https://worker.example.run.app",
 			[]string{"caller@example.iam.gserviceaccount.com"}),
 		Worker: worker.NewHandler[domain.Request](exec),
 	}, "")

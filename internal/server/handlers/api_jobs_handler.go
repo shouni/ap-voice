@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -25,6 +24,9 @@ import (
 //
 // 台本の検証は画面と同じ scriptFromLines を通します。別に書くと、
 // どちらか一方だけが実在しない話者を受け付けるようになります。
+
+// apiTimeFormat は、一覧が返す時刻の書式です。
+const apiTimeFormat = "2006-01-02T15:04:05Z07:00"
 
 // apiJob は一覧の 1 件です。
 type apiJob struct {
@@ -73,30 +75,6 @@ type apiEnqueue struct {
 type apiJobPage struct {
 	Jobs []apiJob        `json:"jobs"`
 	Page paging.PageMeta `json:"page"`
-}
-
-// APIJobs は、ジョブを新しい順に返します。?page= と ?per_page= を受けます。
-func (h *Handler) APIJobs(w http.ResponseWriter, r *http.Request) {
-	perPage := historyPerPage
-	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
-		perPage = n
-	}
-
-	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)
-	if err != nil {
-		writeErrorJSON(w, http.StatusBadGateway, "履歴の取得に失敗しました")
-		return
-	}
-
-	out := make([]apiJob, 0, len(jobs))
-	for _, job := range jobs {
-		out = append(out, apiJob{
-			JobID: job.ID, Title: job.Title,
-			CreatedAt: job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			HasAudio:  job.HasAudio,
-		})
-	}
-	writeJSON(w, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 }
 
 // APIEnqueue は、入力ソースから新しいジョブを投入します。
@@ -173,21 +151,6 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(command)})
-}
-
-// APIScript は、保存済みの台本を返します。
-func (h *Handler) APIScript(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.apiJobID(w, r)
-	if !ok {
-		return
-	}
-
-	script, err := h.repo.Load(r.Context(), jobID)
-	if err != nil {
-		writeErrorJSON(w, http.StatusNotFound, "台本が見つかりません")
-		return
-	}
-	writeJSON(w, http.StatusOK, script)
 }
 
 // APIUpdateScript は、台本を差し替えます。**合成はしません。**
@@ -344,59 +307,6 @@ type apiAudio struct {
 	SignedURL string `json:"signed_url"`
 	// ExpiresInSeconds は SignedURL の有効期間です。
 	ExpiresInSeconds int `json:"expires_in_seconds"`
-}
-
-// APIAudio は、音声を取得できるリンクを発行します。
-//
-// **状態や一覧には署名付き URL を載せません。** 1 時間で切れるうえ発行に計算が要るため、
-// 30 秒ごとのポーリングで毎回作るのは無駄で、渡した頃には切れています。
-// 必要になった時点でこの口を叩く形にしています。
-//
-// 音声がまだ無いジョブは 404 です。署名は対象の存在を確かめないので、
-// 先に確かめないと「開くと 404 になるリンク」を配ることになります。
-func (h *Handler) APIAudio(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.apiJobID(w, r)
-	if !ok {
-		return
-	}
-
-	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
-	if err != nil {
-		writeErrorJSON(w, http.StatusBadGateway, "音声の有無を確認できませんでした")
-		return
-	}
-	if !hasAudio {
-		writeErrorJSON(w, http.StatusNotFound, "このジョブにはまだ音声がありません")
-		return
-	}
-
-	audioURI := h.layout.AudioURI(h.bucket, jobID)
-	signed, err := h.signer.GenerateSignedURL(r.Context(), audioURI, http.MethodGet, signedURLExpiry)
-	if err != nil {
-		writeErrorJSON(w, http.StatusBadGateway, "音声のURL生成に失敗しました")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, apiAudio{
-		JobID:            jobID,
-		AudioURI:         audioURI,
-		SignedURL:        signed,
-		ExpiresInSeconds: int(signedURLExpiry.Seconds()),
-	})
-}
-
-// APIDeleteJob は、1 つのジョブの成果物をまとめて消します。
-func (h *Handler) APIDeleteJob(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.apiJobID(w, r)
-	if !ok {
-		return
-	}
-
-	if err := h.repo.Delete(r.Context(), jobID); err != nil {
-		writeErrorJSON(w, http.StatusBadGateway, "削除に失敗しました")
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // apiJobID は、URL のジョブ ID を取り出して検証します。

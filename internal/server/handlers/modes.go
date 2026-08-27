@@ -39,15 +39,6 @@ type modeDetailView struct {
 	Error  string
 }
 
-// Modes は、選べるモードを一覧にします。
-//
-// **本文は組み立てません。** 一覧に要るのは front matter だけで、7 モード分の
-// プロンプトは合わせて 1 万字を超えます。読むかどうか分からないものを毎回
-// 組み立てるのは、ページを重くするだけです。本文は詳細が受け持ちます。
-func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
-	h.renderTemplate(w, http.StatusOK, "modes.html", modesView{baseView: h.base(r), Modes: h.modes})
-}
-
 // ModeDetail は、1 モードのプロンプト本文を見せます。
 //
 // **生成側と同じ組み立てを通します。** 共通部品も展開されるので、ここに見えている

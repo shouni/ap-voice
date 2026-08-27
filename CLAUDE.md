@@ -198,11 +198,15 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `Repository` satisfies `jobstatus.StatusStore`, which is why the bucket and prefix are assembled
   in one place. Listing uses `paging.LoadPage`, so page maths and `PageMeta`'s JSON match the
   siblings and a page costs only its own rows.
-- **`/api/*` is the same surface for machines**, under the same middleware: `ProtectedMiddleware`
-  tries an OIDC bearer first and falls back to session + CSRF, so one route serves a browser and
-  an agent — the arrangement ap-comp, ap-mv and ap-story already use. `ALLOWED_M2M_SERVICE_ACCOUNTS`
-  is optional; unset, verification always fails and everything falls through to the session, so
-  the failure mode of forgetting it is "the agent gets redirected to login".
+- **One resource, one route.** `auth.Protected(m2m, session)` tries an OIDC bearer first and falls
+  back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
+  Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
+  keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; `ap-mcp` calls the `/history/…` paths directly.
+- **`/api/*` still holds what only machines have**: enqueue by JSON body, `status`, `synthesize`,
+  `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
+  same line `gcp-kit/negotiate` draws. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
+  always fails and everything falls through to the session, so the failure mode of forgetting it is
+  "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).
   **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
   ずんだもん has eight, an impossible pair is rejected on save, and a client with no way to read
   the list can only guess. `PUT /api/jobs/{id}/script` saves without synthesizing, since an agent

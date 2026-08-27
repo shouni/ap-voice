@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/shouni/gcp-kit/auth"
+	"github.com/shouni/gcp-kit/auth/session"
 	"github.com/shouni/go-remote-io/remoteio"
 
 	"github.com/shouni/go-job-kit/jobstatus"
@@ -170,7 +170,7 @@ type baseView struct {
 // フォームはこれを hidden で送り返し、Middleware が検証します。
 func (h *Handler) base(r *http.Request) baseView {
 	return baseView{
-		CSRFToken:    auth.CSRFTokenFromContext(r.Context()),
+		CSRFToken:    session.CSRFTokenFromContext(r.Context()),
 		Path:         r.URL.Path,
 		DefaultModel: h.defaultModel(),
 	}
