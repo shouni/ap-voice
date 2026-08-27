@@ -201,9 +201,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **One resource, one route.** `auth.Protected(m2m, session)` tries an OIDC bearer first and falls
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
-  keeping two meant a fix landed on one side and the two answers drifted. `/api/jobs`, `/api/modes`
-  and the two `/api/jobs/{id}/…` reads are now **aliases registered onto the same handlers**, kept
-  only until `ap-mcp` moves to the `/history/…` paths. Delete those four lines in `router.go` then.
+  keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; `ap-mcp` calls the `/history/…` paths directly.
 - **`/api/*` still holds what only machines have**: enqueue by JSON body, `status`, `synthesize`,
   `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
   same line `gcp-kit/negotiate` draws. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification

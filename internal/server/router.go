@@ -173,15 +173,10 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
 				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
 
-				// 以下は /history へ統合済みです。ap-mcp が移るまでの別名で、
-				// 実装は同じものを指しています。移行後にこの 4 行を消します。
-				r.Get("/", h.Web.Jobs)
+				// 削除は機械にしかありません。画面のボタンは DELETE を出せないため
+				// POST /history/{jobID}/delete を叩きます（実装は同じ Delete です）。
 				r.Delete("/{jobID}", h.Web.Delete)
-				r.Get("/{jobID}/audio", h.Web.Audio)
-				r.Get("/{jobID}/script", h.Web.Script)
 			})
-			// 同上。
-			r.Get("/modes", h.Web.Modes)
 		})
 	})
 

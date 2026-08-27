@@ -97,22 +97,22 @@ go run .        # SERVER_ROLE が必須
 両方を通すため、同じ URL を人も機械も叩けます（御三家と同じ形）。
 
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を
-送れば JSON が、ブラウザの `Accept` なら画面が返ります。下表の `/api/...` のうち
-「`/history/...` と同じ」と書いたものは ap-mcp が移るまでの別名で、実装は同じです。
+送れば JSON が、ブラウザの `Accept` なら画面が返ります。下表に残る `/api/...` は、
+画面に対応物が無いもの（投入・状態・合成・読み確認・話者一覧・削除）だけです。
 
 | メソッド | パス | 用途 |
 | --- | --- | --- |
 | `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
-| `GET` | `/modes` | 選べるモード（キー・表示名・説明）。`/api/modes` は同じものの別名。 |
+| `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
 | `POST` | `/api/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
-| `GET` | `/history` | ジョブを新しい順に（`/api/jobs` は同じものの別名）。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。 |
+| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。 |
 | `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode`。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
-| `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（`/api/jobs/{jobID}/audio` は同じものの別名）（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
+| `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
 | `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
-| `GET` | `/history/{jobID}/script` | 台本を取得（`/api/jobs/{jobID}/script` は同じものの別名）。ブラウザから開くとファイルとして落ちます。 |
+| `GET` | `/history/{jobID}/script` | 台本を取得。ブラウザから開くとファイルとして落ちます。 |
 | `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
 | `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る。 |
-| `DELETE` | `/history/{jobID}`（`/api/jobs/{jobID}` は別名） | 成果物をまとめて削除。 |
+| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。 |
 
 台本の検証（話者・スタイルが実在するか、行数の上限）は**画面と同じ関数**を通ります。
 
