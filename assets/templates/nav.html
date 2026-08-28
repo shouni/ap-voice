@@ -28,12 +28,14 @@
       {{ with .DefaultModel }}
         <span class="navbar-text text-white-50 small text-truncate">{{ . }}</span>
       {{ end }}
-      {{/* ログアウトのリンクは置きません。/auth/logout はアプリのセッション Cookie を
-           消しますが、**Google 側のセッションは終わらせられません。** 直後に
-           /auth/login へ飛び、Google が何も尋ねずに承認して戻すため（コールバックに
-           prompt=none が付きます）、0.5 秒で入り直した状態になります。
-           押しても何も起きないように見えるボタンを置くくらいなら、無い方が正直です。
-           御三家（ap-comp / ap-mv / ap-story）にも同じ理由で置いていません。 */}}
+      {{/* ログアウトのリンクは、いまのところ置いていません。/auth/logout が消せるのは
+           アプリのセッション Cookie だけで、Google 側のセッションは残ります。
+           以前はそのせいで、直後に飛ぶ /auth/login で Google が何も尋ねずに承認を返し、
+           0.5 秒で入り直した状態になっていました（押しても何も起きないように見えます）。
+           いまは session.WithPrompt(PromptSelectAccount) を渡しているため、そこで
+           アカウント選択が必ず挟まります。**置いていないのは決めていないだけで、
+           動かないからではありません。** 御三家（ap-comp / ap-mv / ap-story）は
+           そもそも /auth/logout をマウントしていません。 */}}
     </div>
   </div>
 </nav>

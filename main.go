@@ -23,8 +23,7 @@ func main() {
 	// 出力フォーマットは cloudlog、context 属性の付与は slogctx が担い、
 	// 両者の組み立てだけをアプリ側で行う。
 	level := slogctx.ParseLevel(os.Getenv(logLevelEnvKey))
-	base := slog.NewJSONHandler(os.Stdout, cloudlog.HandlerOptions(level))
-	slog.SetDefault(slog.New(slogctx.NewHandler(base)))
+	slog.SetDefault(slog.New(cloudlog.NewHandler(os.Stdout, level)))
 
 	if err := run(); err != nil {
 		os.Exit(1)

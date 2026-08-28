@@ -22,19 +22,10 @@ import (
 func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := chi.URLParam(r, "jobID")
 	if err := jobid.Validate(id); err != nil {
-		h.fail(w, r, http.StatusBadRequest, "不正なジョブIDです")
+		negotiate.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}
 	return id, true
-}
-
-// fail は、要求された表現でエラーを返します。
-func (h *Handler) fail(w http.ResponseWriter, r *http.Request, status int, message string) {
-	if negotiate.WantsJSON(w, r) {
-		writeErrorJSON(w, status, message)
-		return
-	}
-	http.Error(w, message, status)
 }
 
 // Jobs は、ジョブを新しい順に返します。?page= と ?per_page= を受けます。
@@ -46,7 +37,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 
 	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)
 	if err != nil {
-		h.fail(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
+		negotiate.Error(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
 		return
 	}
 
@@ -59,7 +50,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 				HasAudio:  job.HasAudio,
 			})
 		}
-		writeJSON(w, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
+		negotiate.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 		return
 	}
 	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs, Page: meta})
@@ -75,7 +66,7 @@ func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
 				Direction: mode.Direction, UseWhen: mode.UseWhen,
 			})
 		}
-		writeJSON(w, http.StatusOK, modes)
+		negotiate.JSON(w, r, http.StatusOK, modes)
 		return
 	}
 	h.renderTemplate(w, http.StatusOK, "modes.html", modesView{baseView: h.base(r), Modes: h.modes})
@@ -97,23 +88,23 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 		// 無い場合に署名付き URL を返すと、開いた先で 404 に当たります。
 		hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 		if err != nil {
-			writeErrorJSON(w, http.StatusBadGateway, "音声の有無を確認できませんでした")
+			negotiate.Error(w, r, http.StatusBadGateway, "音声の有無を確認できませんでした")
 			return
 		}
 		if !hasAudio {
-			writeErrorJSON(w, http.StatusNotFound, "このジョブにはまだ音声がありません")
+			negotiate.Error(w, r, http.StatusNotFound, "このジョブにはまだ音声がありません")
 			return
 		}
 	}
 
 	url, err := h.signer.GenerateSignedURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
 	if err != nil {
-		h.fail(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
+		negotiate.Error(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
 		return
 	}
 
 	if wantsJSON {
-		writeJSON(w, http.StatusOK, apiAudio{
+		negotiate.JSON(w, r, http.StatusOK, apiAudio{
 			JobID:            jobID,
 			AudioURI:         h.layout.AudioURI(h.bucket, jobID),
 			SignedURL:        url,
@@ -137,7 +128,7 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	if err != nil {
-		h.fail(w, r, http.StatusNotFound, "台本が見つかりません")
+		negotiate.Error(w, r, http.StatusNotFound, "台本が見つかりません")
 		return
 	}
 
@@ -145,7 +136,7 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 		// jobid.Validate を通った ID だけがここに来るため、ファイル名に使えます。
 		w.Header().Set("Content-Disposition", `attachment; filename="`+jobID+`.json"`)
 	}
-	writeJSON(w, http.StatusOK, script)
+	negotiate.JSON(w, r, http.StatusOK, script)
 }
 
 // Delete は、ジョブと成果物をまとめて消します。
@@ -159,7 +150,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), jobID); err != nil {
-		h.fail(w, r, http.StatusBadGateway, "削除に失敗しました")
+		negotiate.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
 		return
 	}
 
