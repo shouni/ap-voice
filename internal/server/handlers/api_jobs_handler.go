@@ -83,7 +83,7 @@ type apiJobPage struct {
 func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	var body apiEnqueue
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	switch command {
 	case domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize:
 	default:
-		negotiate.Error(w, r, http.StatusBadRequest, fmt.Sprintf("command は %q / %q / %q です",
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, fmt.Sprintf("command は %q / %q / %q です",
 			domain.CommandGenerate, domain.CommandGenerateAndSynthesize, domain.CommandSynthesize))
 		return
 	}
@@ -102,7 +102,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	if body.MusicJobID != "" {
 		resolved, rErr := h.recipeInputURI(body.MusicJobID)
 		if rErr != nil {
-			negotiate.Error(w, r, http.StatusBadRequest, rErr.Error())
+			negotiate.ErrorJSON(w, r, http.StatusBadRequest, rErr.Error())
 			return
 		}
 		inputURI = resolved
@@ -110,7 +110,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
-		negotiate.Error(w, r, http.StatusInternalServerError, "ジョブIDの発行に失敗しました")
+		negotiate.ErrorJSON(w, r, http.StatusInternalServerError, "ジョブIDの発行に失敗しました")
 		return
 	}
 
@@ -128,27 +128,27 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
 	if command == domain.CommandSynthesize {
 		if body.Script == nil {
-			negotiate.Error(w, r, http.StatusBadRequest, "synthesize には script が要ります")
+			negotiate.ErrorJSON(w, r, http.StatusBadRequest, "synthesize には script が要ります")
 			return
 		}
 		cleaned, vErr := h.validateScript(*body.Script)
 		if vErr != nil {
-			negotiate.Error(w, r, http.StatusBadRequest, vErr.Error())
+			negotiate.ErrorJSON(w, r, http.StatusBadRequest, vErr.Error())
 			return
 		}
 		if saveErr := h.repo.SaveScript(r.Context(), jobID, cleaned); saveErr != nil {
-			negotiate.Error(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
+			negotiate.ErrorJSON(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
 			return
 		}
 	}
 
 	if err := req.Validate(); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 
 	var script domain.Script
 	if err := json.NewDecoder(r.Body).Decode(&script); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
 		return
 	}
 
@@ -176,12 +176,12 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 	// 落ちて指示が消えるため、保存する前に弾きます。
 	cleaned, err := h.validateScript(script)
 	if err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := h.repo.SaveScript(r.Context(), jobID, cleaned); err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
+		negotiate.ErrorJSON(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
 		return
 	}
 	negotiate.JSON(w, r, http.StatusOK, cleaned)
@@ -200,12 +200,12 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
 	if err := req.Validate(); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	h.recordQueued(r.Context(), req)
 	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
 		return
 	}
 	negotiate.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
@@ -232,11 +232,11 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := h.repo.Get(r.Context(), jobID)
 	switch {
 	case errors.Is(err, jobstatus.ErrNotFound):
-		negotiate.Error(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
+		negotiate.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
 		return
 	case err != nil:
 		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
-		negotiate.Error(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
+		negotiate.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
 		return
 	}
 	negotiate.JSON(w, r, http.StatusOK, status)
@@ -273,15 +273,15 @@ type apiReadingResponse struct {
 func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
 	var body apiReadingRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
 		return
 	}
 	if len(body.Lines) == 0 {
-		negotiate.Error(w, r, http.StatusBadRequest, "lines が空です")
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, "lines が空です")
 		return
 	}
 	if len(body.Lines) > maxScriptLines {
-		negotiate.Error(w, r, http.StatusBadRequest,
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest,
 			fmt.Sprintf("行が多すぎます（%d 行、上限 %d 行）", len(body.Lines), maxScriptLines))
 		return
 	}
@@ -290,7 +290,7 @@ func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
 	for _, line := range body.Lines {
 		reading, err := h.reading.ConvertToReading(line.Text)
 		if err != nil {
-			negotiate.Error(w, r, http.StatusInternalServerError, err.Error())
+			negotiate.ErrorJSON(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 		out = append(out, apiReadingLine{
@@ -315,7 +315,7 @@ type apiAudio struct {
 func (h *Handler) apiJobID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	jobID := chi.URLParam(r, "jobID")
 	if err := jobid.Validate(jobID); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
+		negotiate.ErrorJSON(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}
 	return jobID, true
