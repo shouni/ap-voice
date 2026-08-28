@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shouni/go-remote-io/remoteio"
-
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
@@ -28,11 +26,11 @@ type mockURLSigner struct {
 	generateSignedURLFunc func(ctx context.Context, path string, method string, expires time.Duration) (string, error)
 }
 
-func (m *mockURLSigner) GenerateSignedURL(ctx context.Context, path string, method string, expires time.Duration) (string, error) {
+func (m *mockURLSigner) SignURL(ctx context.Context, path string, method string, expires time.Duration) (string, error) {
 	return m.generateSignedURLFunc(ctx, path, method, expires)
 }
 
-var _ remoteio.URLSigner = (*mockURLSigner)(nil)
+var _ Signer = (*mockURLSigner)(nil)
 
 func TestPublishStepRun(t *testing.T) {
 	t.Parallel()

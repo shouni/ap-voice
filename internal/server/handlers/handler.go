@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/shouni/gcp-kit/auth/session"
-	"github.com/shouni/go-remote-io/remoteio"
 
 	"github.com/shouni/go-job-kit/jobstatus"
 	"github.com/shouni/go-job-kit/paging"
@@ -24,6 +23,12 @@ import (
 
 // jobIDPrefix は発行するジョブ ID の接頭辞です（voice-{日付}-{時刻}-{hex12}）。
 const jobIDPrefix = "voice"
+
+// Signer は、ハンドラが必要とする署名機能だけを表します。
+// remoteio.Store がそのまま満たします。
+type Signer interface {
+	SignURL(ctx context.Context, name, method string, expires time.Duration) (string, error)
+}
 
 // Handler は Web 面のハンドラーです。
 type Handler struct {
@@ -44,7 +49,7 @@ type Handler struct {
 	// repo は履歴の一覧と台本の読み出しです。
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
-	signer remoteio.URLSigner
+	signer Signer
 	// status は投入時に queued を記録します。**投入より先に書きます** —
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
@@ -100,7 +105,7 @@ type HandlerOptions struct {
 	// （そのタブがジョブ ID を受け付けなくなるだけで、他のモードは動きます）。
 	MusicBucket string
 	Repo        ScriptRepository
-	Signer      remoteio.URLSigner
+	Signer      Signer
 	Speakers    *speaker.Registry
 	Renderer    PromptRenderer
 	Reading     ReadingConverter

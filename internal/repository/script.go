@@ -24,9 +24,9 @@ import (
 // 書き込みは PublishStep が担い、ここは読むだけです。**成果物がジョブ ID ごとの
 // プレフィックスにまとまっている**ため、一覧も削除も中身を知らずに行えます。
 type Repository struct {
-	reader remoteio.InputReader
-	writer remoteio.OutputWriter
-	bucket string
+	// store は gs://{bucket} にスコープ済みのストアです。以降のパスはすべて
+	// そこからの相対名なので、呼び出しごとにバケットを連れ回す必要がありません。
+	store  remoteio.Store
 	layout domain.StorageLayout
 	// status はジョブの進行状況です。**成果物と同じジョブディレクトリ**に置くので、
 	// 履歴の削除（プレフィックスの一括削除）で状態ファイルも一緒に片付きます。
@@ -51,22 +51,21 @@ func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobSt
 const titleFetchParallelism = 8
 
 // NewRepository は Repository を構築します。
-func NewRepository(reader remoteio.InputReader, writer remoteio.OutputWriter, bucket string) (*Repository, error) {
-	if reader == nil {
-		return nil, fmt.Errorf("読み出しクライアントが指定されていません")
-	}
-	if writer == nil {
-		return nil, fmt.Errorf("書き込みクライアントが指定されていません")
+func NewRepository(store remoteio.Store, bucket string) (*Repository, error) {
+	if store == nil {
+		return nil, fmt.Errorf("ストレージが指定されていません")
 	}
 	if bucket == "" {
 		return nil, fmt.Errorf("バケットが指定されていません")
 	}
 	layout := domain.NewStorageLayout()
+	scoped := store.Sub(remoteio.BuildURI(remoteio.SchemeGCS, bucket, ""))
 	return &Repository{
-		reader: reader, writer: writer, bucket: bucket, layout: layout,
-		// UnderJobDir は baseURI/{jobID}/status.json を指します。
-		status: jobstatus.NewStore[domain.JobStatus](reader, writer,
-			jobstatus.UnderJobDir(strings.TrimSuffix(fmt.Sprintf("gs://%s/%s", bucket, layout.VoicePrefix()), "/"))),
+		store: scoped, layout: layout,
+		// UnderJobDir は base/{jobID}/status.json を指します。base はスコープ内の
+		// 相対名なので、ここにバケットは現れません。
+		status: jobstatus.NewStore[domain.JobStatus](scoped,
+			jobstatus.UnderJobDir(strings.TrimSuffix(layout.VoicePrefix(), "/"))),
 	}, nil
 }
 
@@ -85,8 +84,8 @@ func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain
 		return fmt.Errorf("台本のJSONエンコードに失敗しました: %w", err)
 	}
 
-	uri := r.uri(r.layout.ScriptPath(jobID))
-	if err := r.writer.Write(ctx, uri, bytes.NewReader(body),
+	uri := r.layout.ScriptPath(jobID)
+	if err := r.store.Write(ctx, uri, bytes.NewReader(body),
 		remoteio.WithContentType("application/json; charset=utf-8")); err != nil {
 		return fmt.Errorf("台本の保存に失敗しました (%s): %w", uri, err)
 	}
@@ -101,7 +100,7 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 		return domain.Script{}, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
 
-	stream, err := r.reader.Open(ctx, r.uri(r.layout.ScriptPath(jobID)))
+	stream, err := r.store.Open(ctx, r.layout.ScriptPath(jobID))
 	if err != nil {
 		return domain.Script{}, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
 	}
@@ -133,7 +132,7 @@ func (r *Repository) HasAudio(ctx context.Context, jobID string) (bool, error) {
 	if err := jobid.Validate(jobID); err != nil {
 		return false, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
-	return r.reader.Exists(ctx, r.uri(r.layout.AudioPath(jobID)))
+	return r.store.Exists(ctx, r.layout.AudioPath(jobID))
 }
 
 // Job は履歴一覧の 1 件です。
@@ -156,14 +155,17 @@ type Job struct {
 // 並行に行い、失敗した ID はジョブ ID のまま一覧へ残します（台本が壊れていても
 // 音声は残っていることがあり、一覧から消えると消す手段まで失われます）。
 func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, paging.PageMeta, error) {
-	prefix := r.uri(r.layout.VoicePrefix())
-
 	hasAudio := make(map[string]bool)
 	var jobIDs []string
-	err := r.reader.List(ctx, prefix, func(path string) error {
-		jobID, object, ok := r.splitJobPath(path)
+	// Entry.Name は列挙したプレフィックスからの相対名なので、"{jobID}/{ファイル名}" が
+	// そのまま得られます。以前は完全な URI から接頭辞を削って同じものを復元していました。
+	for entry, err := range r.store.List(ctx, r.layout.VoicePrefix()) {
+		if err != nil {
+			return nil, paging.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
+		}
+		jobID, object, ok := splitJobPath(entry.Name)
 		if !ok {
-			return nil
+			continue
 		}
 		if _, seen := hasAudio[jobID]; !seen {
 			hasAudio[jobID] = false
@@ -172,10 +174,6 @@ func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, paging
 		if strings.HasSuffix(object, ".wav") {
 			hasAudio[jobID] = true
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, paging.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
 	}
 
 	load := func(ctx context.Context, jobID string) (Job, error) {
@@ -208,40 +206,34 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
 
-	var paths []string
-	prefix := r.uri(r.layout.VoiceJobPrefix(jobID))
-	if err := r.reader.List(ctx, prefix, func(path string) error {
-		paths = append(paths, path)
-		return nil
-	}); err != nil {
-		return fmt.Errorf("削除対象の一覧取得に失敗しました (%s): %w", jobID, err)
+	// ジョブ配下へさらにスコープを絞ると、一覧で得た名前をそのまま削除へ渡せます。
+	jobStore := r.store.Sub(r.layout.VoiceJobPrefix(jobID))
+
+	var entries []remoteio.Entry
+	for entry, err := range jobStore.List(ctx, "") {
+		if err != nil {
+			return fmt.Errorf("削除対象の一覧取得に失敗しました (%s): %w", jobID, err)
+		}
+		entries = append(entries, entry)
 	}
-	if len(paths) == 0 {
+	if len(entries) == 0 {
 		return fmt.Errorf("ジョブが見つかりません (%s)", jobID)
 	}
 
-	for _, path := range paths {
-		if err := r.writer.Delete(ctx, path); err != nil {
-			return fmt.Errorf("削除に失敗しました (%s): %w", path, err)
+	for _, entry := range entries {
+		if err := jobStore.Delete(ctx, entry.Name); err != nil {
+			return fmt.Errorf("削除に失敗しました (%s): %w", entry.URI, err)
 		}
 	}
-	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(paths))
+	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(entries))
 	return nil
 }
 
-// splitJobPath は、オブジェクトのパスからジョブ ID とファイル名を取り出します。
-func (r *Repository) splitJobPath(path string) (jobID, object string, ok bool) {
-	rest := strings.TrimPrefix(path, r.uri(r.layout.VoicePrefix()))
-	if rest == path {
-		return "", "", false
-	}
-	parts := strings.SplitN(rest, "/", 2)
+// splitJobPath は、プレフィックスからの相対名をジョブ ID とファイル名に分けます。
+func splitJobPath(name string) (jobID, object string, ok bool) {
+	parts := strings.SplitN(name, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
-}
-
-func (r *Repository) uri(path string) string {
-	return fmt.Sprintf("gs://%s/%s", r.bucket, path)
 }

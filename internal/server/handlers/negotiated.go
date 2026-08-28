@@ -97,7 +97,7 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	url, err := h.signer.GenerateSignedURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
+	url, err := h.signer.SignURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
 	if err != nil {
 		negotiate.Error(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
 		return
