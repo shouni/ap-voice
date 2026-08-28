@@ -6,15 +6,19 @@ package handlers
 // <select> を見て選べますが、JSON で叩く呼び出し側（ap-mcp 経由のエージェント）は
 // 一覧を取れないと当てずっぽうになり、実在しない値を送って 400 を繰り返します。
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/shouni/gcp-kit/negotiate"
+)
 
 // APISpeakers は、話者ごとに使えるスタイルを返します。
 //
 // **これが無いと、クライアントは当てずっぽうで台本を書くことになります。**
 // 話者ごとに持つスタイルは違い（春日部つむぎは 1 つ、ずんだもんは 8 つ）、
 // 実在しない組み合わせは保存時に弾かれます。組を選ぶ材料をここで渡します。
-func (h *Handler) APISpeakers(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, h.stylesBySpeaker())
+func (h *Handler) APISpeakers(w http.ResponseWriter, r *http.Request) {
+	negotiate.JSON(w, r, http.StatusOK, h.stylesBySpeaker())
 }
 
 // apiMode は、モード一覧の 1 件です。

@@ -173,12 +173,18 @@ func TestLoadConfig_Defaults(t *testing.T) {
 // 公開している Web 面に Worker のルートが復活します。
 func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		raw  string
-		ok   bool
+		name      string
+		raw       string
+		ok        bool
+		wantInErr string
 	}{
-		{name: "未設定は落ちる", raw: "", ok: false},
-		{name: "未知の値は落ちる", raw: "batch", ok: false},
+		// 値が無いとデコーダは UnmarshalText を呼ばないため、normalize が
+		// 環境変数名つきで返します。
+		{name: "未設定は落ちる", raw: "", ok: false, wantInErr: "SERVER_ROLE"},
+		// 未知の値は env のデコード時点で弾かれます（serverrole.Role が
+		// encoding.TextUnmarshaler を実装しているため）。env が包むので環境変数名では
+		// なくフィールド名が出ますが、何が不正で何なら通るかは残ります。
+		{name: "未知の値は落ちる", raw: "batch", ok: false, wantInErr: `"batch"`},
 		{name: "web", raw: "web", ok: true},
 		{name: "worker", raw: "worker", ok: true},
 		{name: "both", raw: "both", ok: true},
@@ -197,8 +203,12 @@ func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 				if err == nil {
 					t.Fatal("不正な SERVER_ROLE が素通りした")
 				}
-				if !strings.Contains(err.Error(), "SERVER_ROLE") {
-					t.Errorf("エラーに環境変数名が無い: %v", err)
+				if !strings.Contains(err.Error(), tt.wantInErr) {
+					t.Errorf("エラーに %q が無い: %v", tt.wantInErr, err)
+				}
+				// どちらの経路でも、通る値が何かは示されている必要があります。
+				if !strings.Contains(err.Error(), `"web"`) {
+					t.Errorf("エラーに選択肢が無い: %v", err)
 				}
 			}
 		})

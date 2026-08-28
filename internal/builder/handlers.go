@@ -168,5 +168,10 @@ func createAuthHandler(cfg *config.Config) (*session.Handler, error) {
 		IsSecureCookie:    securenet.IsSecureServiceURL(cfg.Server.ServiceURL),
 		AllowedEmails:     cfg.Auth.AllowedEmails,
 		AllowedDomains:    cfg.Auth.AllowedDomains,
-	})
+	},
+		// このアプリだけ /auth/logout を公開しています。prompt を渡さないと、
+		// ログアウト直後にログイン画面へ送られた時点で Google が何も聞かずに承認を返し、
+		// 利用者は元のログイン状態に戻ります（共用端末で「ログアウト」が効きません）。
+		session.WithPrompt(session.PromptSelectAccount),
+	)
 }
