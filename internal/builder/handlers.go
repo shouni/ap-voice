@@ -128,7 +128,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Bucket:      appCtx.Config.Storage.GCSBucket,
 		MusicBucket: appCtx.Config.Storage.MusicBucket,
 		Repo:        appCtx.Repository,
-		Signer:      appCtx.RemoteIO.Signer,
+		Signer:      appCtx.Store,
 		Speakers:    appCtx.Speakers,
 		Renderer:    renderer,
 		Reading:     adapters.NewReadingAdapter(),

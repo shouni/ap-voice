@@ -270,7 +270,7 @@ func (r audioRepo) HasAudio(context.Context, string) (bool, error) { return r.ha
 // stubSigner は署名付き URL を組み立てたことにするフェイクです。
 type stubSigner struct{ calls int }
 
-func (s *stubSigner) GenerateSignedURL(_ context.Context, path, _ string, _ time.Duration) (string, error) {
+func (s *stubSigner) SignURL(_ context.Context, path, _ string, _ time.Duration) (string, error) {
 	s.calls++
 	return "https://storage.googleapis.com/" + path + "?X-Goog-Signature=xxx", nil
 }

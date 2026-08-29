@@ -20,7 +20,11 @@ import (
 type Container struct {
 	Config *config.Config
 	// I/O and Storage
-	RemoteIO *RemoteIO
+	// Storage は GCS クライアントの寿命を持ちます。go-web-reader のように
+	// ファクトリそのものを要求する相手へ渡すために保持しています。
+	Storage remoteio.Factory
+	// Store は Storage から取り出した読み書きの窓口です。
+	Store remoteio.Store
 	// Speakers は使用する話者・スタイルの一覧です。assets/speakers.json を
 	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
 	Speakers *speaker.Registry
@@ -41,13 +45,6 @@ type Container struct {
 	// するだけで済ませるためです。
 	Closers []io.Closer
 }
-
-// RemoteIO は外部ストレージ操作に関するコンポーネントをまとめます。
-//
-// 実体は go-remote-io が持つ remoteio.Bundle です。同じ構造体と組み立て関数を
-// 各アプリが個別に持っていたものをライブラリへ引き取ったため、ここはアプリ内での
-// 呼び名を保つための別名だけになっています（rio.Writer などの参照はそのまま使えます）。
-type RemoteIO = remoteio.Bundle
 
 // Close は、Container が保持するすべての外部接続リソースを安全に解放します。
 //

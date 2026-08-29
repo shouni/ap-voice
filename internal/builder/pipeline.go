@@ -41,8 +41,8 @@ func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.Scri
 	}
 
 	contentReader := reader.New(
-		reader.WithGCSFactory(func(_ context.Context) (remoteio.IOFactory, error) {
-			return appCtx.RemoteIO.Factory, nil
+		reader.WithGCSFactory(func(_ context.Context) (remoteio.Factory, error) {
+			return appCtx.Storage, nil
 		}),
 	)
 
@@ -57,13 +57,13 @@ func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.Scri
 
 // buildPublishStep は、成果物を保存する段を返します。
 func buildPublishStep(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
-	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox, appCtx.Speakers, appCtx.RemoteIO.Writer)
+	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox, appCtx.Speakers, appCtx.Store)
 	if err != nil {
 		return nil, err
 	}
 
 	return pipeline.NewPublishStep(
 		voiceAdapter,
-		appCtx.RemoteIO.Signer,
+		appCtx.Store,
 	), nil
 }

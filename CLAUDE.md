@@ -154,10 +154,12 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   concrete adapter types. New external integrations become a new adapter + port, not a change to
   `domain`.
 - **`internal/builder` is the only place that constructs concrete adapters.** `BuildContainer`
-  builds GCS storage → RemoteIO → HTTP client → Notifier → Pipeline, tracking every opened
+  builds GCS storage → Store → HTTP client → Notifier → Pipeline, tracking every opened
   resource in a `[]io.Closer` so a partial failure during construction cleans up what was already
-  opened. Register new external resources the same way. `app.RemoteIO` is a type alias for
-  `remoteio.Bundle` — go-remote-io owns the struct and its assembly (`remoteio.NewBundle`).
+  opened. Register new external resources the same way. The container holds both `Storage`
+  (the `remoteio.Factory`, which owns the client lifetime and is what goes into `Closers`) and
+  `Store` (the read/write/sign window taken from it); go-web-reader wants the factory itself,
+  everything else wants the store.
 - **Only the worker builds the pipeline.** The web role skips it, so the public service holds no
   Gemini client and never opens a VOICEVOX connection — `voicevox.New` calls `/speakers` at
   construction, so building it on the public side would make every cold start wait on the engine.
@@ -383,8 +385,8 @@ First-party (`github.com/shouni/*`):
   the vocabulary is this repo's `assets/speakers.json` (see above). Throughput comes from
   `config.Voicevox`, not from constants here.
 - `go-web-reader` — reads `https://` and `gs://` input sources transparently
-- `go-remote-io` — local/GCS read/write + signed URL abstraction (`remoteio.Bundle`,
-  `remoteio.Writer`, `remoteio.URLSigner`, `remoteio.IOFactory`)
+- `go-remote-io` — local/GCS read/write + signed URL abstraction (`remoteio.Store`,
+  `remoteio.Writer`, `remoteio.Factory`)
 - `go-prompt-kit` — loads and renders the embedded prompt templates
 - `go-http-kit` — HTTP client with retries; note `builder` passes
   `WithSkipNetworkValidation(true)`, which disables the SSRF guard for the whole client

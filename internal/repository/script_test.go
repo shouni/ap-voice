@@ -10,67 +10,78 @@ import (
 	"testing"
 
 	"github.com/shouni/go-remote-io/remoteio"
+	"github.com/shouni/go-remote-io/remoteio/memio"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
 // fakeStore は GCS の代わりに、パス→中身のマップを持ちます。
 // **読み出しの回数を数えます。** 一覧の往復がジョブ数に比例していないかを見るためです。
+// fakeStore は memio を包んだストレージのフェイクです。
+//
+// 一覧の畳み込みや不在の返し方といったストレージの振る舞いは memio が受け持ちます
+// （本物のハンドラと同じ適合性スイートを通っています）。ここに残しているのは
+// 「何回開いたか」「何回書いたか」という呼び出しの回数だけで、これは
+// 「題名の読み込みが 1 ページぶんに収まっているか」を見るために要ります。
 type fakeStore struct {
-	objects map[string]string
+	remoteio.Store
+	h *memio.Handler
+
 	opened  int32
 	exists  int32
 	written int32
 }
 
-func (f *fakeStore) Open(_ context.Context, path string) (io.ReadCloser, error) {
+func newFakeStore() *fakeStore {
+	f := &fakeStore{h: memio.New(memio.WithScheme(remoteio.SchemeGCS))}
+	f.Store = remoteio.NewStore(f.h)
+	return f
+}
+
+func (f *fakeStore) Open(ctx context.Context, name string) (io.ReadCloser, error) {
 	atomic.AddInt32(&f.opened, 1)
-	body, ok := f.objects[path]
-	if !ok {
-		return nil, fmt.Errorf("見つかりません: %s", path)
-	}
-	return io.NopCloser(strings.NewReader(body)), nil
+	return f.Store.Open(ctx, name)
 }
 
-func (f *fakeStore) List(_ context.Context, prefix string, fn func(string) error, _ ...remoteio.ListOption) error {
-	for path := range f.objects {
-		if !strings.HasPrefix(path, prefix) {
-			continue
-		}
-		if err := fn(path); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (f *fakeStore) Exists(_ context.Context, path string) (bool, error) {
+func (f *fakeStore) Exists(ctx context.Context, name string) (bool, error) {
 	atomic.AddInt32(&f.exists, 1)
-	_, ok := f.objects[path]
-	return ok, nil
+	return f.Store.Exists(ctx, name)
 }
 
-func (f *fakeStore) Write(_ context.Context, path string, r io.Reader, _ ...remoteio.WriteOption) error {
-	body, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
+func (f *fakeStore) Write(ctx context.Context, name string, r io.Reader, opts ...remoteio.WriteOption) error {
 	atomic.AddInt32(&f.written, 1)
-	f.objects[path] = string(body)
-	return nil
+	return f.Store.Write(ctx, name, r, opts...)
 }
 
-func (f *fakeStore) Delete(_ context.Context, path string) error {
-	delete(f.objects, path)
-	return nil
+// Sub をライブラリの Sub へ委譲します。埋め込みから昇格した Sub をそのまま使うと、
+// スコープの土台が埋め込まれた Store になり、上の回数記録が素通しされます。
+func (f *fakeStore) Sub(prefix string) remoteio.Store { return remoteio.Sub(f, prefix) }
+
+// put は前提となるオブジェクトを置きます。
+func (f *fakeStore) put(t *testing.T, uri, body string) {
+	t.Helper()
+	if err := f.h.Seed(uri, []byte(body)); err != nil {
+		t.Fatalf("seed(%s) error = %v", uri, err)
+	}
 }
+
+// drop は対象を取り除きます。
+func (f *fakeStore) drop(t *testing.T, uri string) {
+	t.Helper()
+	if err := f.Delete(context.Background(), uri); err != nil {
+		t.Fatalf("delete(%s) error = %v", uri, err)
+	}
+}
+
+// uris は保存されているオブジェクトの URI を辞書順で返します。
+func (f *fakeStore) uris() []string { return f.h.URIs() }
 
 // newStore は、n 件のジョブ（台本 + 音声）を持つ倉庫を組み立てます。
 // ジョブ ID は go-utils/jobid の形式に従います（voice-{日付}-{時刻}-{hex12}）。
 func newStore(t *testing.T, n int) (*fakeStore, []string) {
 	t.Helper()
 
-	store := &fakeStore{objects: map[string]string{}}
+	store := newFakeStore()
 	ids := make([]string, 0, n)
 	for i := range n {
 		id := fmt.Sprintf("voice-20260814-%06d-abcdef123456", i)
@@ -83,8 +94,8 @@ func newStore(t *testing.T, n int) (*fakeStore, []string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		store.objects["gs://test/voice/"+id+"/audio.json"] = string(script)
-		store.objects["gs://test/voice/"+id+"/audio.wav"] = "RIFF"
+		store.put(t, "gs://test/voice/"+id+"/audio.json", string(script))
+		store.put(t, "gs://test/voice/"+id+"/audio.wav", "RIFF")
 	}
 	return store, ids
 }
@@ -92,7 +103,7 @@ func newStore(t *testing.T, n int) (*fakeStore, []string) {
 func newRepo(t *testing.T, store *fakeStore) *Repository {
 	t.Helper()
 
-	repo, err := NewRepository(store, store, "test")
+	repo, err := NewRepository(store, "test")
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
@@ -139,7 +150,7 @@ func TestListKeepsJobsWithUnreadableScripts(t *testing.T) {
 	t.Parallel()
 
 	store, ids := newStore(t, 2)
-	store.objects["gs://test/voice/"+ids[0]+"/audio.json"] = "これはJSONではありません"
+	store.put(t, "gs://test/voice/"+ids[0]+"/audio.json", "これはJSONではありません")
 	repo := newRepo(t, store)
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
@@ -188,7 +199,7 @@ func TestHasAudioDoesNotDependOnTheListLimit(t *testing.T) {
 	}
 
 	// 台本だけのジョブは false であること。
-	delete(store.objects, "gs://test/voice/"+ids[1]+"/audio.wav")
+	store.drop(t, "gs://test/voice/"+ids[1]+"/audio.wav")
 	if has, err := repo.HasAudio(context.Background(), ids[1]); err != nil || has {
 		t.Errorf("HasAudio() = %v, %v; want false, nil", has, err)
 	}
@@ -220,13 +231,14 @@ func TestDeleteRemovesTheWholeJobPrefix(t *testing.T) {
 	if err := repo.Delete(context.Background(), ids[0]); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	for path := range store.objects {
-		if strings.Contains(path, ids[0]) {
-			t.Errorf("消し残しがあります: %s", path)
+	remaining := store.uris()
+	for _, uri := range remaining {
+		if strings.Contains(uri, ids[0]) {
+			t.Errorf("消し残しがあります: %s", uri)
 		}
 	}
-	if len(store.objects) != 2 {
-		t.Errorf("他のジョブまで消えています: %v", store.objects)
+	if len(remaining) != 2 {
+		t.Errorf("他のジョブまで消えています: %v", remaining)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"github.com/shouni/gcp-kit/tasks"
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-job-kit/jobstatus"
-	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 	"github.com/shouni/go-voicevox/speaker"
 
@@ -44,7 +43,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	resources = append(resources, storage)
 
-	rio, err := remoteio.NewBundle(storage)
+	store, err := storage.Store()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}
@@ -70,7 +69,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
 	// worker は synthesize が保存済み台本を読むために。
-	repo, err := repository.NewRepository(rio.Reader, rio.Writer, cfg.Storage.GCSBucket)
+	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket)
 	if err != nil {
 		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
 	}
@@ -81,13 +80,14 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](repo),
 		Speakers:   speakers,
 		Repository: repo,
-		RemoteIO:   rio,
+		Storage:    storage,
+		Store:      store,
 		HTTPClient: httpClient,
 		Notifier:   notifier,
-		// rio は成功後の storage の所有者です（Bundle.Close が factory を閉じます）。
+		// Store はファクトリが持つクライアントを包むだけで、寿命はファクトリ側にあります。
 		// 組み立てに失敗したときは resources 側が storage を直接閉じるため、
 		// Closers は成功して返ったあとの解放だけを受け持ちます。
-		Closers: []io.Closer{rio},
+		Closers: []io.Closer{storage},
 	}
 
 	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで

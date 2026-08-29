@@ -8,18 +8,22 @@ import (
 	"time"
 
 	"github.com/shouni/ap-voice/internal/domain"
-
-	"github.com/shouni/go-remote-io/remoteio"
 )
+
+// Signer は PublishStep が必要とする署名機能だけを表します。
+// remoteio.Store がそのまま満たします。
+type Signer interface {
+	SignURL(ctx context.Context, name, method string, expires time.Duration) (string, error)
+}
 
 // PublishStep は、スクリプトの公開処理を実行する具象構造体です。
 type PublishStep struct {
 	voice  domain.Voice
-	signer remoteio.URLSigner
+	signer Signer
 }
 
 // NewPublishStep は PublishStep の新しいインスタンスを作成します。
-func NewPublishStep(voice domain.Voice, signer remoteio.URLSigner) *PublishStep {
+func NewPublishStep(voice domain.Voice, signer Signer) *PublishStep {
 	return &PublishStep{
 		voice:  voice,
 		signer: signer,
@@ -89,5 +93,5 @@ func (r *PublishStep) buildPublicURL(ctx context.Context, outputURI string) (str
 	if r.signer == nil {
 		return "", nil
 	}
-	return r.signer.GenerateSignedURL(ctx, outputURI, "GET", time.Hour)
+	return r.signer.SignURL(ctx, outputURI, "GET", time.Hour)
 }
