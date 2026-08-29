@@ -9,7 +9,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/shouni/gcp-kit/negotiate"
+	"github.com/shouni/go-serve-kit/respond"
 )
 
 // APISpeakers は、話者ごとに使えるスタイルを返します。
@@ -18,7 +18,7 @@ import (
 // 話者ごとに持つスタイルは違い（春日部つむぎは 1 つ、ずんだもんは 8 つ）、
 // 実在しない組み合わせは保存時に弾かれます。組を選ぶ材料をここで渡します。
 func (h *Handler) APISpeakers(w http.ResponseWriter, r *http.Request) {
-	negotiate.JSON(w, r, http.StatusOK, h.stylesBySpeaker())
+	respond.JSON(w, r, http.StatusOK, h.stylesBySpeaker())
 }
 
 // apiMode は、モード一覧の 1 件です。

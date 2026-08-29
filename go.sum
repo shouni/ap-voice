@@ -151,8 +151,8 @@ github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46/go.mod h1:uAQ5PCi+MFsC7HjREoAz1BU+Mq60+05gifQSsHSDG/8=
 github.com/shouni/audio v1.4.0 h1:FEU/cwvzr/rTlSuXLvTif3KryqPMGZHrJJ7CpqoUoLc=
 github.com/shouni/audio v1.4.0/go.mod h1:VOSXgko/HpXPB6Yf7+IQQ87c+S55gjIsOuOJAj6m3iE=
-github.com/shouni/gcp-kit v1.13.3 h1:j/2oMWsd39Xn2OXyxgHl2vT3mOpmgxe/A2LKxKMlACU=
-github.com/shouni/gcp-kit v1.13.3/go.mod h1:0C6yAgPULN2Ev0RCOOTs+HLU7+9Yl6l/+MzKjpu6l54=
+github.com/shouni/gcp-kit v1.14.0 h1:BqxDP5J2ewt6mqyZuaJPnHYb7JI0FWifHl0s9Rp9e+A=
+github.com/shouni/gcp-kit v1.14.0/go.mod h1:0C6yAgPULN2Ev0RCOOTs+HLU7+9Yl6l/+MzKjpu6l54=
 github.com/shouni/go-gemini-client v1.21.4 h1:+UVIAAQTZupa6eJk2Mgv59CdpLTceZDy4lBxeQXzXBo=
 github.com/shouni/go-gemini-client v1.21.4/go.mod h1:IH4s5hvGttCWkhn2GGXGJrr9Rbb0BC5B3j6CmjUxE9g=
 github.com/shouni/go-http-kit v1.10.0 h1:2L5zPnZpbEgxGeTsdDP5fKFcS6efpXOOvMBCcbzzlHQ=
@@ -165,6 +165,8 @@ github.com/shouni/go-prompt-kit v1.7.0 h1:uOma6R5jJh1ywy0TepXnRSRYtGX41B3/tN7su7
 github.com/shouni/go-prompt-kit v1.7.0/go.mod h1:nWHeZnzuXiB9UoQ8AFUd6VF+QJAlg1BLmViWuWeRKUM=
 github.com/shouni/go-remote-io v1.11.0 h1:DECXbwTYi32r3TiqMNe6IQ8/UOEe5Twv2CRFbrTziSs=
 github.com/shouni/go-remote-io v1.11.0/go.mod h1:jUxjW7lUcbClHHdjHutvpRjrHfw26Fs+yuf4UwSGzbA=
+github.com/shouni/go-serve-kit v1.0.0 h1:AINHUZKfbHoVh/aCZNz2/Cy8Zm72Y54jrTgCzdp4PAc=
+github.com/shouni/go-serve-kit v1.0.0/go.mod h1:Mmy3q40YTCejIKYcKqid+7xfQBkcMz/OtdVo1wPAxlQ=
 github.com/shouni/go-utils v1.7.1 h1:CrwvhR59Bef2DqJqdpniyW/rJFMip1RzXCKJlE5Ge+o=
 github.com/shouni/go-utils v1.7.1/go.mod h1:z35gD3jCEREuezx2ZnVk44XbJoN0GF35OACYlbrxcAc=
 github.com/shouni/go-voicevox v1.10.3 h1:NODt2DntjmHmCFiGY/lWGX8Tz4bTmuotxMDCmFVyMX4=

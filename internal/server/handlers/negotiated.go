@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/gcp-kit/negotiate"
+	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
 )
 
@@ -22,7 +22,7 @@ import (
 func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := chi.URLParam(r, "jobID")
 	if err := jobid.Validate(id); err != nil {
-		negotiate.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
+		respond.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}
 	return id, true
@@ -37,11 +37,11 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 
 	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)
 	if err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
+		respond.Error(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
 		return
 	}
 
-	if negotiate.WantsJSON(w, r) {
+	if respond.WantsJSON(w, r) {
 		out := make([]apiJob, 0, len(jobs))
 		for _, job := range jobs {
 			out = append(out, apiJob{
@@ -50,7 +50,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 				HasAudio:  job.HasAudio,
 			})
 		}
-		negotiate.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
+		respond.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 		return
 	}
 	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs, Page: meta})
@@ -58,7 +58,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 
 // Modes は、選べる指示モードを返します。
 func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
-	if negotiate.WantsJSON(w, r) {
+	if respond.WantsJSON(w, r) {
 		modes := make([]apiMode, 0, len(h.modes))
 		for _, mode := range h.modes {
 			modes = append(modes, apiMode{
@@ -66,7 +66,7 @@ func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
 				Direction: mode.Direction, UseWhen: mode.UseWhen,
 			})
 		}
-		negotiate.JSON(w, r, http.StatusOK, modes)
+		respond.JSON(w, r, http.StatusOK, modes)
 		return
 	}
 	h.renderTemplate(w, http.StatusOK, "modes.html", modesView{baseView: h.base(r), Modes: h.modes})
@@ -82,29 +82,29 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wantsJSON := negotiate.WantsJSON(w, r)
+	wantsJSON := respond.WantsJSON(w, r)
 	if wantsJSON {
 		// 画面はリンクを出す前に一覧で有無を知っていますが、機械は知りません。
 		// 無い場合に署名付き URL を返すと、開いた先で 404 に当たります。
 		hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 		if err != nil {
-			negotiate.Error(w, r, http.StatusBadGateway, "音声の有無を確認できませんでした")
+			respond.Error(w, r, http.StatusBadGateway, "音声の有無を確認できませんでした")
 			return
 		}
 		if !hasAudio {
-			negotiate.Error(w, r, http.StatusNotFound, "このジョブにはまだ音声がありません")
+			respond.Error(w, r, http.StatusNotFound, "このジョブにはまだ音声がありません")
 			return
 		}
 	}
 
 	url, err := h.signer.SignURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
 	if err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
+		respond.Error(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
 		return
 	}
 
 	if wantsJSON {
-		negotiate.JSON(w, r, http.StatusOK, apiAudio{
+		respond.JSON(w, r, http.StatusOK, apiAudio{
 			JobID:            jobID,
 			AudioURI:         h.layout.AudioURI(h.bucket, jobID),
 			SignedURL:        url,
@@ -128,15 +128,15 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	if err != nil {
-		negotiate.Error(w, r, http.StatusNotFound, "台本が見つかりません")
+		respond.Error(w, r, http.StatusNotFound, "台本が見つかりません")
 		return
 	}
 
-	if !negotiate.WantsJSON(w, r) {
+	if !respond.WantsJSON(w, r) {
 		// jobid.Validate を通った ID だけがここに来るため、ファイル名に使えます。
 		w.Header().Set("Content-Disposition", `attachment; filename="`+jobID+`.json"`)
 	}
-	negotiate.JSON(w, r, http.StatusOK, script)
+	respond.JSON(w, r, http.StatusOK, script)
 }
 
 // Delete は、ジョブと成果物をまとめて消します。
@@ -150,11 +150,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), jobID); err != nil {
-		negotiate.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
+		respond.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
 		return
 	}
 
-	if negotiate.WantsJSON(w, r) {
+	if respond.WantsJSON(w, r) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
