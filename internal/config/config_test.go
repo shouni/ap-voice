@@ -375,7 +375,7 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 	})
 
 	// 実測が覆ったときに再ビルド無しで戻す、という操作が env だけで済むこと。
-	// **既定と違う値を置きます。** 既定と同じ値だと、env が無視されていても通ります。
+	// 既定と違う値を置きます。既定と同じ値だと、env が無視されていても通ります。
 	t.Run("上書きできる", func(t *testing.T) {
 		cfg := loadFor(t, map[string]string{
 			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "8",

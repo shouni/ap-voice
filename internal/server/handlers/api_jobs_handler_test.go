@@ -61,7 +61,7 @@ func putScript(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder
 // TestAPIUpdateScriptSharesValidationWithTheForm は、API が画面と同じ検証を
 // 通ることを検証します。
 //
-// **片方だけ緩いと、そちらから実在しない組み合わせが入ります。** 合成時に
+// 片方だけ緩いと、そちらから実在しない組み合わせが入ります。合成時に
 // getStyleID が既定へ黙って落とすため、保存できてしまうと「指定したのに
 // 違う声で喋る」形でしか現れません。
 func TestAPIUpdateScriptSharesValidationWithTheForm(t *testing.T) {
@@ -113,7 +113,7 @@ func TestAPIUpdateScriptSharesValidationWithTheForm(t *testing.T) {
 			if !strings.Contains(rec.Body.String(), tt.wantErr) {
 				t.Errorf("body = %s, want に %q を含む", rec.Body.String(), tt.wantErr)
 			}
-			// **弾いたものは保存しません。**
+			// 弾いたものは保存しません。
 			if repo.calls != 0 {
 				t.Errorf("検証に失敗したのに %d 回保存しています", repo.calls)
 			}
@@ -153,7 +153,7 @@ func TestAPIUpdateScriptSavesAndReturnsTheCleanedScript(t *testing.T) {
 	if got.Lines[0].Text != "前後の空白は落ちるのだ" {
 		t.Errorf("本文の前後の空白が残っています: %q", got.Lines[0].Text)
 	}
-	// **返したものと保存したものが同じであること。**
+	// 返したものと保存したものが同じであること。
 	if repo.calls != 1 {
 		t.Fatalf("保存回数 = %d, want 1", repo.calls)
 	}
@@ -217,7 +217,7 @@ func (q recordingQueue) Enqueue(context.Context, domain.Request) error {
 // TestAPIEnqueueRecordsQueuedBeforeEnqueueing は、状態を投入より先に書くことを
 // 検証します。
 //
-// **Worker は配信されたタスクより先に状態を読みます。** Cloud Tasks は数十ミリ秒で
+// Worker は配信されたタスクより先に状態を読みます。Cloud Tasks は数十ミリ秒で
 // 届くため、順序が逆だと Worker が書いた running を、あとから届いた queued が
 // 上書きしかねません。ap-story が同じ順序で実際に踏んでいます。
 func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
@@ -252,7 +252,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
 	}
-	// **モードは投入の時点でしか分かりません。** ここで載せ損なうと、
+	// モードは投入の時点でしか分かりません。ここで載せ損なうと、
 	// 出来上がった台本から話者の組み合わせを推し量るしかなくなります。
 	if saved.Mode != "tech_solo" {
 		t.Errorf("Mode = %q, want tech_solo", saved.Mode)
@@ -278,7 +278,7 @@ func (s *stubSigner) SignURL(_ context.Context, path, _ string, _ time.Duration)
 // TestAPIAudioRefusesWhenThereIsNoAudio は、音声が無いジョブにリンクを出さないことを
 // 検証します。
 //
-// **署名は対象の存在を確かめません。** 作っていない音声の URL も署名できてしまうため、
+// 署名は対象の存在を確かめません。作っていない音声の URL も署名できてしまうため、
 // 先に確かめないと「開くと 404 になるリンク」を配ることになります。
 // Slack 通知で同じことを一度やっています。
 func TestAPIAudioRefusesWhenThereIsNoAudio(t *testing.T) {
@@ -320,7 +320,7 @@ func TestAPIAudioReturnsBothLocations(t *testing.T) {
 	if !strings.Contains(got.SignedURL, "X-Goog-Signature") {
 		t.Errorf("signed_url に署名がありません: %q", got.SignedURL)
 	}
-	// **期限を伝えます。** いつまで使えるかが分からないと、呼び出し側は
+	// 期限を伝えます。いつまで使えるかが分からないと、呼び出し側は
 	// 切れたリンクを配ったことに気付けません。
 	if got.ExpiresInSeconds <= 0 {
 		t.Errorf("expires_in_seconds = %d", got.ExpiresInSeconds)
@@ -360,7 +360,7 @@ func (f fakeReading) ConvertToReading(text string) (string, error) {
 // TestAPIPreviewReadingMarksChangedLines は、変換で表記が変わった行に印が付くことを
 // 検証します。
 //
-// **確かめる価値がある行の目印です。** 台本が 30 行あっても、変わったのが 2 行なら
+// 確かめる価値がある行の目印です。台本が 30 行あっても、変わったのが 2 行なら
 // そこだけ読めば済みます。印が無いと全行を目で追うことになります。
 func TestAPIPreviewReadingMarksChangedLines(t *testing.T) {
 	t.Parallel()
@@ -432,7 +432,7 @@ func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.Res
 // TestAPIEnqueueCreatesJobFromSuppliedScript は、持ち込んだ台本から新しいジョブを
 // 作れることを検証します。
 //
-// **既存ジョブが要りません。** 保存先はジョブ ID から決まるだけで、SaveScript は
+// 既存ジョブが要りません。保存先はジョブ ID から決まるだけで、SaveScript は
 // ジョブの存在を確かめないため、ID を発行して保存すればそれが新規作成になります。
 // これが無いと、自分で書いた台本を喋らせるのに、捨てる前提の生成を 1 回
 // 走らせてから上書きする迂回が要りました。
@@ -456,7 +456,7 @@ func TestAPIEnqueueCreatesJobFromSuppliedScript(t *testing.T) {
 		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 	}
 
-	// **台本は投入より先に保存されます。** タスクには載せないため、
+	// 台本は投入より先に保存されます。タスクには載せないため、
 	// worker は保存済みの台本を読む既存の経路をそのまま使えます。
 	if len(repo.saved.Lines) != 2 || repo.saved.Title != "漫才" {
 		t.Errorf("保存された台本が違います: %+v", repo.saved)
@@ -530,7 +530,7 @@ func TestAPIEnqueueRejectsBadSuppliedScript(t *testing.T) {
 // TestAPIEnqueueResolvesRecipeFromMusicJobID は、楽曲のジョブ ID から
 // レシピの場所が組み立てられることを検証します。
 //
-// **規則は ap-voice が持ちます。** 呼び出し側に gs:// を組み立てさせると、
+// 規則は ap-voice が持ちます。呼び出し側に gs:// を組み立てさせると、
 // 置き場を変えるときに全員へ知らせて回ることになります。画面の
 // 「楽曲レシピ」タブと同じ関数を通るので、両者がずれることもありません。
 func TestAPIEnqueueResolvesRecipeFromMusicJobID(t *testing.T) {

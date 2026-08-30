@@ -24,15 +24,15 @@ import (
 
 // Repository は、ジョブの成果物を読み出します。
 //
-// 書き込みは PublishStep が担い、ここは読むだけです。**成果物がジョブ ID ごとの
-// プレフィックスにまとまっている**ため、一覧も削除も中身を知らずに行えます。
+// 書き込みは PublishStep が担い、ここは読むだけです。成果物がジョブ ID ごとの
+// プレフィックスにまとまっているため、一覧も削除も中身を知らずに行えます。
 type Repository struct {
 	// store は gs://{bucket} にスコープ済みのストアです。以降のパスはすべて
 	// そこからの相対名なので、呼び出しごとにバケットを連れ回す必要がありません。
 	store  remoteio.Store
 	layout domain.StorageLayout
-	// status はジョブの進行状況です。**成果物とは別の場所（Firestore）にあるので、
-	// プレフィックスの一括削除では片付きません。** Delete が明示的に消します。
+	// status はジョブの進行状況です。成果物とは別の場所（Firestore）にあるので、
+	// プレフィックスの一括削除では片付きません。Delete が明示的に消します。
 	//
 	// 具象ではなくインターフェースで持つのは、一覧の検証に Firestore を要求しない
 	// ためです（実物が要る検査はエミュレータの担当）。
@@ -55,7 +55,7 @@ func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, e
 
 // Save は、ジョブの状態を書きます。jobfirestore.StatusStore を満たします。
 //
-// **Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。**
+// Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。
 // 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
 func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobStatus) error {
 	return r.status.Save(ctx, jobID, status)
@@ -63,7 +63,7 @@ func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobSt
 
 // statusCollection はジョブ状態を置く Firestore のコレクションです。
 //
-// **成果物のバケットと同じ語彙にしてあります。** コレクションはサービスごとに 1 本で、
+// 成果物のバケットと同じ語彙にしてあります。コレクションはサービスごとに 1 本で、
 // 共有 1 本に判別フィールドを持たせる形は採りません（絞り忘れが落ちずに他サービスの
 // ジョブを履歴へ混ぜるためです）。設定にせず定数なのは、これがサービスの身元であって
 // デプロイごとに変わる値ではないからです。
@@ -90,7 +90,7 @@ func NewRepository(store remoteio.Store, bucket string, firestore *firestore.Cli
 
 // SaveScript は、編集された台本を保存済みのものへ書き戻します。
 //
-// **編集内容をタスクのペイロードに載せません。** Cloud Tasks は 1MB が上限で、
+// 編集内容をタスクのペイロードに載せません。Cloud Tasks は 1MB が上限で、
 // 長い台本はそこに当たりえます。先に保存してから JobID だけを渡せば、
 // Worker は既存の「保存済み台本を読む」経路をそのまま使えます。
 func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain.Script) error {
@@ -108,7 +108,7 @@ func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain
 		remoteio.WithContentType("application/json; charset=utf-8")); err != nil {
 		return fmt.Errorf("台本の保存に失敗しました (%s): %w", uri, err)
 	}
-	// **一覧の題名は状態から取るので、ここで追随させないと古い題名が残ります。**
+	// 一覧の題名は状態から取るので、ここで追随させないと古い題名が残ります。
 	// 台本を読んで題名を出していた頃は保存した瞬間に反映されていました。
 	// 失敗しても保存そのものは成功として返します（題名の鮮度より台本が大事です）。
 	r.refreshTitle(ctx, jobID, script.Title)
@@ -175,9 +175,9 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 
 // HasAudio は、そのジョブの音声が既にあるかを返します。
 //
-// **一覧を引いて探しません。** 以前は List の結果から該当ジョブを線形探索していましたが、
+// 一覧を引いて探しません。以前は List の結果から該当ジョブを線形探索していましたが、
 // これには 2 つの問題がありました。1 つは、真偽値 1 つを知るために全ジョブの台本を
-// 読んでいたこと。もう 1 つは、**上限（50 件）から外れた古いジョブが必ず false になる**
+// 読んでいたこと。もう 1 つは、上限（50 件）から外れた古いジョブが必ず false になる
 // ことで、音声があるのに詳細画面から再生欄が消えていました。
 func (r *Repository) HasAudio(ctx context.Context, jobID string) (bool, error) {
 	if err := jobid.Validate(jobID); err != nil {
@@ -189,7 +189,7 @@ func (r *Repository) HasAudio(ctx context.Context, jobID string) (bool, error) {
 // Job は履歴一覧の 1 件です。
 type Job struct {
 	ID string
-	// Title は台本の題名です。**読めなければジョブ ID を入れます。**
+	// Title は台本の題名です。読めなければジョブ ID を入れます。
 	// 台本が壊れていても音声だけは残っていることがあり、一覧から消えると
 	// 消す手段まで失われるためです。
 	Title string
@@ -201,7 +201,7 @@ type Job struct {
 
 // List は、指定ページのジョブを新しい順に返します。
 //
-// **成果物を一切読みません。** 以前はバケット配下を全走査してジョブ ID と音声の
+// 成果物を一切読みません。以前はバケット配下を全走査してジョブ ID と音声の
 // 有無を集め、ページ分の台本を並行に読んで題名を得ていました。ジョブが増えるほど
 // 走査が伸び、件数に上限がありません。いまは 1 ページ分をクエリで取り、必要な
 // 3 つの値（題名・音声の有無・作成時刻）をすべて状態から導きます。
@@ -220,7 +220,7 @@ func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, jobfir
 			// 在り処が入りません（成果物を数えずに区別できます）。
 			HasAudio: status.AudioURI != "",
 		}
-		// **題名が無くても一覧から落としません。** 生成が題名の確定前に失敗した
+		// 題名が無くても一覧から落としません。生成が題名の確定前に失敗した
 		// ジョブこそ消したいもので、一覧から消えると消す手段まで失われます。
 		if job.Title == "" {
 			job.Title = status.JobID
@@ -233,7 +233,7 @@ func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, jobfir
 
 // Delete は、1 つのジョブの成果物をまとめて消します。
 //
-// **プレフィックス配下を一覧して消します。** 何が置かれたかを呼び出し側が知らなくても
+// プレフィックス配下を一覧して消します。何が置かれたかを呼び出し側が知らなくても
 // 消せるのが、ジョブ ID ごとにまとめている理由です。
 func (r *Repository) Delete(ctx context.Context, jobID string) error {
 	if err := jobid.Validate(jobID); err != nil {
@@ -259,7 +259,7 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 			return fmt.Errorf("削除に失敗しました (%s): %w", entry.URI, err)
 		}
 	}
-	// **状態は成果物と別の場所にあるので、ここで消さないと孤児が残ります。**
+	// 状態は成果物と別の場所にあるので、ここで消さないと孤児が残ります。
 	// 以前は状態ファイルがジョブディレクトリ配下にあり、上の一括削除で一緒に
 	// 片付いていました。Firestore へ移したことで、その連動が失われています。
 	//

@@ -107,7 +107,7 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 
 	// リンクの表示名は署名付き URL ではなく gs:// のパスです。署名付き URL は
 	// クエリだけで 1000 文字を超え、本文が URL で埋まるためです。
-	// 出力は**ファイル名まで出しません**。generate の時点では音声がまだ無く、
+	// 出力はファイル名まで出しません。generate の時点では音声がまだ無く、
 	// audio.wav を示すと存在しないものを案内することになります。
 	// 並びは「どのジョブか → 何ができたか → どう作ったか」です。
 	want := "**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
@@ -125,7 +125,7 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 }
 
 // TestNotifyOmitsPublicURLWhenEmpty は、音声が無い場合に行ごと省かれることを検証します。
-// **generate はここを通ります。** 台本しか作らないため署名付き URL を返さず、
+// generate はここを通ります。台本しか作らないため署名付き URL を返さず、
 // 存在しない audio.wav のリンクを配らないようにしています。
 func TestNotifyOmitsPublicURLWhenEmpty(t *testing.T) {
 	t.Parallel()
@@ -245,7 +245,7 @@ func TestNotifyKeepsNonGCSInputAsPlainValue(t *testing.T) {
 
 // TestNotifyFailureDistinguishesTimeout は、打ち切りが専用の見出しで届くことを検証します。
 //
-// **時間切れと本当の失敗は対処が違います。** 前者は流し直せば通ることがあり、
+// 時間切れと本当の失敗は対処が違います。前者は流し直せば通ることがあり、
 // 後者は入力か設定を直す必要があります。同じ ❌ で並ぶと、一覧では区別できません。
 func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 	t.Parallel()
@@ -308,7 +308,7 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 // TestNotifyGroupsFieldsByPurpose は、項目が「どのジョブか → 何ができたか →
 // どう作ったか」の順に並ぶことを検証します。
 //
-// **synthesize では最後の組がまるごと消えます。** 入力URI・モード・モデルを
+// synthesize では最後の組がまるごと消えます。入力URI・モード・モデルを
 // 持たないためで、識別と成果物だけが残ります。生成条件が途中に挟まっていると、
 // 項目が欠けているのか、そもそも持たないのかを読み分けられません。
 func TestNotifyGroupsFieldsByPurpose(t *testing.T) {

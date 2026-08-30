@@ -3,7 +3,7 @@ package domain
 import "testing"
 
 // TestScriptPathAndScriptURIForAgree は、台本の場所を導く規則が
-// **1 つしかない**ことを検証します。
+// 1 つしかないことを検証します。
 //
 // 書き込み側（VoiceAdapter）は音声の URI から導き、読み出し側（repository）は
 // ジョブ ID から導きます。かつては別々に拡張子を組み替えていたため、

@@ -68,7 +68,7 @@ func postForm(t *testing.T, h *Handler, values url.Values) *httptest.ResponseRec
 // TestHomeSeparatesModesByInputKind は、タブごとに出す生成モードが
 // 入力の型で分かれていることを検証します。
 //
-// **素のテキストのタブに楽曲紹介を出すと、選べるのに必ず失敗します。**
+// 素のテキストのタブに楽曲紹介を出すと、選べるのに必ず失敗します。
 // レシピを渡す前提のモードは、生成に入ってからデコードで落ちるため、
 // 選んだ時点では何も起こらず、原因が分かるのは worker のログだけです。
 func TestHomeSeparatesModesByInputKind(t *testing.T) {
@@ -145,7 +145,7 @@ func openingTagOf(t *testing.T, body, marker string) string {
 // TestEnqueueFromRecipeBuildsURIFromJobID は、楽曲のジョブ ID から
 // レシピの場所が組み立てられることを検証します。
 //
-// **動画生成サービスと同じ規則です。** 片方だけ規則が変わると、同じ ID を渡しているのに
+// 動画生成サービスと同じ規則です。片方だけ規則が変わると、同じ ID を渡しているのに
 // 一方だけ動く状態になり、どちらが正しいのか判断できなくなります。
 func TestEnqueueFromRecipeBuildsURIFromJobID(t *testing.T) {
 	t.Parallel()
@@ -218,7 +218,7 @@ func TestEnqueueFromRecipeRejectsBadJobID(t *testing.T) {
 // TestEnqueueFromScriptCreatesJobWithoutGemini は、貼られた台本が
 // 新しいジョブとして保存され、生成を挟まず合成へ回ることを検証します。
 //
-// **保存が投入より先です。** 台本はタスクに載せないため、届いた worker が
+// 保存が投入より先です。台本はタスクに載せないため、届いた worker が
 // 読みに行く先に既に無いと、その場で失敗します。
 func TestEnqueueFromScriptCreatesJobWithoutGemini(t *testing.T) {
 	t.Parallel()
@@ -246,7 +246,7 @@ func TestEnqueueFromScriptCreatesJobWithoutGemini(t *testing.T) {
 	if queue.got.Command != domain.CommandSynthesize {
 		t.Errorf("Command = %q, want synthesize", queue.got.Command)
 	}
-	// **生成の入力は持ちません。** Gemini を通さない経路なので、
+	// 生成の入力は持ちません。Gemini を通さない経路なので、
 	// 入力ソースやモードが混ざっていると生成が走ってしまいます。
 	if queue.got.InputURI != "" || queue.got.Mode != "" {
 		t.Errorf("生成の入力が混ざっています: InputURI=%q Mode=%q", queue.got.InputURI, queue.got.Mode)
@@ -305,7 +305,7 @@ func TestEnqueueFromScriptRejectsBadScript(t *testing.T) {
 }
 
 // TestEnqueueFromScriptKeepsTheJSONOnError は、失敗したときに貼った JSON が
-// 残ることを検証します。**直して出し直すのが普通です。** 消えると貼り直しになります。
+// 残ることを検証します。直して出し直すのが普通です。消えると貼り直しになります。
 func TestEnqueueFromScriptKeepsTheJSONOnError(t *testing.T) {
 	t.Parallel()
 

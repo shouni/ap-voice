@@ -45,7 +45,7 @@ func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, scrip
 	}
 	slog.InfoContext(ctx, "台本の保存が完了しました。", "output_path", outputURI)
 
-	// **署名付き URL は返しません。** 署名は対象の存在を確かめないため、まだ作っていない
+	// 署名付き URL は返しません。署名は対象の存在を確かめないため、まだ作っていない
 	// 音声の URL を署名でき、通知に載せると 404 のリンクを配ることになります。
 	// この段階で見るべきものは台本で、それは詳細画面が表示します。
 	return "", nil
@@ -53,7 +53,7 @@ func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, scrip
 
 // Run は台本を保存してから音声を合成します。
 //
-// **順序が逆だと、合成の時間切れで台本ごと失われます。** 台本と音声をまとめて作る
+// 順序が逆だと、合成の時間切れで台本ごと失われます。台本と音声をまとめて作る
 // 経路では、生成した台本はまだどこにも保存されていません。音声を先に作ると、
 // 合成が上限に達した時点で Gemini の生成結果が消え、やり直すしかなくなります。
 // 先に保存しておけば、詳細画面から合成だけをやり直せます。

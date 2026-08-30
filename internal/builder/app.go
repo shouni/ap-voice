@@ -49,7 +49,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}
 
 	// ジョブ状態の置き場。成果物は GCS のまま、状態だけを Firestore に持ちます。
-	// **両ロールで要ります** — web は queued を書いて履歴を読み、worker は
+	// 両ロールで要ります— web は queued を書いて履歴を読み、worker は
 	// running / succeeded / failed を書いて再実行ガードのために読みます。
 	jobStatus, err := jobfirestore.New(ctx,
 		jobfirestore.WithProjectID(cfg.GCP.ProjectID),

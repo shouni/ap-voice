@@ -37,7 +37,7 @@ func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain
 	}
 }
 
-// record は、ジョブの状態を書きます。**記録の失敗で処理は止めません** —
+// record は、ジョブの状態を書きます。記録の失敗で処理は止めません—
 // 状態は進行を知るためのもので、成果物より重くはありません。
 func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobfirestore.State, apply ...func(next, prev *domain.JobStatus)) {
 	if p.status == nil || req.JobID == "" {
@@ -83,13 +83,13 @@ func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) 
 // Execute は、すべての依存関係を構築し実行します。
 func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) {
 	// pprof のゴルーチンラベルにジョブを載せます。Go 1.27 以降、ラベルは
-	// **パニックのトレースバックの見出し行にも出る**ため、落ちたときにどのジョブ
+	// パニックのトレースバックの見出し行にも出るため、落ちたときにどのジョブ
 	// だったかがスタックだけで分かります。ラベルは子ゴルーチン（セグメントの
 	// 並列合成）へも継承されます。
 	ctx = pprof.WithLabels(ctx, pprof.Labels("job_id", req.JobID, "command", string(req.Command)))
 	pprof.SetGoroutineLabels(ctx)
 
-	// **完了済みのジョブをもう一度受け取ったら、ここで打ち切ります。**
+	// 完了済みのジョブをもう一度受け取ったら、ここで打ち切ります。
 	// Cloud Tasks は at-least-once 配信なので、同じタスクが再び届くことがあります。
 	// 素通りさせると、数分かかる合成で同じ音声を作り直すことになります。
 	//
@@ -98,7 +98,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	// succeeded ではなく queued として届きます。succeeded のまま届くのは、
 	// ハンドラーを経由しない再配信だけです。
 	//
-	// **失敗を記録する defer より前に置きます。** あとに置くと、状態を読めなかった
+	// 失敗を記録する defer より前に置きます。あとに置くと、状態を読めなかった
 	// ときの return が failed の記録を呼び、succeeded だったかもしれない記録を
 	// 上書きします。次の配信でこのガードが効かなくなり、防ぐはずの再実行を
 	// ガード自身が招きます。
@@ -112,12 +112,12 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return nil
 	}
 
-	// **通知は打ち切りの外側で送ります。** 下で ctx に上限を掛けるため、期限切れで
+	// 通知は打ち切りの外側で送ります。下で ctx に上限を掛けるため、期限切れで
 	// 抜けたときには ctx は既にキャンセル済みです。そのまま通知に使うと通知自体が
 	// 送れず、「先に諦めて失敗を知らせる」という目的が達成できません。
 	notifyCtx := ctx
 
-	// **アプリが自分で先に諦めます。** Cloud Tasks の dispatch_deadline より内側で
+	// アプリが自分で先に諦めます。Cloud Tasks の dispatch_deadline より内側で
 	// 打ち切ることで、下の defer が失敗通知を出す余地を残します。逆順だと
 	// Cloud Tasks が先にリクエストを打ち切り、プロセスは SIGTERM で落ちて
 	// 通知の機会を失います。再配信が来ても、記録が running のままなので
@@ -130,11 +130,11 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 
 	defer func() {
 		if err != nil {
-			// **通知と同じ ctx を使います。** 打ち切り済みの ctx で書くと、
+			// 通知と同じ ctx を使います。打ち切り済みの ctx で書くと、
 			// 失敗したことすら記録に残りません。
 			p.record(notifyCtx, req, jobfirestore.StateFailed, func(next, prev *domain.JobStatus) {
 				next.Error = err.Error()
-				// **前回までの成果物は残ります。** 合成に失敗しても台本は既に
+				// 前回までの成果物は残ります。合成に失敗しても台本は既に
 				// 保存されているので、在り処を消すと詳細画面からやり直せません。
 				next.CarryFrom(prev)
 			})
@@ -163,7 +163,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		next.Title = script.Title
 		next.CarryFrom(prev)
 
-		// **成果物の在り処を状態に載せます。** 「できた」だけでは、投入した側が
+		// 成果物の在り処を状態に載せます。「できた」だけでは、投入した側が
 		// 音声へ辿り着けません。台本はどの経路でも保存され、音声は publish が
 		// 作ったときだけです（generate は台本までで終わります）。
 		layout := domain.NewStorageLayout()
@@ -179,7 +179,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 
 // publish は、Command に応じて保存する成果物を切り替えます。
 //
-// generate は台本まで、synthesize は音声まで。**generate で音声を作らない**のは、
+// generate は台本まで、synthesize は音声まで。generate で音声を作らないのは、
 // 台本を確認・修正してから合成へ進めるようにするためです。
 func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domain.Script) (string, error) {
 	if req.Command == domain.CommandGenerate {
@@ -191,8 +191,8 @@ func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domai
 // resolveScript は、Command に応じて合成対象の台本を用意します。
 //
 // generate は入力ソースから作ります。synthesize は渡された台本を使い、
-// 無ければ JobID で保存済みのものを読みます。**台本をタスクのペイロードで
-// 運ばない**のは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
+// 無ければ JobID で保存済みのものを読みます。台本をタスクのペイロードで
+// 運ばないのは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
 func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.Command == domain.CommandSynthesize {
 		// API から直接渡された台本を優先します。タイトルは保存済みのものを引き継ぎます。

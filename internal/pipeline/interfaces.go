@@ -7,7 +7,7 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// 段の抽象は**パッケージ内に閉じています。** 具象（ScriptStep / PublishStep）と
+// 段の抽象はパッケージ内に閉じています。具象（ScriptStep / PublishStep）と
 // 同居しているため外から実装する必要がなく、公開すると「差し替えられる」という
 // 誤った期待を与えます。オーケストレーションを段から切り離して試すための継ぎ目です。
 type (

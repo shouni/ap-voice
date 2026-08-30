@@ -8,7 +8,7 @@ import (
 // TestConvertToReadingShowsNonObviousReadings は、聴くまで分からない読みが
 // 事前に見えることを検証します。
 //
-// **読みは自明ではありません。** 楽曲生成サービスが同じ理由で preview_lyrics_reading を
+// 読みは自明ではありません。楽曲生成サービスが同じ理由で preview_lyrics_reading を
 // 持っており、その説明が挙げている「水面」はここでも スイメン になります。
 // 合成してから気付くと、台本の長さぶんの合成時間がそのまま無駄になります。
 func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {
@@ -44,7 +44,7 @@ func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {
 // TestConvertToReadingLeavesLatinAlone は、アルファベットが変換されずに
 // そのまま残ることを検証します。
 //
-// **プロンプトが「略語はカタカナで書く」と求めている根拠です。** 変換が面倒を
+// プロンプトが「略語はカタカナで書く」と求めている根拠です。変換が面倒を
 // 見てくれないため、台本の側でカタカナにしておかないと VOICEVOX へ英字のまま
 // 渡ります。この振る舞いが変わったら、プロンプトの指示も見直す必要があります。
 func TestConvertToReadingLeavesLatinAlone(t *testing.T) {
@@ -91,10 +91,10 @@ func TestReadingAdapterLoadsDictionaryOnce(t *testing.T) {
 
 // TestConvertToReadingReadsDigits は、算用数字が読みへ変換されることを検証します。
 //
-// **既定では変換されません。** phonetic は数字をそのまま通すため、VOICEVOX が
+// 既定では変換されません。phonetic は数字をそのまま通すため、VOICEVOX が
 // 字面どおりに読みます（8日→ハチニチ、1人→イチニン、20歳→ニジュッサイ）。
 // 台本には日付も人数も出るので、readingOptions が WithNumberReading を渡している
-// ことがその防波堤です。落としても**静かに壊れます** — プレビューにも数字がそのまま
+// ことがその防波堤です。落としても静かに壊れます— プレビューにも数字がそのまま
 // 並ぶので、気づけるのは合成した音声を聴いたときだけです。
 func TestConvertToReadingReadsDigits(t *testing.T) {
 	t.Parallel()
@@ -120,8 +120,8 @@ func TestConvertToReadingReadsDigits(t *testing.T) {
 //
 // ReadingAdapter は「go-voicevox が合成の直前に通すのと同じ変換」を名乗っています。
 // 設定の宛先は違い（プレビューは phonetic.Option、合成は voicevox.Option）、
-// 型が違うので取り違えてもコンパイルは通ります。**片方だけに足した誤りは、
-// プレビューと実際の音声を突き合わせるまで表に出ません。**
+// 型が違うので取り違えてもコンパイルは通ります。片方だけに足した誤りは、
+// プレビューと実際の音声を突き合わせるまで表に出ません。
 //
 // 対応は readingOptions と NewVoiceAdapter の 2 か所にあります。ここでは
 // readingOptions が空でないことと、それが数字読みを含むことを固定します。

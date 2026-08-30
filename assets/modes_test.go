@@ -8,7 +8,7 @@ import (
 // TestLoadPromptsStripsFrontMatter は、プロンプト本文に front matter が
 // 残らないことを検証します。
 //
-// **ここが一番効くテストです。** front matter は説明であってプロンプトではないので、
+// ここが一番効くテストです。front matter は説明であってプロンプトではないので、
 // 残ったまま渡すと YAML が指示文の先頭に紛れ込み、しかも生成は成功してしまうため
 // 出力を読んでも気付けません。
 func TestLoadPromptsStripsFrontMatter(t *testing.T) {
@@ -27,7 +27,7 @@ func TestLoadPromptsStripsFrontMatter(t *testing.T) {
 	}
 
 	for mode, body := range prompts {
-		// 区切り「---」ではなく、**front matter のブロック**が残っていないかを見ます。
+		// 区切り「---」ではなく、front matter のブロックが残っていないかを見ます。
 		// 部品 _input.md の本文は "--- 元文章 ---" で始まるため、
 		// 単に "---" 始まりを禁じると正しい部品まで落ちます。
 		if strings.HasPrefix(body, frontMatterDelim+"\n") {
@@ -46,8 +46,8 @@ func TestLoadPromptsStripsFrontMatter(t *testing.T) {
 
 // TestLoadModesHasMetadata は、同梱するプロンプトがすべて説明を持つことを検証します。
 //
-// 表示名が無くてもキーで出るため画面は壊れませんが、それは**後から足した人を
-// 助けるための保険**であって、既定の状態ではありません。
+// 表示名が無くてもキーで出るため画面は壊れませんが、それは後から足した人を
+// 助けるための保険であって、既定の状態ではありません。
 func TestLoadModesHasMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -100,7 +100,7 @@ func TestLoadModesIsSorted(t *testing.T) {
 
 // TestLoadModesOrderIsUnique は、同梱するモードの order が重なっていないことを検証します。
 //
-// 重なってもキー順で決まるので画面は壊れませんが、**それは書き間違いの受け皿**であって、
+// 重なってもキー順で決まるので画面は壊れませんが、それは書き間違いの受け皿であって、
 // 意図した並びではありません。番号を振り直した拍子の重複はここで気付けます。
 func TestLoadModesOrderIsUnique(t *testing.T) {
 	t.Parallel()
@@ -151,8 +151,8 @@ func TestLoadModesMatchesPrompts(t *testing.T) {
 	}
 }
 
-// TestPartialsAreLoadedButNotOffered は、共通部品が**ビルダーには渡り、
-// 選択肢には出ない**ことを検証します。
+// TestPartialsAreLoadedButNotOffered は、共通部品がビルダーには渡り、
+// 選択肢には出ないことを検証します。
 //
 // どちらか片方でも間違うと壊れ方が違います。モードに混ざれば利用者に
 // 「_writing」という選択肢が見え、ビルダーに渡らなければ本文の

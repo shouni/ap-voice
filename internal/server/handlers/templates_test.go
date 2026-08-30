@@ -18,12 +18,12 @@ import (
 )
 
 // テンプレートは実行時にしか評価されないため、参照している値の名前が変わっても
-// コンパイルは通ります。**画面を開くまで壊れたと分からない**のがテンプレートの弱点で、
+// コンパイルは通ります。画面を開くまで壊れたと分からないのがテンプレートの弱点で、
 // ナビの重複や CSRF の hidden 欠落は実際にデプロイ後に見つかりました。
 //
 // ここでは builder と同じ組み立て方で読み、ハンドラーが渡すのと同じ型を流します。
 // map で流すと存在しないキーが "<no value>" になって素通りするため、
-// **必ず本物の View 構造体を使います。** それがフィールド名の改名を検知する条件です。
+// 必ず本物の View 構造体を使います。それがフィールド名の改名を検知する条件です。
 
 // parseTemplates は builder/handlers.go と同じ手順でテンプレートを読みます。
 // 画面ごとに独立したセットになります（キーは "history.html" などのファイル名）。
@@ -193,7 +193,7 @@ func optionPattern(value string) *regexp.Regexp {
 // TestFormKeepsSelectedMode は、投入済みのモードが選択された状態で戻ることを検証します。
 //
 // 選択肢の中身が front matter 由来になったことで、value（キー）と表示名が別物に
-// なりました。**selected が付くのはキーの一致で決まる**ので、表示名を変えても
+// なりました。selected が付くのはキーの一致で決まるので、表示名を変えても
 // 選択状態が外れないことをここで押さえます。
 func TestFormKeepsSelectedMode(t *testing.T) {
 	t.Parallel()
@@ -225,7 +225,7 @@ func TestFormKeepsSelectedMode(t *testing.T) {
 // CSRF トークンの hidden があることを検証します。
 //
 // 1 つでも欠けるとその操作だけが「不正なCSRFトークン」で弾かれ、しかも
-// **画面は正常に見える**ため気付きにくい。実際に投入フォームで踏みました。
+// 画面は正常に見えるため気付きにくい。実際に投入フォームで踏みました。
 func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 	t.Parallel()
 
@@ -299,7 +299,7 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 // 画面側が JSON.parse に失敗しないことを検証します。
 //
 // 以前はインラインスクリプトで `window.apVoiceStyles = {{ .StylesJSON }};` と埋めており、
-// 値が空だと `= ;` になって**その行だけでなく以降の読み込みごと壊れて**いました。
+// 値が空だと `= ;` になってその行だけでなく以降の読み込みごと壊れていました。
 // CSP の script-src を 'self' だけにするためインラインをやめ、data 属性へ移しています
 // （template.JS は </script> を素通しするので、属性コンテキストの方が安全でもあります）。
 // 壊れ方は変わりましたが、「空でも妥当な値を吐く」という守るべき性質は同じです。

@@ -17,8 +17,8 @@ const scriptTitleMaxLength = 60
 // 受け取るための gemini.Schema を構築します。
 //
 // 許可語彙は assets/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
-// speaker と style は独立した enum なので、**この形では「話者ごとに使えるスタイル」を
-// 表現できません**。実在しない組み合わせを選ばれても getStyleID がその話者の既定へ落とすため、
+// speaker と style は独立した enum なので、この形では「話者ごとに使えるスタイル」を
+// 表現できません。実在しない組み合わせを選ばれても getStyleID がその話者の既定へ落とすため、
 // 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担います
 // （現在はどのモードも "ノーマル" 固定なので、この enum は実質そこまで絞られています）。
 func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
@@ -50,7 +50,7 @@ func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
 		PropertyOrdering: []string{"speaker", "style", "text"},
 	}
 
-	// **配列ではなくオブジェクトを返させます。** タイトルは履歴の一覧に出すもので、
+	// 配列ではなくオブジェクトを返させます。タイトルは履歴の一覧に出すもので、
 	// 台本と同じ生成で作らせれば追加の API 呼び出しが要りません。
 	return &gemini.Schema{
 		Type: gemini.TypeObject,

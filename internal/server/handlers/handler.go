@@ -33,32 +33,32 @@ type Signer interface {
 type Handler struct {
 	queue     domain.TaskQueue
 	templates map[string]*template.Template
-	// modes は投入フォームに出す生成モードです。**生成時と同じ埋め込みテンプレートから
-	// 取ります。** フォーム側が別の一覧を持つと、画面に出したモードが worker に無い、
+	// modes は投入フォームに出す生成モードです。生成時と同じ埋め込みテンプレートから
+	// 取ります。フォーム側が別の一覧を持つと、画面に出したモードが worker に無い、
 	// という食い違いが起こり得ます。表示名と説明はプロンプトの front matter です。
 	modes []assets.Mode
 	// models は GEMINI_MODELS です。先頭が既定で、フォームでは選択肢になります。
 	models []string
-	// bucket と layout で出力先を決めます。**利用者には入力させません。**
+	// bucket と layout で出力先を決めます。利用者には入力させません。
 	bucket string
 	layout domain.StorageLayout
 	// musicBucket は、楽曲紹介モードの入力を楽曲生成サービスのジョブ ID から解決するために使います。
-	// **動画生成サービスと同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+	// 動画生成サービスと同じ規則です（gs://<musicBucket>/music/<jobID>/recipe.json）。
 	musicBucket string
 	// repo は履歴の一覧と台本の読み出しです。
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer Signer
-	// status は投入時に queued を記録します。**投入より先に書きます** —
+	// status は投入時に queued を記録します。投入より先に書きます—
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
 	status *jobfirestore.Recorder[domain.JobStatus]
 	// reading は、合成前に読みを確かめるために使います。
 	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
-	// **生成時と同じ組み立て**を通すので、画面に出るものと Gemini へ渡るものが一致します。
+	// 生成時と同じ組み立てを通すので、画面に出るものと Gemini へ渡るものが一致します。
 	renderer PromptRenderer
-	// speakers は編集画面の選択肢です。**話者ごとに実在するスタイルだけ**を出すために持ちます。
+	// speakers は編集画面の選択肢です。話者ごとに実在するスタイルだけを出すために持ちます。
 	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
 	// 落ちて指示が無視されます。
 	speakers *speaker.Registry
@@ -180,7 +180,7 @@ func (h *Handler) base(r *http.Request) baseView {
 	}
 }
 
-// recordQueued は、投入を記録します。**enqueue より先に呼びます。**
+// recordQueued は、投入を記録します。enqueue より先に呼びます。
 //
 // Cloud Tasks は数十ミリ秒で届くため、順序が逆だと Worker が書いた running を
 // あとから queued で上書きしかねません。記録できなくても投入は続けます。
@@ -193,7 +193,7 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 		Command: string(req.Command),
 		State:   jobfirestore.StateQueued,
 		Mode:    req.Mode,
-		// **一覧はこれで並べ替えます。** 入れないと全件がゼロ値になり、
+		// 一覧はこれで並べ替えます。入れないと全件がゼロ値になり、
 		// 新しい順が成立しません。作り直しでは CarryOver が最初の投入時刻を
 		// 引き継ぐので、履歴の位置は動きません。
 		QueuedAt: time.Now().UTC(),

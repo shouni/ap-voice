@@ -10,7 +10,7 @@ import (
 // TestPromptAdapterBuildsEveryMode は、同梱するすべてのモードが実際に組み立てられることを
 // 検証します。
 //
-// **部品の参照は実行時にしか解決されません。** {{template "_clarity" .}} の綴りを 1 文字
+// 部品の参照は実行時にしか解決されません。{{template "_clarity" .}} の綴りを 1 文字
 // 間違えても go build は通り、そのモードを選んだ人が生成を走らせるまで誰も気付けません。
 // モードを足す側から見ると、テストを書かなくてもここで拾われるのが要点です。
 func TestPromptAdapterBuildsEveryMode(t *testing.T) {
