@@ -22,8 +22,8 @@ cloud.google.com/go/monitoring v1.30.0 h1:r/d+JUbyKmJ8b07iznuKfzVzrIXTWxHQ3lBRm3
 cloud.google.com/go/monitoring v1.30.0/go.mod h1:htlUR0QWVMrjFzZmN4LGnMAve9xB/eduwjmINxVZ8RM=
 cloud.google.com/go/pubsub/v2 v2.6.2 h1:YPeEXnf4LZz9eVdpbXqBMRlxdwk4breCUsoIp7uDet4=
 cloud.google.com/go/pubsub/v2 v2.6.2/go.mod h1:JaFvWNVRk3Knoil/4M1ECeLOaI9D8drbmJWypQlK5aM=
-cloud.google.com/go/storage v1.65.1 h1:LRRpBJUTf+OXDPX9jZUKZ3mSLIsz3htG+qUpeNZovyA=
-cloud.google.com/go/storage v1.65.1/go.mod h1:UsS9OgFg/XHOSYakQ8ZtLWWeyGkk1WnmD/GsGfN0BHM=
+cloud.google.com/go/storage v1.66.0 h1:HwYx7m9Md/rzphAFshUeAWS3hNFsJQTgFrAu4RIRwpg=
+cloud.google.com/go/storage v1.66.0/go.mod h1:UsS9OgFg/XHOSYakQ8ZtLWWeyGkk1WnmD/GsGfN0BHM=
 cloud.google.com/go/trace v1.16.0 h1:GmQovzFc5F0CNfl0VLgL64aoTtu7xsM0YajW2GlG9+E=
 cloud.google.com/go/trace v1.16.0/go.mod h1:r+bdAn16dKLSV1G2D5v3e58IlQlizfxWrUfjx7kM7X0=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.36.0 h1:3SdxXLkgAfiHRWcGTq6fneq9jgoJzneiY0yPQnjoT2E=
@@ -153,8 +153,8 @@ github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46/go.mod h1:uAQ5PCi+MFsC7HjREoAz1BU+Mq60+05gifQSsHSDG/8=
 github.com/shouni/audio v1.4.0 h1:FEU/cwvzr/rTlSuXLvTif3KryqPMGZHrJJ7CpqoUoLc=
 github.com/shouni/audio v1.4.0/go.mod h1:VOSXgko/HpXPB6Yf7+IQQ87c+S55gjIsOuOJAj6m3iE=
-github.com/shouni/gcp-kit v1.14.0 h1:BqxDP5J2ewt6mqyZuaJPnHYb7JI0FWifHl0s9Rp9e+A=
-github.com/shouni/gcp-kit v1.14.0/go.mod h1:0C6yAgPULN2Ev0RCOOTs+HLU7+9Yl6l/+MzKjpu6l54=
+github.com/shouni/gcp-kit v1.14.1 h1:LEYPqgA6O05KsMCoSg/IfnQ7hrUKyWgsfxRvPcuoiI8=
+github.com/shouni/gcp-kit v1.14.1/go.mod h1:0C6yAgPULN2Ev0RCOOTs+HLU7+9Yl6l/+MzKjpu6l54=
 github.com/shouni/go-gemini-client v1.21.4 h1:+UVIAAQTZupa6eJk2Mgv59CdpLTceZDy4lBxeQXzXBo=
 github.com/shouni/go-gemini-client v1.21.4/go.mod h1:IH4s5hvGttCWkhn2GGXGJrr9Rbb0BC5B3j6CmjUxE9g=
 github.com/shouni/go-http-kit v1.10.0 h1:2L5zPnZpbEgxGeTsdDP5fKFcS6efpXOOvMBCcbzzlHQ=
