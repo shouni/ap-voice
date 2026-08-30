@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-utils/jobid"
 
@@ -152,7 +152,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(command)})
+	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
 }
 
 // APIUpdateScript は、台本を差し替えます。**合成はしません。**
@@ -208,14 +208,14 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		respond.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
 		return
 	}
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
+	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
 }
 
 // APIJobStatus は、ジョブの進行状況を返します。
 //
 // **投入した側が完了と失敗を知る唯一の手段です。** 成果物の有無だけでは、
 // まだ動いているのか失敗したのかを区別できません。書式は go-job-kit の
-// jobstatus.Status で、御三家と同じ形です。
+// jobfirestore.Status で、御三家と同じ形です。
 //
 // 記録が無い場合（ErrNotFound）は 404 です。ap-mcp 側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
@@ -231,7 +231,7 @@ func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	status, err := h.repo.Get(r.Context(), jobID)
 	switch {
-	case errors.Is(err, jobstatus.ErrNotFound):
+	case errors.Is(err, jobfirestore.ErrNotFound):
 		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
 		return
 	case err != nil:

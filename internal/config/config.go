@@ -194,8 +194,9 @@ type PipelineConfig struct {
 	//
 	// **三段のうち最も短く取ります。** アプリが自分で先に諦めることで、失敗を記録して
 	// Slack へ通知してから終われます。逆順にすると Cloud Tasks が先にリクエストを
-	// 打ち切り、プロセスは SIGTERM で落ちて通知の機会を失います。キューは
-	// max_attempts = 1 なので再試行も来ません。
+	// 打ち切り、プロセスは SIGTERM で落ちて通知の機会を失います。voice-queue は
+	// max_attempts = 2 ですが、**この不等式が守られていないと 2 回目が 1 回目と
+	// 重なりえます**。再配信が直列に届くことに再実行ガードが依存しています。
 	Timeout time.Duration `env:"PIPELINE_TIMEOUT"`
 }
 
@@ -210,6 +211,12 @@ type StorageConfig struct {
 	// **ap-mv と同じ環境変数・同じ規則です**（gs://<MusicBucket>/music/<jobID>/recipe.json）。
 	// 読む側が 2 つに増えたので、片方だけ別名にすると設定を移すときに取り違えます。
 	MusicBucket string `env:"AP_MUSIC_BUCKET" envDefault:"ap-music"`
+	// FirestoreDatabase はジョブ状態を置く Firestore データベースです。
+	//
+	// 名前付きデータベースを使うのは、(default) の枠を占めないためです。
+	// コレクション名は設定にしません（サービスの身元であってデプロイごとに
+	// 変わる値ではないため。repository の statusCollection を参照）。
+	FirestoreDatabase string `env:"FIRESTORE_DATABASE" envDefault:"job-status"`
 }
 
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。

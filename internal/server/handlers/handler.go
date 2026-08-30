@@ -12,7 +12,7 @@ import (
 
 	"github.com/shouni/gcp-kit/auth/session"
 
-	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-voicevox/speaker"
 
@@ -53,7 +53,7 @@ type Handler struct {
 	// status は投入時に queued を記録します。**投入より先に書きます** —
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
-	status *jobstatus.Recorder[domain.JobStatus]
+	status *jobfirestore.Recorder[domain.JobStatus]
 	// reading は、合成前に読みを確かめるために使います。
 	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
@@ -109,7 +109,7 @@ type HandlerOptions struct {
 	Speakers    *speaker.Registry
 	Renderer    PromptRenderer
 	Reading     ReadingConverter
-	JobStatus   *jobstatus.Recorder[domain.JobStatus]
+	JobStatus   *jobfirestore.Recorder[domain.JobStatus]
 }
 
 // NewHandler は Handler を生成します。
@@ -192,7 +192,7 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	h.status.Record(ctx, req.JobID, domain.JobStatus{
 		JobID:   req.JobID,
 		Command: string(req.Command),
-		State:   jobstatus.StateQueued,
+		State:   jobfirestore.StateQueued,
 		Mode:    req.Mode,
 	}, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、前回の成果物の在り処とモードを残します。

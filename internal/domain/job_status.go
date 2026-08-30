@@ -1,33 +1,36 @@
 package domain
 
-import "github.com/shouni/go-job-kit/jobstatus"
+import "github.com/shouni/go-job-firestore/jobfirestore"
 
 // JobStatus は、ジョブの進行状況に ap-voice の成果物の在り処を足した型です。
 //
-// go-job-kit の Status は**成果物の場所を持ちません**。単一 URI・出力ディレクトリ・
+// go-job-firestore の Status は**成果物の場所を持ちません**。単一 URI・出力ディレクトリ・
 // 複数 URI とサービスごとに形が違うため、埋め込んだ型を利用側が定義する決まりです。
-// Go は埋め込みを JSON でフラットに展開するので、保存済みの status.json は
-// そのまま読み書きできます。
+// 埋め込みは Firestore でも JSON でもフラットに展開されるので、ドキュメントと
+// レスポンス JSON は同じ形になります。
+//
+// **firestore タグを省かないでください。** 省くと保存されるフィールド名が Go の
+// 識別子（AudioURI）になり、json タグで組み立てた既存のレスポンスと食い違います。
 //
 // **これが無いと「できた」としか言えません。** 状態だけ見ても音声の在り処が
 // 分からず、投入した側は成果物へ辿り着けません。
 type JobStatus struct {
-	jobstatus.Status
+	jobfirestore.Status
 	// AudioURI は音声の保存先（gs://）です。合成が完了したジョブにだけ入ります。
 	//
 	// **署名付き URL はここに置きません。** 1 時間で切れるうえ発行に計算が要るので、
 	// 30 秒ごとのポーリングで返すには向きません。再生できるリンクが要るときは
 	// 都度発行する別の口を使います。
-	AudioURI string `json:"audio_uri,omitempty"`
+	AudioURI string `json:"audio_uri,omitempty" firestore:"audio_uri,omitempty"`
 	// ScriptURI は台本の保存先（gs://）です。generate の時点から入ります。
-	ScriptURI string `json:"script_uri,omitempty"`
+	ScriptURI string `json:"script_uri,omitempty" firestore:"script_uri,omitempty"`
 	// Mode は台本を作ったときの形式（tech_solo など）です。
 	//
 	// **状態に残さないと、後から振り返る手段がありません。** 出来上がった台本から
 	// 分かるのは話者の組み合わせまでで、ずんだもん 1 人の台本が tech_solo だったか
 	// tech_howto だったかは区別できません。長さや口調の目安を実測で見直すには、
 	// どのモードが何を作ったかが要ります。
-	Mode string `json:"mode,omitempty"`
+	Mode string `json:"mode,omitempty" firestore:"mode,omitempty"`
 }
 
 // CarryFrom は、前回の記録から**今回の組み立てでは分からない値**を引き継ぎます。

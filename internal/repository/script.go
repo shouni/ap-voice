@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shouni/go-job-kit/jobstatus"
+	"cloud.google.com/go/firestore"
+
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-utils/jobid"
@@ -28,17 +30,17 @@ type Repository struct {
 	// そこからの相対名なので、呼び出しごとにバケットを連れ回す必要がありません。
 	store  remoteio.Store
 	layout domain.StorageLayout
-	// status はジョブの進行状況です。**成果物と同じジョブディレクトリ**に置くので、
-	// 履歴の削除（プレフィックスの一括削除）で状態ファイルも一緒に片付きます。
-	status *jobstatus.Store[domain.JobStatus]
+	// status はジョブの進行状況です。**成果物とは別の場所（Firestore）にあるので、
+	// プレフィックスの一括削除では片付きません。** Delete が明示的に消します。
+	status *jobfirestore.Store[domain.JobStatus]
 }
 
-// Get は、ジョブの状態を読みます。jobstatus.StatusStore を満たします。
+// Get は、ジョブの状態を読みます。jobfirestore.StatusStore を満たします。
 func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, error) {
 	return r.status.Get(ctx, jobID)
 }
 
-// Save は、ジョブの状態を書きます。jobstatus.StatusStore を満たします。
+// Save は、ジョブの状態を書きます。jobfirestore.StatusStore を満たします。
 //
 // **Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。**
 // 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
@@ -50,8 +52,19 @@ func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobSt
 // 1 件ずつ読むと件数分の往復になるため並べますが、GCS を叩きすぎない程度に抑えます。
 const titleFetchParallelism = 8
 
+// statusCollection はジョブ状態を置く Firestore のコレクションです。
+//
+// **成果物のバケットと同じ語彙にしてあります。** コレクションはサービスごとに 1 本で、
+// 共有 1 本に判別フィールドを持たせる形は採りません（絞り忘れが落ちずに他サービスの
+// ジョブを履歴へ混ぜるためです）。設定にせず定数なのは、これがサービスの身元であって
+// デプロイごとに変わる値ではないからです。
+const statusCollection = "ap-voice"
+
 // NewRepository は Repository を構築します。
-func NewRepository(store remoteio.Store, bucket string) (*Repository, error) {
+//
+// firestore は nil でも構築できます。その場合ジョブ状態の読み書きだけが失敗し、
+// 成果物の読み出しは動きます（テストが状態を要求しないため）。
+func NewRepository(store remoteio.Store, bucket string, firestore *firestore.Client) (*Repository, error) {
 	if store == nil {
 		return nil, fmt.Errorf("ストレージが指定されていません")
 	}
@@ -62,10 +75,7 @@ func NewRepository(store remoteio.Store, bucket string) (*Repository, error) {
 	scoped := store.Sub(remoteio.BuildURI(remoteio.SchemeGCS, bucket, ""))
 	return &Repository{
 		store: scoped, layout: layout,
-		// UnderJobDir は base/{jobID}/status.json を指します。base はスコープ内の
-		// 相対名なので、ここにバケットは現れません。
-		status: jobstatus.NewStore[domain.JobStatus](scoped,
-			jobstatus.UnderJobDir(strings.TrimSuffix(layout.VoicePrefix(), "/"))),
+		status: jobfirestore.NewStore[domain.JobStatus](firestore, statusCollection),
 	}, nil
 }
 
@@ -225,6 +235,18 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 			return fmt.Errorf("削除に失敗しました (%s): %w", entry.URI, err)
 		}
 	}
+	// **状態は成果物と別の場所にあるので、ここで消さないと孤児が残ります。**
+	// 以前は状態ファイルがジョブディレクトリ配下にあり、上の一括削除で一緒に
+	// 片付いていました。Firestore へ移したことで、その連動が失われています。
+	//
+	// 失敗しても削除そのものは成功として返します。成果物は既に消えており、
+	// 呼び出し側の依頼は果たされているためです。残るのは観測用の記録だけなので、
+	// ここでエラーを返すと「消えたのに失敗した」と見える分だけ害が大きくなります。
+	if err := r.status.Delete(ctx, jobID); err != nil {
+		slog.WarnContext(ctx, "ジョブ状態の削除に失敗しました。孤児が残ります",
+			"job_id", jobID, "error", err)
+	}
+
 	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(entries))
 	return nil
 }

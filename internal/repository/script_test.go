@@ -103,7 +103,10 @@ func newStore(t *testing.T, n int) (*fakeStore, []string) {
 func newRepo(t *testing.T, store *fakeStore) *Repository {
 	t.Helper()
 
-	repo, err := NewRepository(store, "test")
+	// Firestore クライアントは渡しません。ここで検証するのは成果物の読み書きで、
+	// ジョブ状態には触れないためです。削除は状態の消し込みに失敗しても成功として
+	// 返すので（孤児は警告ログに残ります）、この構成でも Delete の検証は通ります。
+	repo, err := NewRepository(store, "test", nil)
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}

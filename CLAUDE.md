@@ -175,9 +175,10 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **Job state lives in `go-job-kit`**, as it does in the siblings: `jobstatus.Status` written by
-  `UnderJobDir` to `voice/<jobID>/status.json`, so deleting a job's prefix takes its state with
-  it. The record also carries `mode`, which **nothing else preserves**: a finished script only
+- **Job state lives in `go-job-firestore`**, unlike the siblings: `jobfirestore.Status` written to
+  Firestore `ap-voice/<jobID>`, **outside the job's GCS prefix**. Deleting a job's objects no longer
+  takes its state with it, so `Repository.Delete` removes the document explicitly; if that fails the
+  delete still succeeds and the orphan is logged. The record also carries `mode`, which **nothing else preserves**: a finished script only
   reveals the speaker line-up, so a one-speaker script cannot be told apart as `tech_solo` or
   `tech_howto`, and revising a mode's length or tone from real output needs to know which mode
   produced what. `synthesize` carries no mode (the script already exists), so

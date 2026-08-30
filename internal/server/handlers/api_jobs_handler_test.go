@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -185,7 +185,7 @@ func TestAPIUpdateScriptRejectsBadJobID(t *testing.T) {
 	}
 }
 
-// recordingStore は、保存の順序を記録する jobstatus.StatusStore です。
+// recordingStore は、保存の順序を記録する jobfirestore.StatusStore です。
 type recordingStore struct {
 	order *[]string
 	// saved は最後に書かれた状態です。中身まで見たいテストだけが渡します。
@@ -226,7 +226,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	var order []string
 	var saved domain.JobStatus
 	h := apiHandler(t, &savingRepo{})
-	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order, saved: &saved})
+	h.status = jobfirestore.NewRecorder[domain.JobStatus](recordingStore{order: &order, saved: &saved})
 	h.queue = recordingQueue{order: &order}
 
 	req := httptest.NewRequest("POST", "/api/jobs",
@@ -246,8 +246,8 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body["status"] != string(jobstatus.StateQueued) {
-		t.Errorf("status = %q, want %q", body["status"], jobstatus.StateQueued)
+	if body["status"] != string(jobfirestore.StateQueued) {
+		t.Errorf("status = %q, want %q", body["status"], jobfirestore.StateQueued)
 	}
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
@@ -442,7 +442,7 @@ func TestAPIEnqueueCreatesJobFromSuppliedScript(t *testing.T) {
 	var order []string
 	repo := &savingRepo{}
 	h := apiHandler(t, repo)
-	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
+	h.status = jobfirestore.NewRecorder[domain.JobStatus](recordingStore{order: &order})
 	h.queue = recordingQueue{order: &order}
 
 	rec := postJSON(t, h.APIEnqueue, "/api/jobs", `{
@@ -608,7 +608,7 @@ func getJobStatus(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 func TestAPIJobStatusNotRecordedIs404(t *testing.T) {
 	t.Parallel()
 
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobstatus.ErrNotFound)})
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobfirestore.ErrNotFound)})
 	if rec := getJobStatus(t, h); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
 	}
@@ -620,7 +620,7 @@ func TestAPIJobStatusNotRecordedIs404(t *testing.T) {
 func TestAPIJobStatusUnreadableIsNot404(t *testing.T) {
 	t.Parallel()
 
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobstatus.ErrUnavailable)})
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable)})
 	rec := getJobStatus(t, h)
 	if rec.Code == http.StatusNotFound {
 		t.Fatalf("status = 404: 読めないだけのジョブを未記録と答えている: %s", rec.Body.String())
@@ -630,12 +630,12 @@ func TestAPIJobStatusUnreadableIsNot404(t *testing.T) {
 	}
 }
 
-// 読めたら 200 で jobstatus.Status のフラットな形のまま返すこと。
+// 読めたら 200 で jobfirestore.Status のフラットな形のまま返すこと。
 func TestAPIJobStatusReturnsRecord(t *testing.T) {
 	t.Parallel()
 
 	h := apiHandler(t, &statusRepo{status: domain.JobStatus{
-		Status:   jobstatus.Status{State: jobstatus.StateRunning},
+		Status:   jobfirestore.Status{State: jobfirestore.StateRunning},
 		AudioURI: "gs://test/voice/x/audio.wav",
 	}})
 	rec := getJobStatus(t, h)
@@ -647,7 +647,7 @@ func TestAPIJobStatusReturnsRecord(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("応答が JSON ではない: %v", err)
 	}
-	if got["state"] != string(jobstatus.StateRunning) {
+	if got["state"] != string(jobfirestore.StateRunning) {
 		t.Errorf("state = %v, want running", got["state"])
 	}
 	if got["audio_uri"] != "gs://test/voice/x/audio.wav" {
