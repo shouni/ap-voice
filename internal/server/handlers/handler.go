@@ -13,7 +13,6 @@ import (
 	"github.com/shouni/gcp-kit/auth/session"
 
 	"github.com/shouni/go-job-firestore/jobfirestore"
-	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -79,7 +78,7 @@ type PromptRenderer interface {
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
-	List(ctx context.Context, page, perPage int) ([]repository.Job, paging.PageMeta, error)
+	List(ctx context.Context, page, perPage int) ([]repository.Job, jobfirestore.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
 	SaveScript(ctx context.Context, jobID string, script domain.Script) error
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
@@ -194,6 +193,10 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 		Command: string(req.Command),
 		State:   jobfirestore.StateQueued,
 		Mode:    req.Mode,
+		// **一覧はこれで並べ替えます。** 入れないと全件がゼロ値になり、
+		// 新しい順が成立しません。作り直しでは CarryOver が最初の投入時刻を
+		// 引き継ぐので、履歴の位置は動きません。
+		QueuedAt: time.Now().UTC(),
 	}, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、前回の成果物の在り処とモードを残します。
 		next.CarryFrom(prev)

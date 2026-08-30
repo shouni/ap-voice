@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-firestore/jobfirestore"
-	"github.com/shouni/go-job-kit/paging"
 	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -72,11 +71,11 @@ type apiEnqueue struct {
 
 // apiJobPage は、ページ付きの一覧応答です。
 //
-// **メタデータの形は go-job-kit の paging.PageMeta です。** 御三家の一覧と同じ
+// **メタデータの形は go-job-firestore の PageMeta です。** JSON タグは御三家と同じ
 // JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
 type apiJobPage struct {
-	Jobs []apiJob        `json:"jobs"`
-	Page paging.PageMeta `json:"page"`
+	Jobs []apiJob              `json:"jobs"`
+	Page jobfirestore.PageMeta `json:"page"`
 }
 
 // APIEnqueue は、入力ソースから新しいジョブを投入します。
@@ -214,7 +213,7 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 // APIJobStatus は、ジョブの進行状況を返します。
 //
 // **投入した側が完了と失敗を知る唯一の手段です。** 成果物の有無だけでは、
-// まだ動いているのか失敗したのかを区別できません。書式は go-job-kit の
+// まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
 // jobfirestore.Status で、御三家と同じ形です。
 //
 // 記録が無い場合（ErrNotFound）は 404 です。ap-mcp 側はこれを unknown として扱い、

@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-kit/paging"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -31,7 +31,7 @@ func pageParam(r *http.Request) int {
 type historyView struct {
 	baseView
 	Jobs []repository.Job
-	Page paging.PageMeta
+	Page jobfirestore.PageMeta
 }
 
 // detailView は詳細画面に渡す値です。

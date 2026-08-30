@@ -207,7 +207,7 @@ sequenceDiagram
 
     Note over User, Slack: 2. 台本を確認・修正する
     User->>Web: GET /history
-    Web->>Store: ジョブを一覧
+    Web->>Firestore: ジョブを一覧（成果物は読みません）
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
     Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
@@ -268,7 +268,6 @@ ap-voice/
 * **[caarlos0/env](https://github.com/caarlos0/env)**: 環境変数から設定構造体への読み込み
 * **[shouni/go-notify](https://github.com/shouni/go-notify)**: Slack 通知の組み立てと送信
 * **[shouni/go-job-firestore](https://github.com/shouni/go-job-firestore)**: ジョブ状態の記録 (`jobfirestore`)。Firestore の `job-status` データベース、コレクションは `ap-voice`
-* **[shouni/go-job-kit](https://github.com/shouni/go-job-kit)**: 一覧のページング (`paging`)
 * **[shouni/go-utils](https://github.com/shouni/go-utils)**: ジョブ ID の発行・検証 (`jobid`)
 * **[gopkg.in/yaml.v3](https://gopkg.in/yaml.v3)**: プロンプト冒頭の front matter の解析
 

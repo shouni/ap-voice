@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shouni/go-job-kit/paging"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -110,7 +110,7 @@ func TestTemplatesRender(t *testing.T) {
 			template: "history.html",
 			view: historyView{
 				baseView: testBaseView("/history"),
-				Page:     paging.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
+				Page:     jobfirestore.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
 				Jobs: []repository.Job{
 					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true},
 					// 台本が読めなかった場合はジョブ ID が題名に入ります。

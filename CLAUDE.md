@@ -198,9 +198,11 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   that may say `succeeded`, disarming the guard for the next delivery. Failure is recorded on the
   un-cancelled notification context for the same reason the notification is: a timed-out context
   records nothing.
-  `Repository` satisfies `jobstatus.StatusStore`, which is why the bucket and prefix are assembled
-  in one place. Listing uses `paging.LoadPage`, so page maths and `PageMeta`'s JSON match the
-  siblings and a page costs only its own rows.
+  `Repository` satisfies `jobfirestore.StatusStore`, which is why the store is assembled in one
+  place. **Listing reads no artifacts at all**: title, audio presence and creation time all come
+  out of the record, so a page costs one query plus a count instead of a full bucket scan.
+  `script_test.go` keeps the bucket empty and still expects a page — without that, "just in case"
+  reads of the artifacts creep back.
 - **One resource, one route.** `auth.Protected(m2m, session)` tries an OIDC bearer first and falls
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
