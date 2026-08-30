@@ -37,7 +37,7 @@ func testModesHandler(t *testing.T, renderer PromptRenderer, modes ...assets.Mod
 // TestModesListDoesNotAssemblePrompts は、一覧がプロンプトを組み立てないことを
 // 検証します。
 //
-// **一覧に要るのは front matter だけです。** 7 モード分の本文は合わせて 1 万字を
+// 一覧に要るのは front matter だけです。7 モード分の本文は合わせて 1 万字を
 // 超えるため、読むか分からないものを毎回組み立てるとページが重くなるだけです。
 // 本文が要るのは詳細で、MCP のように機械が読む場合も、索引と本文を別々に
 // 取れる方が無駄がありません。
@@ -67,7 +67,7 @@ func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 // TestModeDetailPicksTheSampleFromFrontMatter は、入力の型に合った仮の入力が
 // 一度で選ばれることを検証します。
 //
-// **以前は素のテキストで試し、失敗したらレシピで試し直していました。**
+// 以前は素のテキストで試し、失敗したらレシピで試し直していました。
 // 当てずっぽうだと、本当の組み立て失敗も「型が違っただけ」に見えて隠れます。
 // どちらを渡すかは front matter の input が最初から知っています。
 func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
@@ -87,7 +87,7 @@ func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
 	if strings.Contains(body, "組み立てに失敗しました") {
 		t.Error("エラー表示になっています")
 	}
-	// **1 回だけです。** 型が分かっているので、外して試す必要がありません。
+	// 1 回だけです。型が分かっているので、外して試す必要がありません。
 	if len(renderer.got) != 1 {
 		t.Errorf("呼び出し回数 = %d, want 1", len(renderer.got))
 	}

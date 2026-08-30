@@ -20,7 +20,7 @@ import (
 
 // API は、ブラウザではなく機械（MCP サーバーなど）から使う口です。
 //
-// **画面と同じミドルウェアの下にあります。** ProtectedMiddleware が OIDC の
+// 画面と同じミドルウェアの下にあります。ProtectedMiddleware が OIDC の
 // Bearer とセッションの両方を通すため、同じ URL を人も機械も叩けます。
 //
 // 台本の検証は画面と同じ scriptFromLines を通します。別に書くと、
@@ -39,7 +39,7 @@ type apiJob struct {
 
 // apiAccepted は投入を受け付けたときの応答です。
 //
-// **姉妹サービスと同じ封筒**です（MCP サーバーの client.TaskQueuedResponse が
+// 姉妹サービスと同じ封筒です（MCP サーバーの client.TaskQueuedResponse が
 // status と job_id を読みます）。ここだけ形が違うと、共通クライアントに
 // ap-voice 用の分岐が要ります。
 type apiAccepted struct {
@@ -51,7 +51,7 @@ type apiAccepted struct {
 
 // apiEnqueue は、ジョブ投入の要求です。
 //
-// **入口は 2 つあります。** 入力ソースから AI に書かせるか（generate 系）、
+// 入口は 2 つあります。入力ソースから AI に書かせるか（generate 系）、
 // 既に手元にある台本をそのまま渡すか（synthesize）です。後者は呼び出し側が
 // 自分で書いた台本を喋らせる経路で、Gemini を呼びません。
 type apiEnqueue struct {
@@ -59,7 +59,7 @@ type apiEnqueue struct {
 	InputURI string `json:"input_uri,omitempty"`
 	// MusicJobID は、入力が楽曲レシピのときのジョブ ID です。
 	//
-	// **解決はここでやります。** 呼び出し側に gs:// を組み立てさせると、
+	// 解決はここでやります。呼び出し側に gs:// を組み立てさせると、
 	// 置き場の規則がサービスの外へ漏れ、変えるときに全員へ知らせて回ることに
 	// なります。画面の「楽曲レシピ」タブと同じ関数を通ります。
 	MusicJobID string `json:"music_job_id,omitempty"`
@@ -71,7 +71,7 @@ type apiEnqueue struct {
 
 // apiJobPage は、ページ付きの一覧応答です。
 //
-// **メタデータの形は go-job-firestore の PageMeta です。** JSON タグは姉妹サービスと同じ
+// メタデータの形は go-job-firestore の PageMeta です。JSON タグは姉妹サービスと同じ
 // JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
 type apiJobPage struct {
 	Jobs []apiJob              `json:"jobs"`
@@ -122,7 +122,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		AIModel:   body.AIModel,
 	}
 
-	// **持ち込まれた台本は、投入の前に保存します。** 保存先はジョブ ID から決まるので、
+	// 持ち込まれた台本は、投入の前に保存します。保存先はジョブ ID から決まるので、
 	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
 	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
 	if command == domain.CommandSynthesize {
@@ -154,7 +154,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
 }
 
-// APIUpdateScript は、台本を差し替えます。**合成はしません。**
+// APIUpdateScript は、台本を差し替えます。合成はしません。
 //
 // 保存と合成を分けているのは、クライアントが何度か直してから 1 度だけ
 // 合成できるようにするためです。画面はその 2 つを 1 つのボタンにまとめていますが、
@@ -171,7 +171,7 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// **画面と同じ検証です。** 実在しない話者・スタイルは、合成時に既定へ黙って
+	// 画面と同じ検証です。実在しない話者・スタイルは、合成時に既定へ黙って
 	// 落ちて指示が消えるため、保存する前に弾きます。
 	cleaned, err := h.validateScript(script)
 	if err != nil {
@@ -212,14 +212,14 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 
 // APIJobStatus は、ジョブの進行状況を返します。
 //
-// **投入した側が完了と失敗を知る唯一の手段です。** 成果物の有無だけでは、
+// 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
 // まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
 // jobfirestore.Status で、姉妹サービスと同じ形です。
 //
 // 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
 //
-// **読めなかっただけの場合は 404 と混ぜません。** 権限や GCS 障害（ErrUnavailable）
+// 読めなかっただけの場合は 404 と混ぜません。権限や GCS 障害（ErrUnavailable）
 // まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
 // ポーリング側が unknown として静かに受け入れてしまいます。
 func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +252,7 @@ type apiReadingLine struct {
 	Text string `json:"text"`
 	// Reading は合成時に実際に読まれるカタカナです。
 	Reading string `json:"reading"`
-	// Changed は、変換で表記が変わったかどうかです。**確かめる価値がある行の目印**で、
+	// Changed は、変換で表記が変わったかどうかです。確かめる価値がある行の目印で、
 	// カタカナだけの行は変換しても変わらないため false になります。
 	Changed bool `json:"changed"`
 }
@@ -262,9 +262,9 @@ type apiReadingResponse struct {
 	Lines []apiReadingLine `json:"lines"`
 }
 
-// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。**合成はしません。**
+// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。合成はしません。
 //
-// **読みは自明ではありません。**「田中」「同姓同名」のような語がどう読まれるかは、
+// 読みは自明ではありません。「田中」「同姓同名」のような語がどう読まれるかは、
 // 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
 // 気付くことになるため、その前に確かめられるようにします。
 //
@@ -304,7 +304,7 @@ type apiAudio struct {
 	JobID string `json:"job_id"`
 	// AudioURI は保存先です。期限が無いので、記録や再取得の手掛かりになります。
 	AudioURI string `json:"audio_uri"`
-	// SignedURL は誰でも再生・取得できるリンクです。**期限があります。**
+	// SignedURL は誰でも再生・取得できるリンクです。期限があります。
 	SignedURL string `json:"signed_url"`
 	// ExpiresInSeconds は SignedURL の有効期間です。
 	ExpiresInSeconds int `json:"expires_in_seconds"`
@@ -323,7 +323,7 @@ func (h *Handler) apiJobID(w http.ResponseWriter, r *http.Request) (string, bool
 // validateScript は、台本の各行が実在する話者・スタイルであることを確かめ、
 // 本文が空の行を落とした台本を返します。
 //
-// **フォームと API の共通の入口です。** 片方だけに書くと、もう片方から
+// フォームと API の共通の入口です。片方だけに書くと、もう片方から
 // 実在しない組み合わせが保存できてしまいます。
 func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	if len(script.Lines) == 0 {

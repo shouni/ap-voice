@@ -397,7 +397,7 @@ func TestPipelineNotifications(t *testing.T) {
 
 }
 
-// 上限を超えたら打ち切り、**失敗通知はその外側で送ります。**
+// 上限を超えたら打ち切り、失敗通知はその外側で送ります。
 //
 // 通知に打ち切り済みの ctx を渡すと通知自体が送れず、「Cloud Tasks より先に諦めて
 // 失敗を知らせる」という三段の目的が達成できません。ここはその退行を見ています。
@@ -444,7 +444,7 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 		if got.ctx.Err() != nil {
 			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctx.Err())
 		}
-		// **通知側が打ち切りだと判別できること。** ここが切れていると、
+		// 通知側が打ち切りだと判別できること。ここが切れていると、
 		// SlackAdapter は時間切れを普通の失敗として出してしまいます。
 		// 途中の 1 箇所でも %w を %v に変えると落ちます。
 		if !errors.Is(got.err, context.DeadlineExceeded) {
@@ -483,7 +483,7 @@ func (s *memoryStatusStore) Save(_ context.Context, _ string, status domain.JobS
 // TestPipelineRecordsArtifactLocations は、完了した状態に成果物の在り処が
 // 載ることを検証します。
 //
-// **「できた」だけでは投入した側が成果物へ辿り着けません。** 音声は publish が
+// 「できた」だけでは投入した側が成果物へ辿り着けません。音声は publish が
 // 作ったときだけ入り、generate は台本までなので入りません。ここを分けないと、
 // 台本しか無いジョブに音声の URI を書くことになります。
 func TestPipelineRecordsArtifactLocations(t *testing.T) {
@@ -609,7 +609,8 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:   jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded},
+			JobID:    "job-1",
+			State:    jobfirestore.StateSucceeded,
 			AudioURI: "gs://bucket/voice/job-1/audio.wav",
 		},
 	}
@@ -664,7 +665,8 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 		found: true,
 		saved: domain.JobStatus{
 			// 直前の generate は succeeded だったが、投入時に queued へ戻っている。
-			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
+			JobID:     "job-1",
+			State:     jobfirestore.StateQueued,
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},
 	}
@@ -705,7 +707,7 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 
 	store := &memoryStatusStore{
 		found:  true,
-		saved:  domain.JobStatus{Status: jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded}},
+		saved:  domain.JobStatus{JobID: "job-1", State: jobfirestore.StateSucceeded},
 		getErr: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable),
 	}
 
@@ -748,7 +750,7 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 // TestPipelineKeepsModeOnSynthesize は、二段で進めたジョブがモードを失わないことを
 // 検証します。
 //
-// **synthesize はモードを持ちません。** 台本がすでにある前提のコマンドだからです。
+// synthesize はモードを持ちません。台本がすでにある前提のコマンドだからです。
 // 画面から作ると必ず generate → synthesize と分かれるため、引き継ぎが無いと
 // 「画面から作ったジョブだけモードが空」という、記録として一番使えない形になります。
 func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
@@ -758,7 +760,8 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
+			JobID:     "job-1",
+			State:     jobfirestore.StateQueued,
 			Mode:      "tech_duet",
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},

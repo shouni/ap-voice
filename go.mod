@@ -11,13 +11,13 @@ require (
 	github.com/shouni/gcp-kit v1.14.1
 	github.com/shouni/go-gemini-client v1.21.4
 	github.com/shouni/go-http-kit v1.10.0
-	github.com/shouni/go-job-firestore v1.0.1
+	github.com/shouni/go-job-firestore v1.0.3
 	github.com/shouni/go-notify v1.3.1
 	github.com/shouni/go-prompt-kit v1.7.0
 	github.com/shouni/go-remote-io v1.11.0
 	github.com/shouni/go-serve-kit v1.0.0
 	github.com/shouni/go-utils v1.7.1
-	github.com/shouni/go-voicevox v1.10.3
+	github.com/shouni/go-voicevox v1.10.4
 	github.com/shouni/go-web-reader v1.5.0
 	github.com/shouni/netarmor v1.4.0
 	go.yaml.in/yaml/v3 v3.0.5

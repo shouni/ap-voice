@@ -15,7 +15,7 @@ import (
 type Command string
 
 const (
-	// CommandGenerate は、入力ソースから台本を生成して保存します。**音声は作りません。**
+	// CommandGenerate は、入力ソースから台本を生成して保存します。音声は作りません。
 	// 台本を確認・修正してから合成へ進めるようにするためです。
 	CommandGenerate Command = "generate"
 	// CommandSynthesize は、台本から音声を作ります。台本は Script で直接渡すか、
@@ -23,7 +23,7 @@ const (
 	CommandSynthesize Command = "synthesize"
 	// CommandGenerateAndSynthesize は、台本を作ってそのまま音声まで作ります。
 	//
-	// **確認を省く選択です。** 台本を直せるようになった今、確認を挟むかどうかは
+	// 確認を省く選択です。台本を直せるようになった今、確認を挟むかどうかは
 	// 利用者が決められます。短いモード（ニュース、楽曲紹介）のように直す前提が
 	// 薄いものでは、履歴を開いてもう一度押す手間の方が大きくなります。
 	//

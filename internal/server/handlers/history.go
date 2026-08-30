@@ -65,7 +65,7 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 
 // UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
 //
-// **台本はタスクに載せません。** 先に保存してから JobID だけを渡すことで、
+// 台本はタスクに載せません。先に保存してから JobID だけを渡すことで、
 // Cloud Tasks の 1MB 上限に台本の長さが当たらず、Worker 側も
 // 「保存済み台本を読む」既存の経路をそのまま使えます。
 func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +108,7 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 // scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
 //
 // 組み立てるだけで、実在するかの確認は validateScript が行います。
-// **API と同じ関数を通す**ため、どちらか一方だけが緩くなることがありません。
+// API と同じ関数を通すため、どちらか一方だけが緩くなることがありません。
 func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 	speakers := r.Form["speaker"]
 	styles := r.Form["style"]

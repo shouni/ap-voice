@@ -25,7 +25,7 @@ var slackTitles = notify.Titles{
 
 // timeoutTitles は、PIPELINE_TIMEOUT で打ち切ったときの見出しです。
 //
-// **時間切れは「失敗」と対処が違います。** 設定や入力が壊れているわけではなく、
+// 時間切れは「失敗」と対処が違います。設定や入力が壊れているわけではなく、
 // もう一度流せば通ることも、台本を分ければ通ることもあります。同じ ❌ で並ぶと、
 // 一覧を見たときにどちらなのか開くまで分かりません。
 var timeoutTitles = notify.Titles{
@@ -51,7 +51,7 @@ var _ domain.Notifier = (*SlackAdapter)(nil)
 // NewSlackAdapter は新しいアダプターインスタンスを作成します。
 // webhookURL が空の場合は通知を行わないアダプターを返すため、
 // 呼び出し側で未設定時の分岐を持つ必要はありません。
-// serviceURL には**公開側（Web 面）の URL**を渡します。通知から辿る詳細画面は
+// serviceURL には公開側（Web 面）の URLを渡します。通知から辿る詳細画面は
 // Worker 面ではなく Web 面にあり、Worker の URL を入れるとリンクが非公開サービスを
 // 指して 403 になります。
 func NewSlackAdapter(httpClient httpkit.Requester, webhookURL, serviceURL string) (*SlackAdapter, error) {
@@ -90,7 +90,7 @@ func (s *SlackAdapter) Notify(ctx context.Context, req domain.Request, publicURL
 
 // NotifyFailure は Slack へ失敗通知を送信します。
 //
-// **時間切れだけは見出しを分けます。** go-voicevox がバッチのエラーを
+// 時間切れだけは見出しを分けます。go-voicevox がバッチのエラーを
 // Unwrap() []error で返すようになったため、打ち切りかどうかが型で分かります。
 func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, err error) error {
 	if !s.pipeline.Enabled() {
@@ -121,7 +121,7 @@ func isTimeout(err error) bool {
 
 // metadata は、通知本文を組み立てます。publicURL が空なら音声の行は出ません。
 //
-// **並びは「何のジョブか → 何ができたか → どう作ったか」**です。値が空の項目は
+// 並びは「何のジョブか → 何ができたか → どう作ったか」です。値が空の項目は
 // notify.Body が行ごと省くため、synthesize では最後の組がまるごと消え、
 // 識別と成果物だけが残ります。項目が混ざっていると、欠けているのか
 // そもそも持たないのかを読み分けられません。
@@ -142,7 +142,7 @@ func (s *SlackAdapter) metadata(req domain.Request, publicURL string) *notify.Bo
 	// リンクの表示名には署名付き URL をそのまま使いません。クエリだけで 1000 文字を
 	// 超えるため、本文が URL で埋まって他の項目が読めなくなります。
 	body = body.Link("音声", publicURL, req.OutputURI)
-	// **ファイル名まで出しません。** generate の時点では音声がまだ無く、
+	// ファイル名まで出しません。generate の時点では音声がまだ無く、
 	// audio.wav を出力先として示すと存在しないものを案内することになります。
 	// 何が置かれたかは詳細画面が示します。
 	// gs:// は表示のまま Cloud Console へリンクされます（notify.Body.URIField）。

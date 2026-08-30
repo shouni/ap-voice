@@ -41,13 +41,13 @@ type modeDetailView struct {
 
 // ModeDetail は、1 モードのプロンプト本文を見せます。
 //
-// **生成側と同じ組み立てを通します。** 共通部品も展開されるので、ここに見えている
+// 生成側と同じ組み立てを通します。共通部品も展開されるので、ここに見えている
 // ものがそのまま Gemini へ渡ります。出力が期待と違ったとき、指示文のどこが
 // そう言わせたのかを追うための画面です。
 func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "mode")
 
-	// **一覧に載っているキーだけを受け付けます。** 未知のキーは Generate が
+	// 一覧に載っているキーだけを受け付けます。未知のキーは Generate が
 	// ErrUnknownMode で弾きますが、そこまで行くと 500 相当の見え方になります。
 	mode, ok := h.findMode(key)
 	if !ok {
@@ -57,7 +57,7 @@ func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 
 	view := modeDetailView{baseView: h.base(r), Mode: mode}
 
-	// **入力の型は front matter が持っています。** 以前は素のテキストで試して
+	// 入力の型は front matter が持っています。以前は素のテキストで試して
 	// 失敗したらレシピで試し直していましたが、当てずっぽうだと本当の失敗も
 	// 「型が違っただけ」に見えて隠れます。どちらを渡すかは最初から分かります。
 	sample := samplePlaceholder

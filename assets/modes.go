@@ -13,9 +13,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// isPartial は、そのファイルが**モードではなく部品**かどうかを返します。
+// isPartial は、そのファイルがモードではなく部品かどうかを返します。
 //
-// **判定を二重に書きません。** ビルダーが Build の対象から外すのと同じ関数を呼びます。
+// 判定を二重に書きません。ビルダーが Build の対象から外すのと同じ関数を呼びます。
 // 自前で "_" 始まりを見ていた頃は、再帰読み込みで "en/_writing" のようなキーになった
 // 場合にライブラリ側とずれる状態でした。モード名はジャンル接頭辞（tech_ / news_ …）を
 // 持つので、"_" 始まりと衝突しません。
@@ -24,20 +24,20 @@ func isPartial(key string) bool {
 }
 
 // ModeMetadata は、プロンプト冒頭の front matter に書くモードの説明です。
-// 姉妹サービスと同じ方式で、**説明の置き場をプロンプト自身にします。**
+// 姉妹サービスと同じ方式で、説明の置き場をプロンプト自身にします。
 //
 // 画面側に一覧を持たせない理由は、モードの追加が prompts/<mode>.md を置くだけで
 // 済む仕組みだからです。説明を別ファイルに分けると、モードを足した人が説明を
 // 書き忘れても誰も気付かず、選択肢だけが増えていきます。
 type ModeMetadata struct {
-	// Order は選択肢に出す並び順です。1 から **10 刻み**で振ります（間へ挿すときに
+	// Order は選択肢に出す並び順です。1 から 10 刻みで振ります（間へ挿すときに
 	// 前後を振り直さずに済みます）。
 	//
-	// **ファイル名に番号を付けない理由がここです。** ファイル名はそのままモードのキー、
+	// ファイル名に番号を付けない理由がここです。ファイル名はそのままモードのキー、
 	// つまり Request.Mode に載る値であり /modes/{mode} の URL でもあります。並べ替えの
 	// ためにリネームすると、保存済みのジョブや外の呼び出し側（MCP の list_voice_modes が
-	// 返すキー）が一斉に指し先を失います。**並び順は表示の都合なので、識別子ではなく
-	// label と同じ場所に置きます。**
+	// 返すキー）が一斉に指し先を失います。並び順は表示の都合なので、識別子ではなく
+	// label と同じ場所に置きます。
 	Order int `yaml:"order"`
 	// Label は選択肢に出す名前です。キー（ファイル名）は英字で、誰が喋るのかまでは
 	// 読み取れないため、日本語の表示名を別に持ちます。
@@ -48,14 +48,14 @@ type ModeMetadata struct {
 	UseWhen string `yaml:"use_when"`
 	// Input は、そのモードが受け取る入力の種類です。空なら InputText 扱いです。
 	//
-	// **ジャンルとは別の軸です。** ファイル名の接頭辞（tech_ / news_ / comedy_ …）は
+	// ジャンルとは別の軸です。ファイル名の接頭辞（tech_ / news_ / comedy_ …）は
 	// ジャンルを表しますが、入力の型はそれと直交します — comedy_manzai と tech_solo は
 	// ジャンルが違っても同じ素のテキストを受け取ります。ディレクトリで分けると
 	// 軸を 1 本しか表せないため、ここに書きます。
 	Input string `yaml:"input"`
 }
 
-// 入力の種類。**画面のタブと、プロンプトへ渡すデータの型が、これで決まります。**
+// 入力の種類。画面のタブと、プロンプトへ渡すデータの型が、これで決まります。
 const (
 	// InputText は素のテキスト（Web 記事・文書）を受け取るモードです。
 	InputText = "text"
@@ -78,7 +78,7 @@ func (m Mode) NeedsRecipe() bool { return m.InputKind() == InputRecipe }
 
 // FilterModes は、指定した入力種別のモードだけを返します。
 //
-// **画面のタブごとの選択肢はこれで作ります。** 素のテキストのタブに
+// 画面のタブごとの選択肢はこれで作ります。素のテキストのタブに
 // recipe.json のモードを出すと、選べるのに必ず失敗する組み合わせになります。
 func FilterModes(modes []Mode, kind string) []Mode {
 	out := make([]Mode, 0, len(modes))
@@ -97,7 +97,7 @@ type Mode struct {
 	ModeMetadata
 }
 
-// sortOrder は並べ替えに使う順位です。**order が無いモードは末尾へ回します。**
+// sortOrder は並べ替えに使う順位です。order が無いモードは末尾へ回します。
 //
 // 先頭ではなく末尾なのは、order を書き忘れたモードが既存の並びの先頭へ割り込むより、
 // 後ろに足されるほうが被害が小さいためです。DisplayName がキーで代替するのと同じで、
@@ -111,7 +111,7 @@ func (m Mode) sortOrder() int {
 
 // DisplayName は選択肢に表示する名前です。
 //
-// front matter が無いプロンプトを置いてもキーで表示され、**選択肢自体は消えません。**
+// front matter が無いプロンプトを置いてもキーで表示され、選択肢自体は消えません。
 // 説明の書き忘れで動くはずのモードが画面から消えるほうが困るためです。
 func (m Mode) DisplayName() string {
 	if m.Label != "" {
@@ -143,12 +143,12 @@ var loadPromptSet = sync.OnceValues(func() (promptSet, error) {
 	return promptSet{bodies: bodies, fronts: fronts}, nil
 })
 
-// LoadPrompts は埋め込まれたプロンプトの**本文だけ**を読み込みます。
+// LoadPrompts は埋め込まれたプロンプトの本文だけを読み込みます。
 //
 // front matter は説明であってプロンプトではないので、ここで落とします。
 // 残したまま渡すと YAML が指示文の先頭に紛れ込みます。
 //
-// **部品（_ 始まり）も含めて返します。** モード本文が {{template "_writing" .}} で
+// 部品（_ 始まり）も含めて返します。モード本文が {{template "_writing" .}} で
 // 参照するため、ビルダーには全部渡す必要があります。選択肢に出さないのは
 // LoadModes の役目です。
 func LoadPrompts() (map[string]string, error) {
@@ -174,7 +174,7 @@ func LoadModes() ([]Mode, error) {
 	fronts := maps.Clone(set.fronts)
 	maps.DeleteFunc(fronts, func(key, _ string) bool { return isPartial(key) })
 
-	// **黙って無視しません。** 書き間違えた説明が空欄になるだけだと、
+	// 黙って無視しません。書き間違えた説明が空欄になるだけだと、
 	// 画面を開くまで気付けません。
 	metas, err := frontmatter.DecodeMap[ModeMetadata](fronts, yaml.Unmarshal)
 	if err != nil {

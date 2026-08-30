@@ -39,7 +39,7 @@ func getScript(t *testing.T, h *Handler, jobID string) *httptest.ResponseRecorde
 // TestScriptDownloadsTheStoredScript は、保存済みの台本がそのまま JSON として
 // 落ちてくることを検証します。
 //
-// **ファイル名を付ける Content-Disposition が要ります。** 無いとブラウザは
+// ファイル名を付ける Content-Disposition が要ります。無いとブラウザは
 // JSON を画面に表示するだけで、ダウンロードにならない経路があります。
 func TestScriptDownloadsTheStoredScript(t *testing.T) {
 	t.Parallel()

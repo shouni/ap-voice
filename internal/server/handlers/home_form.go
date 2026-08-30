@@ -12,7 +12,7 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// 投入フォームのタブです。**入力の型ごとに分かれています。**
+// 投入フォームのタブです。入力の型ごとに分かれています。
 //
 // 1 枚のフォームに全部載せていた頃は、素のテキストを入れたまま楽曲紹介モードを
 // 選べてしまい、選んだ時点では何も起こらず、生成に入ってからデコードで落ちていました。
@@ -30,7 +30,7 @@ const (
 type formView struct {
 	baseView
 	// TextModes と RecipeModes は、front matter の input で分けたモードです。
-	// **タブごとに別の <select> を描きます。** 1 つの select を JavaScript で
+	// タブごとに別の <select> を描きます。1 つの select を JavaScript で
 	// 組み替えると、選択肢の出し分けの根拠が画面側に移ってしまいます。
 	TextModes   []assets.Mode
 	RecipeModes []assets.Mode
@@ -38,7 +38,7 @@ type formView struct {
 	Message     string
 	Error       string
 	Form        domain.Request
-	// ActiveTab は再描画時に開くタブです。**投入したタブを開き直します。**
+	// ActiveTab は再描画時に開くタブです。投入したタブを開き直します。
 	// 常に先頭を開くと、結果の文言だけが見えて入力内容が隠れたタブに残ります。
 	ActiveTab string
 	// MusicJobID と ScriptJSON は、入力ソース以外のタブの入力の残りです。
@@ -96,7 +96,7 @@ func (h *Handler) enqueueFromInput(w http.ResponseWriter, r *http.Request) {
 
 // enqueueFromRecipe は「楽曲レシピ」タブの投入です。
 //
-// **入力ソースの代わりに楽曲生成サービスのジョブ ID を受け取ります。**
+// 入力ソースの代わりに楽曲生成サービスのジョブ ID を受け取ります。
 // gs:// のパスを貼らせるより短く、打ち間違えれば ID の形で弾けます。
 func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 	command, ok := h.generateCommand(w, r, tabRecipe)
@@ -115,13 +115,13 @@ func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 
 // recipeInputURI は、楽曲生成サービスのジョブ ID から楽曲レシピの場所を組み立てます。
 //
-// **動画生成サービスと同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+// 動画生成サービスと同じ規則です（gs://<musicBucket>/music/<jobID>/recipe.json）。
 // 下書き（drafts/）は見ません — 宣伝ナレーションは公開した曲に付けるものだからです。
 func (h *Handler) recipeInputURI(musicJobID string) (string, error) {
 	if musicJobID == "" {
 		return "", fmt.Errorf("楽曲のジョブIDを入力してください")
 	}
-	// Validate はパスとして安全かだけを見ます。**形式は見ません** —
+	// Validate はパスとして安全かだけを見ます。形式は見ません—
 	// "not-a-job-id" も通ってしまい、存在しない場所を指すジョブが投入されます。
 	// SortKey は時刻を取り出せない ID で空を返すので、形の確認に使えます。
 	if err := jobid.Validate(musicJobID); err != nil {
@@ -138,7 +138,7 @@ func (h *Handler) recipeInputURI(musicJobID string) (string, error) {
 
 // generateCommand は、生成系タブのボタンが送った command を確かめます。
 //
-// **この画面から選べる command は限られます。** 台本 JSON タブ以外に synthesize を
+// この画面から選べる command は限られます。台本 JSON タブ以外に synthesize を
 // 渡す口は無く、受け付ける値をここで明示しておくと、画面から来るものと
 // API から来るものの境界がはっきりします。
 func (h *Handler) generateCommand(w http.ResponseWriter, r *http.Request, tab string) (domain.Command, bool) {
@@ -152,7 +152,7 @@ func (h *Handler) generateCommand(w http.ResponseWriter, r *http.Request, tab st
 
 // enqueueGenerate は、生成系タブの共通の投入経路です。
 func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, command domain.Command, inputURI, tab, musicJobID string) {
-	// **出力先はフォームから受け取りません。** ジョブ ID から導くことで、1 ジョブの
+	// 出力先はフォームから受け取りません。ジョブ ID から導くことで、1 ジョブの
 	// 成果物が必ず 1 つのプレフィックスにまとまり、あとから一覧・削除できます。
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
@@ -182,7 +182,7 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 		return
 	}
 
-	// **投入した内容をそのまま残します。** 同じソースからモードを変えて
+	// 投入した内容をそのまま残します。同じソースからモードを変えて
 	// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
 	// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
 	view := h.formView(r, req, tab)
@@ -193,7 +193,7 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 
 // enqueueFromScript は「台本 JSON」タブの投入です。
 //
-// **Gemini を通しません。** 貼られた台本をそのまま合成します。ジョブ ID を発行して
+// Gemini を通しません。貼られた台本をそのまま合成します。ジョブ ID を発行して
 // その場所へ保存するので、既存ジョブの差し替えと同じ経路が新規作成になります
 // （保存先はジョブ ID から決まり、ジョブが既にあるかどうかは問いません）。
 // 台本はタスクに載せないため、長くても Cloud Tasks の 1MB 上限に当たりません。
@@ -245,7 +245,7 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// **貼った JSON は残しません。** 投入した台本は履歴の詳細で編集できるため、
+	// 貼った JSON は残しません。投入した台本は履歴の詳細で編集できるため、
 	// 同じものを貼ったまま二重に投入できる状態のほうが危険です。
 	view := h.formView(r, domain.Request{Command: domain.CommandGenerate}, tabScript)
 	view.Message = fmt.Sprintf("音声の作成を受け付けました（%s）。完了すると通知が届きます。", jobID)
@@ -253,7 +253,7 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptedMessage は、受け付けた処理に応じた案内文を返します。
-// **どちらを押したかが分かる文面**にします。まとめて作った場合は音声まで待つため、
+// どちらを押したかが分かる文面にします。まとめて作った場合は音声まで待つため、
 // 「履歴に並びます」だけでは、次に何を待てばよいのか分かりません。
 func acceptedMessage(command domain.Command, jobID string) string {
 	if command == domain.CommandGenerateAndSynthesize {
@@ -271,7 +271,7 @@ func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int
 }
 
 // renderScriptError は、台本 JSON タブの失敗を、貼った JSON を残したまま描き直します。
-// **ここでは残します。** 直して出し直すのが普通で、消えると貼り直しになります。
+// ここでは残します。直して出し直すのが普通で、消えると貼り直しになります。
 func (h *Handler) renderScriptError(w http.ResponseWriter, r *http.Request, status int, raw, msg string) {
 	view := h.formView(r, domain.Request{Command: domain.CommandGenerate}, tabScript)
 	view.ScriptJSON = raw

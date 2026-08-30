@@ -17,7 +17,7 @@ import (
 )
 
 // fakeStore は GCS の代わりに、パス→中身のマップを持ちます。
-// **読み出しの回数を数えます。** 一覧の往復がジョブ数に比例していないかを見るためです。
+// 読み出しの回数を数えます。一覧の往復がジョブ数に比例していないかを見るためです。
 // fakeStore は memio を包んだストレージのフェイクです。
 //
 // 一覧の畳み込みや不在の返し方といったストレージの振る舞いは memio が受け持ちます
@@ -116,7 +116,7 @@ func newRepo(t *testing.T, store *fakeStore) *Repository {
 
 // fakeStatus は Firestore の代わりに、返すべき状態をそのまま持ちます。
 //
-// 一覧が**成果物を一切読まない**ことを見るために要ります。実物の Store を使うと
+// 一覧が成果物を一切読まないことを見るために要ります。実物の Store を使うと
 // エミュレータが要り、この検査のためだけに外部プロセスへ依存することになります。
 type fakeStatus struct {
 	statuses []domain.JobStatus
@@ -133,10 +133,7 @@ func (f *fakeStatus) Delete(context.Context, string) error { return nil }
 func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error) {
 	// 実物と同じく、返すのはページ分だけです。
 	total := len(f.statuses)
-	from := (page - 1) * perPage
-	if from > total {
-		from = total
-	}
+	from := min((page-1)*perPage, total)
 	to := min(from+perPage, total)
 	return f.statuses[from:to], jobfirestore.PageMeta{Page: page, PerPage: perPage, Total: total}, nil
 }
@@ -152,18 +149,18 @@ func withStatuses(t *testing.T, store *fakeStore, statuses ...domain.JobStatus) 
 
 // TestListDoesNotReadArtifacts は、一覧が成果物を 1 つも読まないことを検証します。
 //
-// **以前はバケット配下を全走査し、ページ分の台本を開いて題名を得ていました。**
+// 以前はバケット配下を全走査し、ページ分の台本を開いて題名を得ていました。
 // ジョブが増えるほど走査が伸び、増え方に上限がありませんでした。いま必要な値は
 // すべて状態に入っているので、倉庫へは一度も触りません。ここで回数を見ておかないと、
 // 題名や音声の有無を「念のため」成果物から取り直す実装がいつでも戻ってきます。
 func TestListDoesNotReadArtifacts(t *testing.T) {
 	t.Parallel()
 
-	// 倉庫は**空**です。それでも一覧は返ります。
+	// 倉庫は空です。それでも一覧は返ります。
 	store := newFakeStore()
 	repo := withStatuses(t, store,
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Title: "新しい方"}},
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb", Title: "古い方"}},
+		domain.JobStatus{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Title: "新しい方"},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb", Title: "古い方"},
 	)
 
 	jobs, meta, err := repo.List(context.Background(), 1, 10)
@@ -190,14 +187,14 @@ func TestListDoesNotReadArtifacts(t *testing.T) {
 
 // TestListFallsBackToJobID は、題名の無いジョブが一覧から消えないことを検証します。
 //
-// **消えると削除する手段まで失われます。** 題名が確定する前に失敗したジョブこそ
+// 消えると削除する手段まで失われます。題名が確定する前に失敗したジョブこそ
 // 消したいものです。
 func TestListFallsBackToJobID(t *testing.T) {
 	t.Parallel()
 
 	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
 	repo := withStatuses(t, newFakeStore(),
-		domain.JobStatus{Status: jobfirestore.Status{JobID: jobID, State: jobfirestore.StateFailed}})
+		domain.JobStatus{JobID: jobID, State: jobfirestore.StateFailed})
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
@@ -218,10 +215,10 @@ func TestListMarksAudioFromTheRecordedURI(t *testing.T) {
 
 	repo := withStatuses(t, newFakeStore(),
 		domain.JobStatus{
-			Status:   jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa"},
+			JobID:    "voice-20260830-090000-aaaaaaaaaaaa",
 			AudioURI: "gs://test/voice/voice-20260830-090000-aaaaaaaaaaaa/audio.wav",
 		},
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb"}},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb"},
 	)
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
@@ -239,7 +236,7 @@ func TestListMarksAudioFromTheRecordedURI(t *testing.T) {
 // TestHasAudioChecksTheObjectItself は、音声の有無を倉庫へ直接問い合わせることを
 // 検証します。
 //
-// **一覧の判定とは別物です。** 詳細画面は記録より実物を信じます（記録の取りこぼしで
+// 一覧の判定とは別物です。詳細画面は記録より実物を信じます（記録の取りこぼしで
 // 再生欄が消えるより、余分に 1 回問い合わせるほうが安いためです）。
 func TestHasAudioChecksTheObjectItself(t *testing.T) {
 	t.Parallel()
@@ -299,7 +296,7 @@ func TestDeleteRemovesTheWholeJobPrefix(t *testing.T) {
 	}
 }
 
-// TestSaveWritesBackToTheStoredScript は、編集した台本が**読み出し先と同じ場所**へ
+// TestSaveWritesBackToTheStoredScript は、編集した台本が読み出し先と同じ場所へ
 // 保存されることを検証します。
 //
 // 保存先と読み出し先がずれると、編集したのに古い台本で合成される、という

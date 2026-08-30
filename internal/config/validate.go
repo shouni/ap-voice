@@ -14,7 +14,7 @@ func (c *Config) ValidateEssentialConfig() error {
 		return fmt.Errorf("GCP_PROJECT_ID が設定されていません（Gemini は Vertex AI 経由で呼びます）")
 	}
 
-	// **両ロールで要ります。** web は履歴の一覧と出力先の組み立てに、worker は
+	// 両ロールで要ります。web は履歴の一覧と出力先の組み立てに、worker は
 	// synthesize が保存済み台本を読むために使います。
 	if c.Storage.GCSBucket == "" {
 		return fmt.Errorf("GCS_VOICE_BUCKET が設定されていません")

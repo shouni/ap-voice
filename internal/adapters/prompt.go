@@ -29,7 +29,7 @@ type PromptAdapter struct {
 	scriptBuilder promptBuilder
 	// recipeModes は、入力を楽曲レシピとして解釈するモードです。
 	//
-	// **モード名をここに書きません。** prompts/<mode>.md の front matter が
+	// モード名をここに書きません。prompts/<mode>.md の front matter が
 	// `input: "recipe"` を持つかどうかで決まるため、モードを足すのは
 	// ファイルを置くだけで済みます。画面のタブも同じ front matter を読むので、
 	// 「どのモードがレシピ入力か」の答えが 2 箇所に分かれません。

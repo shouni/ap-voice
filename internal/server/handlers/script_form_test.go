@@ -41,7 +41,7 @@ func parseScript(t *testing.T, h *Handler, values url.Values) (lines int, err er
 // TestScriptFromFormRejectsUnknownSpeakerAndStyle は、一覧に無い話者・スタイルを
 // 保存前に弾くことを検証します。
 //
-// **画面が選択肢で出していても、フォームは何でも送れます。** 実在しない組み合わせは
+// 画面が選択肢で出していても、フォームは何でも送れます。実在しない組み合わせは
 // 合成時に getStyleID がその話者の既定へ黙って落とすため、保存できてしまうと
 // 「指定したのに違う声で喋る」という気付きにくい形で現れます。
 func TestScriptFromFormRejectsUnknownSpeakerAndStyle(t *testing.T) {
@@ -135,7 +135,7 @@ func TestScriptFromFormAcceptsValidLines(t *testing.T) {
 }
 
 // TestScriptFromFormDropsEmptyLines は、本文を空にした行が落ちることを検証します。
-// **行を消す唯一の手段**なので、残ってしまうと編集画面から行を減らせません。
+// 行を消す唯一の手段なので、残ってしまうと編集画面から行を減らせません。
 func TestScriptFromFormDropsEmptyLines(t *testing.T) {
 	t.Parallel()
 

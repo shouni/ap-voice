@@ -38,7 +38,7 @@ func (l StorageLayout) AudioPath(jobID string) string {
 
 // ScriptPath は、台本 JSON の相対オブジェクトパスを返します。
 //
-// 台本は**成果物であると同時に入力**です。generate はこれだけを書き、
+// 台本は成果物であると同時に入力です。generate はこれだけを書き、
 // synthesize はこれを読んで音声を作ります。
 func (l StorageLayout) ScriptPath(jobID string) string {
 	return l.ScriptURIFor(l.AudioPath(jobID))
@@ -46,7 +46,7 @@ func (l StorageLayout) ScriptPath(jobID string) string {
 
 // ScriptURIFor は、音声の出力先から台本の出力先を導きます。
 //
-// **導出の規則をここ 1 箇所に置きます。** 台本の書き込み側は音声の URI しか
+// 導出の規則をここ 1 箇所に置きます。台本の書き込み側は音声の URI しか
 // 受け取らないため、拡張子を .json に替える計算がかつてアダプター側にもありました。
 // 同じ規則が 2 箇所にあると、片方だけ変えたときに「保存はできるが誰も読まない場所」
 // という気付きにくい壊れ方をします。
