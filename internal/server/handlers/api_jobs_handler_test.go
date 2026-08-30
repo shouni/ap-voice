@@ -241,7 +241,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 		t.Errorf("順序 = %v, want [status enqueue]", order)
 	}
 
-	// 応答は御三家と同じ封筒（status + job_id）であること。
+	// 応答は姉妹サービスと同じ封筒（status + job_id）であること。
 	var body map[string]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)

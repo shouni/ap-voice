@@ -39,7 +39,7 @@ type apiJob struct {
 
 // apiAccepted は投入を受け付けたときの応答です。
 //
-// **御三家と同じ封筒**です（MCP サーバーの client.TaskQueuedResponse が
+// **姉妹サービスと同じ封筒**です（MCP サーバーの client.TaskQueuedResponse が
 // status と job_id を読みます）。ここだけ形が違うと、共通クライアントに
 // ap-voice 用の分岐が要ります。
 type apiAccepted struct {
@@ -71,7 +71,7 @@ type apiEnqueue struct {
 
 // apiJobPage は、ページ付きの一覧応答です。
 //
-// **メタデータの形は go-job-firestore の PageMeta です。** JSON タグは御三家と同じ
+// **メタデータの形は go-job-firestore の PageMeta です。** JSON タグは姉妹サービスと同じ
 // JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
 type apiJobPage struct {
 	Jobs []apiJob              `json:"jobs"`
@@ -214,7 +214,7 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 //
 // **投入した側が完了と失敗を知る唯一の手段です。** 成果物の有無だけでは、
 // まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
-// jobfirestore.Status で、御三家と同じ形です。
+// jobfirestore.Status で、姉妹サービスと同じ形です。
 //
 // 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。

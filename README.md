@@ -94,7 +94,7 @@ go run .        # SERVER_ROLE が必須
 #### API（機械向け）
 
 **画面と同じ認証の下**にあります。`auth.Protected` が OIDC の Bearer とセッションの
-両方を通すため、同じ URL を人も機械も叩けます（御三家と同じ形）。
+両方を通すため、同じ URL を人も機械も叩けます（姉妹サービスと同じ形）。
 
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を
 送れば JSON が、ブラウザの `Accept` なら画面が返ります。下表に残る `/api/...` は、
@@ -190,11 +190,14 @@ sequenceDiagram
     participant Gemini as Vertex AI
     participant Engine as VOICEVOX (サイドカー)
     participant Store as GCS
+    participant State as Firestore
     participant Slack as Slack
 
     Note over User, Slack: 1. 台本を作る (command=generate)
     User->>Web: POST / （入力ソース・モード・モデル）
     Web->>Web: ジョブIDを発行し、出力先を導出
+    Web->>State: queued を記録
+    Note right of Web: **enqueue より先に**。逆だと Worker の running を上書きしかねません
     Web->>Tasks: enqueue(Request)
     Web-->>User: 202 受付
     Tasks->>Worker: POST /tasks/generate (OIDC)
@@ -202,12 +205,13 @@ sequenceDiagram
     Worker->>Gemini: 台本を生成 (スキーマ強制)
     Gemini-->>Worker: Script（title + lines）
     Worker->>Store: audio.json を書く
+    Worker->>State: succeeded を記録（題名・台本の在り処）
     Note right of Worker: **音声はまだ作りません**
     Worker->>Slack: 完了通知（詳細画面のリンク付き）
 
     Note over User, Slack: 2. 台本を確認・修正する
     User->>Web: GET /history
-    Web->>Firestore: ジョブを一覧（成果物は読みません）
+    Web->>State: ジョブを一覧（成果物は読みません）
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
     Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
@@ -215,6 +219,7 @@ sequenceDiagram
     Note over User, Slack: 3. 音声を作る (command=synthesize)
     User->>Web: POST /history/{jobID}/script （必要なら直してから）
     Web->>Store: 直した audio.json を保存
+    Web->>State: queued を記録
     Web->>Tasks: enqueue(Request{JobID})
     Note right of Web: 台本は載せません（1MB 上限）。先に保存して ID だけ渡します
     Tasks->>Worker: POST /tasks/generate (OIDC)
@@ -225,6 +230,7 @@ sequenceDiagram
     end
     Worker->>Worker: WAV を結合
     Worker->>Store: audio.wav と audio.json を書く
+    Worker->>State: succeeded を記録（音声の在り処）
     Worker->>Slack: 完了通知（詳細画面のリンク付き）
 
     Note over User, Slack: 4. 再生する
@@ -248,7 +254,7 @@ ap-voice/
     ├── domain/              # ドメインモデルとポート定義・成果物のパス規約
     ├── app/                 # DI コンテナとリソース管理
     ├── builder/             # 外部依存とハンドラーの組み立て
-    ├── repository/          # GCS 上の成果物の読み出し（履歴・台本）
+    ├── repository/          # 成果物の読み出し（台本）とジョブ状態の読み書き（履歴）
     ├── pipeline/            # command による分岐と各段（step_*.go）
     └── adapters/            # Gemini / VOICEVOX / Cloud Tasks / Slack / プロンプト
 ```

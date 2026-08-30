@@ -1,4 +1,5 @@
-// Package repository は、GCS 上の成果物の読み出しを担います。
+// Package repository は、GCS 上の成果物の読み出しと、Firestore 上のジョブ状態の
+// 読み書きを担います。履歴の一覧は状態だけで組み立て、成果物には触れません。
 package repository
 
 import (

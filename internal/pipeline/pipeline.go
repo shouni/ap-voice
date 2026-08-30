@@ -120,7 +120,8 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	// **アプリが自分で先に諦めます。** Cloud Tasks の dispatch_deadline より内側で
 	// 打ち切ることで、下の defer が失敗通知を出す余地を残します。逆順だと
 	// Cloud Tasks が先にリクエストを打ち切り、プロセスは SIGTERM で落ちて
-	// 通知の機会を失います（キューは max_attempts = 1 なので再試行も来ません）。
+	// 通知の機会を失います。再配信が来ても、記録が running のままなので
+	// 失敗として観測できません。
 	if p.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, p.timeout)
