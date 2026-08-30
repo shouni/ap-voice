@@ -46,7 +46,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `SESSION_SECRET` | セッションの署名鍵。**16バイト以上**。 |
 | `SESSION_ENCRYPT_KEY` | セッションの暗号化鍵。AES の要件で **16 / 24 / 32 バイト**のいずれか。 |
 | `ALLOWED_EMAILS` / `ALLOWED_DOMAINS` | ログインを許可する相手（カンマ区切り）。**どちらも空だと起動しません。** |
-| `ALLOWED_M2M_SERVICE_ACCOUNTS` | `/api/*` を機械（ap-mcp など）から叩くときに許可する SA（カンマ区切り）。**任意** — 空なら M2M 検証は常に失敗し、すべてセッション認証に落ちます。 |
+| `ALLOWED_M2M_SERVICE_ACCOUNTS` | `/api/*` を機械（MCP サーバーなど）から叩くときに許可する SA（カンマ区切り）。**任意** — 空なら M2M 検証は常に失敗し、すべてセッション認証に落ちます。 |
 
 **Worker 面（`worker` / `both`）で必須**
 
@@ -68,7 +68,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
 | `PIPELINE_TIMEOUT` | ジョブ1件の実行上限 (Default: `25m`)。**Cloud Tasks より先にアプリが諦める**ための値で、超えると失敗を通知して終わります。 |
 | `TASK_DISPATCH_DEADLINE` | Cloud Tasks がワーカーの応答を待つ上限 (Default: `30m`、Cloud Tasks の上限)。`PIPELINE_TIMEOUT` より長くします。 |
-| `AP_MUSIC_BUCKET` | 楽曲レシピ（ap-comp の `recipe.json`）の置き場 (Default: `ap-music`)。作成画面の「楽曲レシピ」タブが、ap-comp のジョブ ID から `gs://<bucket>/music/<jobID>/recipe.json` を組み立てるために使います。**ap-mv と同じ変数名・同じ規則です。** |
+| `AP_MUSIC_BUCKET` | 楽曲レシピ（`music.Recipe` 形式の `recipe.json`）の置き場 (Default: `ap-music`)。作成画面の「楽曲レシピ」タブが、楽曲生成サービスのジョブ ID から `gs://<bucket>/music/<jobID>/recipe.json` を組み立てるために使います。**動画生成サービスと同じ変数名・同じ規則です。** |
 | `SLACK_WEBHOOK_URL` | 完了・失敗の通知先。未設定なら通知は無効になります。 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `gs://` を読み書きする場合のみ（ADC 利用時）。 |
 

@@ -8,7 +8,7 @@ import (
 // TestConvertToReadingShowsNonObviousReadings は、聴くまで分からない読みが
 // 事前に見えることを検証します。
 //
-// **読みは自明ではありません。** ap-comp が同じ理由で preview_lyrics_reading を
+// **読みは自明ではありません。** 楽曲生成サービスが同じ理由で preview_lyrics_reading を
 // 持っており、その説明が挙げている「水面」はここでも スイメン になります。
 // 合成してから気付くと、台本の長さぶんの合成時間がそのまま無駄になります。
 func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {

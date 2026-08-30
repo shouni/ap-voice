@@ -333,7 +333,7 @@ func callAudio(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	req := httptest.NewRequest("GET", "/api/jobs/"+jobID+"/audio", nil)
-	// 統合後は Accept が表現を決めます。ap-mcp の baseClient は常に付けています。
+	// 統合後は Accept が表現を決めます。MCP サーバーの baseClient は常に付けています。
 	req.Header.Set("Accept", "application/json")
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("jobID", jobID)
@@ -604,7 +604,7 @@ func getJobStatus(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 	return rec
 }
 
-// 未記録（ErrNotFound）は 404。ap-mcp が unknown として扱う正常系。
+// 未記録（ErrNotFound）は 404。MCP サーバーが unknown として扱う正常系。
 func TestAPIJobStatusNotRecordedIs404(t *testing.T) {
 	t.Parallel()
 

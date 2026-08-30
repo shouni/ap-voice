@@ -36,7 +36,7 @@ type AppHandlers struct {
 	// TaskAuth は Cloud Tasks からの OIDC を検証します。OAuth 設定を必要としないため、
 	// Web 面を持たない Worker プロセスでも構築できます。
 	TaskAuth *oidc.Verifier
-	// M2M は、ブラウザではなく機械（ap-mcp など）からの OIDC を検証します。
+	// M2M は、ブラウザではなく機械（MCP サーバーなど）からの OIDC を検証します。
 	// 未設定でも nil にはしません。検証が常に失敗する verifier を渡しておくと、
 	// auth.Protected はセッション認証へ落として動き続けます。
 	M2M *oidc.Verifier

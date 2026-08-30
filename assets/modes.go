@@ -24,7 +24,7 @@ func isPartial(key string) bool {
 }
 
 // ModeMetadata は、プロンプト冒頭の front matter に書くモードの説明です。
-// ap-comp と同じ方式で、**説明の置き場をプロンプト自身にします。**
+// 姉妹サービスと同じ方式で、**説明の置き場をプロンプト自身にします。**
 //
 // 画面側に一覧を持たせない理由は、モードの追加が prompts/<mode>.md を置くだけで
 // 済む仕組みだからです。説明を別ファイルに分けると、モードを足した人が説明を
@@ -59,7 +59,7 @@ type ModeMetadata struct {
 const (
 	// InputText は素のテキスト（Web 記事・文書）を受け取るモードです。
 	InputText = "text"
-	// InputRecipe は ap-comp の recipe.json を受け取るモードです。
+	// InputRecipe は楽曲レシピ（music.Recipe）を受け取るモードです。
 	// 素のテキストを渡すと、生成へ進む前にデコードで落ちます。
 	InputRecipe = "recipe"
 )

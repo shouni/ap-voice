@@ -16,8 +16,8 @@ regeneration that rewrites every other line, nor minutes of synthesis on a draft
 change.
 
 Module name: `ap-voice` (Go 1.26). One image, deployed as two Cloud Run services (`ap-voice`
-public / `ap-voice-worker` private) selected by `SERVER_ROLE`, the same shape as
-`ap-comp`/`ap-mv`/`ap-story`.
+public / `ap-voice-worker` private) selected by `SERVER_ROLE`, the same shape as the sibling
+services.
 
 ## Commands
 
@@ -51,8 +51,8 @@ is easy to break by editing.
   request's `ai_model` is empty (`ScriptStep.modelFor`). There is deliberately **no default
   model in the code**: model IDs age on Google's release schedule, not this repo's, so a default
   would keep an outdated model in use unnoticed. `ValidateEssentialConfig` fails startup when it
-  is empty — do not reintroduce a fallback. Plural matches the fleet convention, where
-  `ap-infra`'s `shared_models.tf` is the single source of the spelling.
+  is empty — do not reintroduce a fallback. Plural matches the fleet convention; the spelling comes from the env var
+  alone, never from a constant here.
 - `GCP_PROJECT_ID` — required. **Gemini is called via Vertex AI only**; there is no
   `GEMINI_API_KEY` path. On Cloud Run the runtime SA's `roles/aiplatform.user` authenticates, so
   shipping a key would hand out access to a secret nothing reads — and Cloud Run resolves secret
@@ -66,8 +66,8 @@ is easy to break by editing.
   must be 16/24/32 bytes (AES) and `SESSION_SECRET` at least 16 — the first is checked in
   `validateWebConfig`, the second by `gcp-kit/auth` when the handler is built.
 - `GCP_LOCATION_ID` — the **Cloud Tasks queue region** (`asia-northeast1`), *not* the Vertex AI
-  endpoint. Vertex is pinned to `global` in `adapters.defaultVertexLocationID`, the same split
-  ap-comp and ap-story make; feeding the queue region to Vertex points it at an endpoint that
+  endpoint. Vertex is pinned to `global` in `adapters.defaultVertexLocationID`, the same split the
+  sibling services make; feeding the queue region to Vertex points it at an endpoint that
   does not exist.
 - `TASK_AUDIENCE_URL` / `ALLOWED_TASK_SERVICE_ACCOUNTS` — **required for `worker`/`both`**, not
   read at all by `web`. The audience is the worker's own URL; the allowlist holds the *caller's*
@@ -99,12 +99,13 @@ is easy to break by editing.
   `4`. The low-concurrency side is only 7 samples (progress logs fire every 5th segment plus the
   last) and those small batches may have caught `startup_cpu_boost`, which would flatter them —
   that bias runs against the change, so if elapsed times worsen, put `8` back through the env and
-  measure again. **The env var exists for that reversal, not for infra to tune**: ap-infra sets
-  none of these three, deliberately — it owns the engine's size, the app owns how to feed it.
+  measure again. **The env var exists for that reversal, not for infra to tune**: the deployment sets
+  none of these three, deliberately — infra owns the engine's size, the app owns how to feed it.
   What parallelism does cost is engine
   memory, and note that the peak does not grow with script length: the in-flight count is capped,
   so a 200-line script has the same memory peak as a 12-line one and only runs longer. They are
-  env vars rather than constants because the engine's size is decided in `ap-infra`, not here, so
+  env vars rather than constants because the engine's size is decided by the
+  deployment, not here, so
   throttling to fit it should not need a rebuild. Note this is **unrelated** to Cloud Run's
   `max_instance_request_concurrency = 1`, which counts *jobs* per instance, not segments per job.
   go-voicevox logs per-segment avg/min/max at the end of each batch — read that before touching
@@ -206,7 +207,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **One resource, one route.** `auth.Protected(m2m, session)` tries an OIDC bearer first and falls
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
-  keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; `ap-mcp` calls the `/history/…` paths directly.
+  keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; the MCP server calls the `/history/…` paths directly.
 - **`/api/*` still holds what only machines have**: enqueue by JSON body, `status`, `synthesize`,
   `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
   same line `gcp-kit/negotiate` draws. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
@@ -218,7 +219,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   may revise several times before spending the minutes once; the browser folds the two into one
   button because a person editing has already decided. Both go through `validateScript` — one
   loose path is enough to store a pair that silently becomes the speaker's default at synthesis.
-- **`/modes` lists, `/modes/{mode}` shows one**, the split ap-comp uses. The index carries only
+- **`/modes` lists, `/modes/{mode}` shows one**, the split the sibling services use. The index carries only
   front matter and **assembles no prompts**: the eight bodies come to more than 10k characters,
   so building them for a page that may only be scanned is waste, and a reader — or an MCP client
   — that wants the index should not pay for the bodies. The detail assembles through the same
@@ -301,7 +302,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   a genre prefix so the list groups itself: `tech_*`, `news_*`, `story_*`, `music_*`).
   Each file opens with a YAML front matter block
   (`order` / `label` / `direction` / `use_when`) that supplies the form's option text and the
-  description under the select — the same arrangement as ap-comp, so **the explanation lives next
+  description under the select — the same arrangement the sibling services use, so **the explanation lives next
   to the prompt it explains** rather than in a list the form owns. `order` (numbered in tens, so a
   mode can be inserted without renumbering) decides the option order, and it lives in front matter
   rather than in a numeric filename prefix **because the filename is the mode key**: it is the
@@ -324,8 +325,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   keeps them, since the bodies reference them.
   The mode string travels from `Request.Mode` straight to
   `PromptAdapter.Generate` and is never validated against a list. The one mode whose *input type*
-  differs — `music_promo`, which reads ap-comp's `recipe.json` and decodes it into a
-  `music.Recipe` before rendering — **is not named in code either**: `NewPromptAdapter` collects
+  differs — `music_promo`, which reads a `recipe.json` and decodes it into
+  go-gemini-client's `music.Recipe` before rendering — **is not named in code either**: `NewPromptAdapter` collects
   the recipe modes from the same `input: "recipe"` front matter the form's tabs read, so the
   answer to "which modes take a recipe" does not live in two places.
   **No mode name appears anywhere in Go code**, which is what keeps adding one to a file drop.

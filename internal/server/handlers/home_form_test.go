@@ -145,7 +145,7 @@ func openingTagOf(t *testing.T, body, marker string) string {
 // TestEnqueueFromRecipeBuildsURIFromJobID は、楽曲のジョブ ID から
 // レシピの場所が組み立てられることを検証します。
 //
-// **ap-mv と同じ規則です。** 片方だけ規則が変わると、同じ ID を渡しているのに
+// **動画生成サービスと同じ規則です。** 片方だけ規則が変わると、同じ ID を渡しているのに
 // 一方だけ動く状態になり、どちらが正しいのか判断できなくなります。
 func TestEnqueueFromRecipeBuildsURIFromJobID(t *testing.T) {
 	t.Parallel()

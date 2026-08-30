@@ -42,8 +42,8 @@ type Handler struct {
 	// bucket と layout で出力先を決めます。**利用者には入力させません。**
 	bucket string
 	layout domain.StorageLayout
-	// musicBucket は、楽曲紹介モードの入力を ap-comp のジョブ ID から解決するために使います。
-	// **ap-mv と同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+	// musicBucket は、楽曲紹介モードの入力を楽曲生成サービスのジョブ ID から解決するために使います。
+	// **動画生成サービスと同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
 	musicBucket string
 	// repo は履歴の一覧と台本の読み出しです。
 	repo ScriptRepository

@@ -18,7 +18,7 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// API は、ブラウザではなく機械（ap-mcp など）から使う口です。
+// API は、ブラウザではなく機械（MCP サーバーなど）から使う口です。
 //
 // **画面と同じミドルウェアの下にあります。** ProtectedMiddleware が OIDC の
 // Bearer とセッションの両方を通すため、同じ URL を人も機械も叩けます。
@@ -39,7 +39,7 @@ type apiJob struct {
 
 // apiAccepted は投入を受け付けたときの応答です。
 //
-// **御三家と同じ封筒**です（ap-mcp の client.TaskQueuedResponse が
+// **御三家と同じ封筒**です（MCP サーバーの client.TaskQueuedResponse が
 // status と job_id を読みます）。ここだけ形が違うと、共通クライアントに
 // ap-voice 用の分岐が要ります。
 type apiAccepted struct {
@@ -57,7 +57,7 @@ type apiAccepted struct {
 type apiEnqueue struct {
 	Command  string `json:"command"`
 	InputURI string `json:"input_uri,omitempty"`
-	// MusicJobID は、入力が ap-comp の楽曲レシピのときのジョブ ID です。
+	// MusicJobID は、入力が楽曲レシピのときのジョブ ID です。
 	//
 	// **解決はここでやります。** 呼び出し側に gs:// を組み立てさせると、
 	// 置き場の規則がサービスの外へ漏れ、変えるときに全員へ知らせて回ることに
@@ -95,7 +95,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// music_job_id は input_uri より優先します（ap-mv の compose_video と同じ）。
+	// music_job_id は input_uri より優先します（動画生成サービスの compose_video と同じ）。
 	// 両方来たときに黙って片方を捨てるより、ID を書いた側の意図を採ります。
 	inputURI := body.InputURI
 	if body.MusicJobID != "" {
@@ -216,7 +216,7 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 // まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
 // jobfirestore.Status で、御三家と同じ形です。
 //
-// 記録が無い場合（ErrNotFound）は 404 です。ap-mcp 側はこれを unknown として扱い、
+// 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
 //
 // **読めなかっただけの場合は 404 と混ぜません。** 権限や GCS 障害（ErrUnavailable）

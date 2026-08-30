@@ -27,7 +27,7 @@ const (
 	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
 	DefaultSegmentTimeout = 120 * time.Second
 	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
-	// ap-infra はフリート全体で asia-northeast1 を使っています。
+	// フリート全体で asia-northeast1 を使っています。
 	defaultLocationID = "asia-northeast1"
 )
 
@@ -72,7 +72,7 @@ type TasksConfig struct {
 // ADC（gcloud auth application-default login）が要ります。
 type GCPConfig struct {
 	ProjectID string `env:"GCP_PROJECT_ID"`
-	// LocationID は **Cloud Tasks のキューが存在するリージョン**です（ap-infra は
+	// LocationID は **Cloud Tasks のキューが存在するリージョン**です（デプロイ設定が
 	// asia-northeast1 を渡します）。Vertex AI のエンドポイントとは別物で、そちらは
 	// adapters.defaultVertexLocationID に固定してあります。混同すると、キューを
 	// 見失うか Vertex が存在しないリージョンを指すかのどちらかになります。
@@ -95,7 +95,7 @@ type AIConfig struct {
 //
 // 流量の3つは**デプロイ先のエンジンの大きさで変わる値**なので env に置きます。
 // エンジンが 4 vCPU / 3 GiB のサイドカーだという事実はこのリポジトリではなく
-// ap-infra が持っており、そこに合わせて絞るにはコードのビルドを挟みたくありません。
+// デプロイ設定が持っており、そこに合わせて絞るにはコードのビルドを挟みたくありません。
 //
 //	スループット = min(1/SegmentRateLimit, MaxParallelSegments ÷ 1セグメントの所要時間)
 //
@@ -156,8 +156,8 @@ type VoicevoxConfig struct {
 	// 伸ばすだけ**であることが実測に出ています（下記）。
 	//
 	// **この値はアプリの都合であって、インフラの設定ではありません。** エンジンの
-	// 大きさ（4 vCPU / 3 GiB）を決めるのは ap-infra ですが、それをどう食わせるかは
-	// 合成の戦略なのでここが持ちます。ap-infra はこの env を設定しておらず、
+	// 大きさ（4 vCPU / 3 GiB）を決めるのはデプロイ設定ですが、それをどう食わせるかは
+	// 合成の戦略なのでここが持ちます。デプロイ設定はこの env を置いておらず、
 	// env が残っているのは**戻すため**です — 実測が覆ったら、再ビルドを挟まずに
 	// VOICEVOX_MAX_PARALLEL_SEGMENTS で上書きできます。
 	//
@@ -206,9 +206,9 @@ type StorageConfig struct {
 	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
 	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
 	GCSBucket string `env:"GCS_VOICE_BUCKET"`
-	// MusicBucket は、楽曲紹介モードの入力（ap-comp の recipe.json）を
+	// MusicBucket は、楽曲紹介モードの入力（music.Recipe 形式の recipe.json）を
 	// ジョブ ID から解決するために使います。
-	// **ap-mv と同じ環境変数・同じ規則です**（gs://<MusicBucket>/music/<jobID>/recipe.json）。
+	// **動画生成サービスと同じ環境変数・同じ規則です**（gs://<MusicBucket>/music/<jobID>/recipe.json）。
 	// 読む側が 2 つに増えたので、片方だけ別名にすると設定を移すときに取り違えます。
 	MusicBucket string `env:"AP_MUSIC_BUCKET" envDefault:"ap-music"`
 	// FirestoreDatabase はジョブ状態を置く Firestore データベースです。
@@ -229,7 +229,7 @@ type AuthConfig struct {
 	AllowedDomains     []string `env:"ALLOWED_DOMAINS"`
 
 	// AllowedM2MServiceAccounts は、ブラウザではなく機械が /api を叩くときに
-	// 許可するサービスアカウントです（ap-mcp など）。
+	// 許可するサービスアカウントです（MCP サーバーなど）。
 	//
 	// **空でも起動します。** 未設定なら M2M の検証は常に失敗し、すべての
 	// リクエストがセッション認証へ落ちます。つまり API を使わない構成では
