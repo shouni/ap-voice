@@ -23,7 +23,7 @@ const PageTemplate = "layout.html"
 //
 // 1 つのセットに全画面を入れられないのは、各画面が同じ名前（"content" / "title" /
 // "scripts"）でブロックを define するためです。html/template は同名の再定義を許さないので、
-// 「外枠 + 共通ナビ + その画面 1 枚」を画面ごとに作ります。ap-comp も同じ形です。
+// 「外枠 + 共通ナビ + その画面 1 枚」を画面ごとに作ります。姉妹サービスも同じ形です。
 func ParsePages() (map[string]*template.Template, error) {
 	names, err := fs.Glob(Templates, "templates/*.html")
 	if err != nil {

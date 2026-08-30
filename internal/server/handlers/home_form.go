@@ -20,7 +20,7 @@ import (
 const (
 	// tabInput は入力ソース（Web URL / gs:// の文書）から台本を書かせるタブです。
 	tabInput = "input"
-	// tabRecipe は ap-comp の楽曲レシピから宣伝ナレーションを書かせるタブです。
+	// tabRecipe は楽曲レシピから宣伝ナレーションを書かせるタブです。
 	tabRecipe = "recipe"
 	// tabScript は完成済みの台本 JSON をそのまま合成するタブです。Gemini を通しません。
 	tabScript = "script"
@@ -96,7 +96,7 @@ func (h *Handler) enqueueFromInput(w http.ResponseWriter, r *http.Request) {
 
 // enqueueFromRecipe は「楽曲レシピ」タブの投入です。
 //
-// **入力ソースの代わりに ap-comp のジョブ ID を受け取ります。**
+// **入力ソースの代わりに楽曲生成サービスのジョブ ID を受け取ります。**
 // gs:// のパスを貼らせるより短く、打ち間違えれば ID の形で弾けます。
 func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 	command, ok := h.generateCommand(w, r, tabRecipe)
@@ -113,9 +113,9 @@ func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 	h.enqueueGenerate(w, r, command, inputURI, tabRecipe, musicJobID)
 }
 
-// recipeInputURI は、ap-comp のジョブ ID から楽曲レシピの場所を組み立てます。
+// recipeInputURI は、楽曲生成サービスのジョブ ID から楽曲レシピの場所を組み立てます。
 //
-// **ap-mv と同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+// **動画生成サービスと同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
 // 下書き（drafts/）は見ません — 宣伝ナレーションは公開した曲に付けるものだからです。
 func (h *Handler) recipeInputURI(musicJobID string) (string, error) {
 	if musicJobID == "" {

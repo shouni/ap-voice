@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -470,7 +470,7 @@ func (s *memoryStatusStore) Get(context.Context, string) (domain.JobStatus, erro
 	if !s.found {
 		// 本物の Store は未記録を ErrNotFound で返します。ここを素のエラーにすると、
 		// 「未記録」と「読めない」を分けて扱う側（再実行ガード）の検証がすり抜けます。
-		return domain.JobStatus{}, fmt.Errorf("%w: 記録がありません", jobstatus.ErrNotFound)
+		return domain.JobStatus{}, fmt.Errorf("%w: 記録がありません", jobfirestore.ErrNotFound)
 	}
 	return s.saved, nil
 }
@@ -523,7 +523,7 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 				&MockPublishStep{},
 				&MockNotifier{},
 				&MockScriptStore{},
-				jobstatus.NewRecorder[domain.JobStatus](store),
+				jobfirestore.NewRecorder[domain.JobStatus](store),
 				0,
 			)
 
@@ -537,7 +537,7 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 				t.Fatalf("Execute() error = %v", err)
 			}
 
-			if store.saved.State != jobstatus.StateSucceeded {
+			if store.saved.State != jobfirestore.StateSucceeded {
 				t.Fatalf("State = %q, want succeeded", store.saved.State)
 			}
 			if store.saved.AudioURI != tt.wantAudioURI {
@@ -579,7 +579,7 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 		&MockPublishStep{},
 		&MockNotifier{},
 		&MockScriptStore{},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 
@@ -591,7 +591,7 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 		t.Fatal("失敗するはずが成功しています")
 	}
 
-	if store.saved.State != jobstatus.StateFailed {
+	if store.saved.State != jobfirestore.StateFailed {
 		t.Errorf("State = %q, want failed", store.saved.State)
 	}
 	if store.saved.ScriptURI == "" || store.saved.AudioURI == "" {
@@ -609,7 +609,7 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:   jobstatus.Status{JobID: "job-1", State: jobstatus.StateSucceeded},
+			Status:   jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded},
 			AudioURI: "gs://bucket/voice/job-1/audio.wav",
 		},
 	}
@@ -629,7 +629,7 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 			return nil
 		}},
 		&MockScriptStore{},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 
@@ -647,7 +647,7 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	if notified != 0 {
 		t.Errorf("完了済みなのに再通知している: %d 回", notified)
 	}
-	if store.saved.State != jobstatus.StateSucceeded {
+	if store.saved.State != jobfirestore.StateSucceeded {
 		t.Errorf("State = %q, want succeeded（記録を書き換えない）", store.saved.State)
 	}
 }
@@ -664,7 +664,7 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 		found: true,
 		saved: domain.JobStatus{
 			// 直前の generate は succeeded だったが、投入時に queued へ戻っている。
-			Status:    jobstatus.Status{JobID: "job-1", State: jobstatus.StateQueued},
+			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},
 	}
@@ -680,7 +680,7 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 		&MockScriptStore{LoadFunc: func(context.Context, string) (domain.Script, error) {
 			return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
 		}},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 
@@ -705,8 +705,8 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 
 	store := &memoryStatusStore{
 		found:  true,
-		saved:  domain.JobStatus{Status: jobstatus.Status{JobID: "job-1", State: jobstatus.StateSucceeded}},
-		getErr: fmt.Errorf("%w: storage down", jobstatus.ErrUnavailable),
+		saved:  domain.JobStatus{Status: jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded}},
+		getErr: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable),
 	}
 
 	var generated int
@@ -722,7 +722,7 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 			return nil
 		}},
 		&MockScriptStore{},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 
@@ -730,14 +730,14 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 		Command: domain.CommandGenerate, JobID: "job-1",
 		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
 	})
-	if !errors.Is(err, jobstatus.ErrUnavailable) {
+	if !errors.Is(err, jobfirestore.ErrUnavailable) {
 		t.Fatalf("Execute() error = %v, want wrapping ErrUnavailable", err)
 	}
 
 	if generated != 0 {
 		t.Errorf("判断できないのに実行している: %d 回", generated)
 	}
-	if store.saved.State != jobstatus.StateSucceeded {
+	if store.saved.State != jobfirestore.StateSucceeded {
 		t.Errorf("State = %q, want succeeded（読めないだけで記録を潰さない）", store.saved.State)
 	}
 	if notifiedFailure != 0 {
@@ -758,7 +758,7 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:    jobstatus.Status{JobID: "job-1", State: jobstatus.StateQueued},
+			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
 			Mode:      "tech_duet",
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},
@@ -773,7 +773,7 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 				return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Text: "本文"}}}, nil
 			},
 		},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 
@@ -786,7 +786,7 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if store.saved.State != jobstatus.StateSucceeded {
+	if store.saved.State != jobfirestore.StateSucceeded {
 		t.Fatalf("State = %q, want succeeded", store.saved.State)
 	}
 	if store.saved.Mode != "tech_duet" {
@@ -808,7 +808,7 @@ func TestPipelineRecordsMode(t *testing.T) {
 		&MockPublishStep{},
 		&MockNotifier{},
 		&MockScriptStore{},
-		jobstatus.NewRecorder[domain.JobStatus](store),
+		jobfirestore.NewRecorder[domain.JobStatus](store),
 		0,
 	)
 

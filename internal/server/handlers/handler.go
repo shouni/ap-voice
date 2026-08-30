@@ -12,8 +12,7 @@ import (
 
 	"github.com/shouni/gcp-kit/auth/session"
 
-	"github.com/shouni/go-job-kit/jobstatus"
-	"github.com/shouni/go-job-kit/paging"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -43,8 +42,8 @@ type Handler struct {
 	// bucket と layout で出力先を決めます。**利用者には入力させません。**
 	bucket string
 	layout domain.StorageLayout
-	// musicBucket は、楽曲紹介モードの入力を ap-comp のジョブ ID から解決するために使います。
-	// **ap-mv と同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
+	// musicBucket は、楽曲紹介モードの入力を楽曲生成サービスのジョブ ID から解決するために使います。
+	// **動画生成サービスと同じ規則です**（gs://<musicBucket>/music/<jobID>/recipe.json）。
 	musicBucket string
 	// repo は履歴の一覧と台本の読み出しです。
 	repo ScriptRepository
@@ -53,7 +52,7 @@ type Handler struct {
 	// status は投入時に queued を記録します。**投入より先に書きます** —
 	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
 	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
-	status *jobstatus.Recorder[domain.JobStatus]
+	status *jobfirestore.Recorder[domain.JobStatus]
 	// reading は、合成前に読みを確かめるために使います。
 	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
@@ -79,7 +78,7 @@ type PromptRenderer interface {
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
-	List(ctx context.Context, page, perPage int) ([]repository.Job, paging.PageMeta, error)
+	List(ctx context.Context, page, perPage int) ([]repository.Job, jobfirestore.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
 	SaveScript(ctx context.Context, jobID string, script domain.Script) error
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
@@ -109,7 +108,7 @@ type HandlerOptions struct {
 	Speakers    *speaker.Registry
 	Renderer    PromptRenderer
 	Reading     ReadingConverter
-	JobStatus   *jobstatus.Recorder[domain.JobStatus]
+	JobStatus   *jobfirestore.Recorder[domain.JobStatus]
 }
 
 // NewHandler は Handler を生成します。
@@ -192,8 +191,12 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	h.status.Record(ctx, req.JobID, domain.JobStatus{
 		JobID:   req.JobID,
 		Command: string(req.Command),
-		State:   jobstatus.StateQueued,
+		State:   jobfirestore.StateQueued,
 		Mode:    req.Mode,
+		// **一覧はこれで並べ替えます。** 入れないと全件がゼロ値になり、
+		// 新しい順が成立しません。作り直しでは CarryOver が最初の投入時刻を
+		// 引き継ぐので、履歴の位置は動きません。
+		QueuedAt: time.Now().UTC(),
 	}, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、前回の成果物の在り処とモードを残します。
 		next.CarryFrom(prev)

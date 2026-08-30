@@ -9,7 +9,7 @@ import (
 
 	"github.com/shouni/gcp-kit/tasks"
 	"github.com/shouni/go-http-kit/httpkit"
-	"github.com/shouni/go-job-kit/jobstatus"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 	"github.com/shouni/go-voicevox/speaker"
 
@@ -48,6 +48,23 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}
 
+	// ジョブ状態の置き場。成果物は GCS のまま、状態だけを Firestore に持ちます。
+	// **両ロールで要ります** — web は queued を書いて履歴を読み、worker は
+	// running / succeeded / failed を書いて再実行ガードのために読みます。
+	jobStatus, err := jobfirestore.New(ctx,
+		jobfirestore.WithProjectID(cfg.GCP.ProjectID),
+		jobfirestore.WithDatabase(cfg.Storage.FirestoreDatabase),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("firestore の初期化に失敗しました: %w", err)
+	}
+	resources = append(resources, jobStatus)
+
+	jobStatusClient, err := jobStatus.Client()
+	if err != nil {
+		return nil, fmt.Errorf("firestore クライアントの取得に失敗しました: %w", err)
+	}
+
 	httpClient := httpkit.New(
 		cfg.HTTP.Timeout,
 		httpkit.WithMaxRetries(1),
@@ -69,7 +86,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
 	// worker は synthesize が保存済み台本を読むために。
-	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket)
+	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket, jobStatusClient)
 	if err != nil {
 		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
 	}
@@ -77,7 +94,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	appCtx := &app.Container{
 		Config: cfg,
 		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
-		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](repo),
+		JobStatus:  jobfirestore.NewRecorder[domain.JobStatus](repo),
 		Speakers:   speakers,
 		Repository: repo,
 		Storage:    storage,
@@ -87,7 +104,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		// Store はファクトリが持つクライアントを包むだけで、寿命はファクトリ側にあります。
 		// 組み立てに失敗したときは resources 側が storage を直接閉じるため、
 		// Closers は成功して返ったあとの解放だけを受け持ちます。
-		Closers: []io.Closer{storage},
+		Closers: []io.Closer{storage, jobStatus},
 	}
 
 	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで

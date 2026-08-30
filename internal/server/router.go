@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shouni/gcp-kit/cloudlog"
 	"github.com/shouni/gcp-kit/cloudrun"
-	"github.com/shouni/gcp-kit/secureheaders"
+	"github.com/shouni/go-serve-kit/secureheaders"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
@@ -38,8 +38,10 @@ func setupCommonMiddleware(r *chi.Mux, projectID string) {
 	// 画面は日本語 UTF-8（1 文字 3 バイト）なので圧縮がよく効くが、これまで無圧縮で
 	// 配信していた。静的ファイルも同じ経路に乗る（vendor は immutable なので再圧縮は稀）。
 	r.Use(middleware.Compress(compressionLevel))
-	r.Use(secureheaders.New(secureheaders.Config{
+	r.Use(secureheaders.Middleware(secureheaders.Config{
 		MediaSources: []string{gcsOrigin},
+		// Bootstrap の JS が遷移中にインラインスタイルを当てるため。
+		AllowInlineStyle: true,
 	}))
 }
 

@@ -84,7 +84,7 @@ func (p *PromptAdapter) Generate(mode, content string) (string, error) {
 	return prompt, nil
 }
 
-// decodeRecipe は、入力を ap-comp の recipe.json として解釈します。
+// decodeRecipe は、入力を music.Recipe 形式の recipe.json として解釈します。
 //
 // 素の JSON 文字列のままプロンプトへ流し込むこともできますが、それだと入力の壊れに
 // 生成が終わるまで気付けません。曲名すら無いレシピから宣伝台本は作れないので、

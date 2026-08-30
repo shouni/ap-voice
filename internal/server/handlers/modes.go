@@ -15,7 +15,7 @@ const samplePlaceholder = "（ここに入力ソースの本文が入ります�
 
 // sampleRecipe は、入力の型が違うモードを組み立てるための仮のレシピです。
 //
-// 楽曲紹介だけは ap-comp の recipe.json を読みます。素のテキストを渡すと
+// 楽曲紹介だけは楽曲レシピ（music.Recipe）を読みます。素のテキストを渡すと
 // デコードで落ちるため、形の合う値を用意します。
 const sampleRecipe = `{
   "title": "（曲名）", "theme": "（テーマ）", "mood": "（ムード）", "tempo": 120,

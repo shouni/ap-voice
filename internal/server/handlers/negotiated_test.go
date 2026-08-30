@@ -24,7 +24,7 @@ func requestWithJobID(method, target, accept, jobID string) *http.Request {
 
 // 同じルートが、相手の求める表現で答えること。
 //
-// ap-mcp の baseClient は全リクエストに Accept: application/json を付けるため、
+// MCP サーバーの baseClient は全リクエストに Accept: application/json を付けるため、
 // ルートを 1 本にしても機械側は JSON を受け取り続けます。
 func TestScriptServesBothAudiences(t *testing.T) {
 	t.Parallel()

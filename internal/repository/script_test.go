@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/memio"
 
@@ -103,94 +104,150 @@ func newStore(t *testing.T, n int) (*fakeStore, []string) {
 func newRepo(t *testing.T, store *fakeStore) *Repository {
 	t.Helper()
 
-	repo, err := NewRepository(store, "test")
+	// Firestore クライアントは渡しません。ここで検証するのは成果物の読み書きで、
+	// ジョブ状態には触れないためです。削除は状態の消し込みに失敗しても成功として
+	// 返すので（孤児は警告ログに残ります）、この構成でも Delete の検証は通ります。
+	repo, err := NewRepository(store, "test", nil)
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
 	return repo
 }
 
-// TestListReadsOnlyTheScriptsItShows は、題名の読み出しが**表示件数**で
-// 止まることを検証します。
+// fakeStatus は Firestore の代わりに、返すべき状態をそのまま持ちます。
 //
-// 以前は全件の題名を読んでから上限で切っていたため、50 件を出すのに
-// ジョブ数ぶんの往復が発生していました。ジョブが増えるほど遅くなり、
-// 増え方に上限がありません。
-func TestListReadsOnlyTheScriptsItShows(t *testing.T) {
-	t.Parallel()
-
-	store, _ := newStore(t, 30)
-	repo := newRepo(t, store)
-
-	jobs, _, err := repo.List(context.Background(), 1, 5)
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-	if len(jobs) != 5 {
-		t.Fatalf("件数 = %d, want 5", len(jobs))
-	}
-	if got := int(store.opened); got != 5 {
-		t.Errorf("台本を %d 件読みました。表示は 5 件なので 5 回で足ります", got)
-	}
-	// 新しい順であること。
-	if jobs[0].ID <= jobs[1].ID {
-		t.Errorf("降順に並んでいません: %s, %s", jobs[0].ID, jobs[1].ID)
-	}
-	// 題名が埋まっていること。
-	for _, job := range jobs {
-		if !strings.HasPrefix(job.Title, "台本 ") {
-			t.Errorf("題名が埋まっていません: %+v", job)
-		}
-	}
+// 一覧が**成果物を一切読まない**ことを見るために要ります。実物の Store を使うと
+// エミュレータが要り、この検査のためだけに外部プロセスへ依存することになります。
+type fakeStatus struct {
+	statuses []domain.JobStatus
 }
 
-// TestListKeepsJobsWithUnreadableScripts は、台本が壊れていても一覧から
-// 消えないことを検証します。**消えると削除する手段まで失われます。**
-func TestListKeepsJobsWithUnreadableScripts(t *testing.T) {
+func (f *fakeStatus) Get(context.Context, string) (domain.JobStatus, error) {
+	return domain.JobStatus{}, jobfirestore.ErrNotFound
+}
+
+func (f *fakeStatus) Save(context.Context, string, domain.JobStatus) error { return nil }
+
+func (f *fakeStatus) Delete(context.Context, string) error { return nil }
+
+func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error) {
+	// 実物と同じく、返すのはページ分だけです。
+	total := len(f.statuses)
+	from := (page - 1) * perPage
+	if from > total {
+		from = total
+	}
+	to := min(from+perPage, total)
+	return f.statuses[from:to], jobfirestore.PageMeta{Page: page, PerPage: perPage, Total: total}, nil
+}
+
+// withStatuses は、Firestore が返す状態を差し替えた Repository を返します。
+func withStatuses(t *testing.T, store *fakeStore, statuses ...domain.JobStatus) *Repository {
+	t.Helper()
+
+	repo := newRepo(t, store)
+	repo.status = &fakeStatus{statuses: statuses}
+	return repo
+}
+
+// TestListDoesNotReadArtifacts は、一覧が成果物を 1 つも読まないことを検証します。
+//
+// **以前はバケット配下を全走査し、ページ分の台本を開いて題名を得ていました。**
+// ジョブが増えるほど走査が伸び、増え方に上限がありませんでした。いま必要な値は
+// すべて状態に入っているので、倉庫へは一度も触りません。ここで回数を見ておかないと、
+// 題名や音声の有無を「念のため」成果物から取り直す実装がいつでも戻ってきます。
+func TestListDoesNotReadArtifacts(t *testing.T) {
 	t.Parallel()
 
-	store, ids := newStore(t, 2)
-	store.put(t, "gs://test/voice/"+ids[0]+"/audio.json", "これはJSONではありません")
-	repo := newRepo(t, store)
+	// 倉庫は**空**です。それでも一覧は返ります。
+	store := newFakeStore()
+	repo := withStatuses(t, store,
+		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Title: "新しい方"}},
+		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb", Title: "古い方"}},
+	)
 
-	jobs, _, err := repo.List(context.Background(), 1, 10)
+	jobs, meta, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 	if len(jobs) != 2 {
 		t.Fatalf("件数 = %d, want 2", len(jobs))
 	}
-	for _, job := range jobs {
-		if job.ID == ids[0] && job.Title != ids[0] {
-			t.Errorf("読めない台本の題名 = %q, want ジョブID", job.Title)
-		}
+	if meta.Total != 2 {
+		t.Errorf("Total = %d, want 2", meta.Total)
+	}
+	if store.opened != 0 || store.exists != 0 {
+		t.Errorf("倉庫へ触れています: opened=%d exists=%d", store.opened, store.exists)
+	}
+	if jobs[0].Title != "新しい方" {
+		t.Errorf("題名 = %q, 状態から取れていません", jobs[0].Title)
+	}
+	// 作成時刻はジョブ ID から復元します。
+	if jobs[0].CreatedAt.IsZero() {
+		t.Error("作成時刻が空です")
 	}
 }
 
-// TestHasAudioDoesNotDependOnTheListLimit は、一覧の上限から外れた古いジョブでも
-// 音声の有無を正しく返すことを検証します。
+// TestListFallsBackToJobID は、題名の無いジョブが一覧から消えないことを検証します。
 //
-// **以前は List の結果を線形探索していました。** 上限 50 件に入らないジョブは
-// 必ず false になり、音声があるのに詳細画面から再生欄が消えていました。
-func TestHasAudioDoesNotDependOnTheListLimit(t *testing.T) {
+// **消えると削除する手段まで失われます。** 題名が確定する前に失敗したジョブこそ
+// 消したいものです。
+func TestListFallsBackToJobID(t *testing.T) {
 	t.Parallel()
 
-	store, ids := newStore(t, 60)
-	repo := newRepo(t, store)
+	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
+	repo := withStatuses(t, newFakeStore(),
+		domain.JobStatus{Status: jobfirestore.Status{JobID: jobID, State: jobfirestore.StateFailed}})
 
-	// ids[0] は最も古いので、新しい順 50 件には入りません。
-	oldest := ids[0]
-	jobs, _, err := repo.List(context.Background(), 1, 50)
+	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	for _, job := range jobs {
-		if job.ID == oldest {
-			t.Fatalf("前提が崩れています: %s が上限内に入っています", oldest)
-		}
+	if len(jobs) != 1 {
+		t.Fatalf("件数 = %d, want 1", len(jobs))
 	}
+	if jobs[0].Title != jobID {
+		t.Errorf("題名 = %q, want ジョブID", jobs[0].Title)
+	}
+}
 
-	has, err := repo.HasAudio(context.Background(), oldest)
+// TestListMarksAudioFromTheRecordedURI は、音声の有無を成果物ではなく記録から
+// 判定することを検証します。generate は台本で終わるので在り処が入りません。
+func TestListMarksAudioFromTheRecordedURI(t *testing.T) {
+	t.Parallel()
+
+	repo := withStatuses(t, newFakeStore(),
+		domain.JobStatus{
+			Status:   jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa"},
+			AudioURI: "gs://test/voice/voice-20260830-090000-aaaaaaaaaaaa/audio.wav",
+		},
+		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb"}},
+	)
+
+	jobs, _, err := repo.List(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !jobs[0].HasAudio {
+		t.Error("音声の在り処が記録されているのに false です")
+	}
+	if jobs[1].HasAudio {
+		t.Error("台本だけのジョブを true にしています")
+	}
+}
+
+// TestHasAudioChecksTheObjectItself は、音声の有無を倉庫へ直接問い合わせることを
+// 検証します。
+//
+// **一覧の判定とは別物です。** 詳細画面は記録より実物を信じます（記録の取りこぼしで
+// 再生欄が消えるより、余分に 1 回問い合わせるほうが安いためです）。
+func TestHasAudioChecksTheObjectItself(t *testing.T) {
+	t.Parallel()
+
+	store, ids := newStore(t, 2)
+	repo := newRepo(t, store)
+
+	has, err := repo.HasAudio(context.Background(), ids[0])
 	if err != nil {
 		t.Fatalf("HasAudio() error = %v", err)
 	}
