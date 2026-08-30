@@ -159,8 +159,8 @@ github.com/shouni/go-gemini-client v1.21.4 h1:+UVIAAQTZupa6eJk2Mgv59CdpLTceZDy4l
 github.com/shouni/go-gemini-client v1.21.4/go.mod h1:IH4s5hvGttCWkhn2GGXGJrr9Rbb0BC5B3j6CmjUxE9g=
 github.com/shouni/go-http-kit v1.10.0 h1:2L5zPnZpbEgxGeTsdDP5fKFcS6efpXOOvMBCcbzzlHQ=
 github.com/shouni/go-http-kit v1.10.0/go.mod h1:rk5iB0MB/Z3cnMGrQlTubCoDA+QUFHGMF7g7PA7ArQo=
-github.com/shouni/go-job-firestore v1.0.1 h1:j0XKKFrrajX3Vd7AidezpyCiKXIgTQ0KYPo5KElttWE=
-github.com/shouni/go-job-firestore v1.0.1/go.mod h1:12oCOhGT4gW+JScIysDjQuNHtk6v97zTGgv0BaGZ4f8=
+github.com/shouni/go-job-firestore v1.0.3 h1:HIIOfcw2QvHNXSU3KwSPSIsTIgeRf0cdfCfu+xdVnpo=
+github.com/shouni/go-job-firestore v1.0.3/go.mod h1:12oCOhGT4gW+JScIysDjQuNHtk6v97zTGgv0BaGZ4f8=
 github.com/shouni/go-notify v1.3.1 h1:fzaSiT0fX2IKXd7hH1pZSXsFXzMc8DrpHXZJRaoF1rk=
 github.com/shouni/go-notify v1.3.1/go.mod h1:vgnXQGdz8LnWReoqrTEAMKjEJlTzeCmVwiUL1Qfb2Vw=
 github.com/shouni/go-prompt-kit v1.7.0 h1:uOma6R5jJh1ywy0TepXnRSRYtGX41B3/tN7su7E4vcs=
@@ -171,8 +171,8 @@ github.com/shouni/go-serve-kit v1.0.0 h1:AINHUZKfbHoVh/aCZNz2/Cy8Zm72Y54jrTgCzdp
 github.com/shouni/go-serve-kit v1.0.0/go.mod h1:Mmy3q40YTCejIKYcKqid+7xfQBkcMz/OtdVo1wPAxlQ=
 github.com/shouni/go-utils v1.7.1 h1:CrwvhR59Bef2DqJqdpniyW/rJFMip1RzXCKJlE5Ge+o=
 github.com/shouni/go-utils v1.7.1/go.mod h1:z35gD3jCEREuezx2ZnVk44XbJoN0GF35OACYlbrxcAc=
-github.com/shouni/go-voicevox v1.10.3 h1:NODt2DntjmHmCFiGY/lWGX8Tz4bTmuotxMDCmFVyMX4=
-github.com/shouni/go-voicevox v1.10.3/go.mod h1:utHLzql/hd3GhexGNdXUu3EhBW57GlCKrBDMoiyDw74=
+github.com/shouni/go-voicevox v1.10.4 h1:VAOhMPI7JAN3vrjkhKf/gBG391wogsLjZzC6K4pg2oQ=
+github.com/shouni/go-voicevox v1.10.4/go.mod h1:utHLzql/hd3GhexGNdXUu3EhBW57GlCKrBDMoiyDw74=
 github.com/shouni/go-web-reader v1.5.0 h1:oGv4tiTyJyFwA1uP9+rNSL+BdiFIop4mNDhl4Z81NFo=
 github.com/shouni/go-web-reader v1.5.0/go.mod h1:/32kketOpLDYz8M/b4UvLxUucTKuZ272W/EXUSJOBCM=
 github.com/shouni/netarmor v1.4.0 h1:ePG5m1Ao3jvDwdNarsGHqekGYeRJDdoSmHrivqN2TfE=

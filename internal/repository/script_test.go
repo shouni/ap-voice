@@ -133,10 +133,7 @@ func (f *fakeStatus) Delete(context.Context, string) error { return nil }
 func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error) {
 	// 実物と同じく、返すのはページ分だけです。
 	total := len(f.statuses)
-	from := (page - 1) * perPage
-	if from > total {
-		from = total
-	}
+	from := min((page-1)*perPage, total)
 	to := min(from+perPage, total)
 	return f.statuses[from:to], jobfirestore.PageMeta{Page: page, PerPage: perPage, Total: total}, nil
 }
@@ -162,8 +159,8 @@ func TestListDoesNotReadArtifacts(t *testing.T) {
 	// 倉庫は**空**です。それでも一覧は返ります。
 	store := newFakeStore()
 	repo := withStatuses(t, store,
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Title: "新しい方"}},
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb", Title: "古い方"}},
+		domain.JobStatus{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Title: "新しい方"},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb", Title: "古い方"},
 	)
 
 	jobs, meta, err := repo.List(context.Background(), 1, 10)
@@ -197,7 +194,7 @@ func TestListFallsBackToJobID(t *testing.T) {
 
 	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
 	repo := withStatuses(t, newFakeStore(),
-		domain.JobStatus{Status: jobfirestore.Status{JobID: jobID, State: jobfirestore.StateFailed}})
+		domain.JobStatus{JobID: jobID, State: jobfirestore.StateFailed})
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
@@ -218,10 +215,10 @@ func TestListMarksAudioFromTheRecordedURI(t *testing.T) {
 
 	repo := withStatuses(t, newFakeStore(),
 		domain.JobStatus{
-			Status:   jobfirestore.Status{JobID: "voice-20260830-090000-aaaaaaaaaaaa"},
+			JobID:    "voice-20260830-090000-aaaaaaaaaaaa",
 			AudioURI: "gs://test/voice/voice-20260830-090000-aaaaaaaaaaaa/audio.wav",
 		},
-		domain.JobStatus{Status: jobfirestore.Status{JobID: "voice-20260829-090000-bbbbbbbbbbbb"}},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb"},
 	)
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)

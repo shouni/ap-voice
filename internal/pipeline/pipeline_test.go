@@ -609,7 +609,8 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:   jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded},
+			JobID:    "job-1",
+			State:    jobfirestore.StateSucceeded,
 			AudioURI: "gs://bucket/voice/job-1/audio.wav",
 		},
 	}
@@ -664,7 +665,8 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 		found: true,
 		saved: domain.JobStatus{
 			// 直前の generate は succeeded だったが、投入時に queued へ戻っている。
-			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
+			JobID:     "job-1",
+			State:     jobfirestore.StateQueued,
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},
 	}
@@ -705,7 +707,7 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 
 	store := &memoryStatusStore{
 		found:  true,
-		saved:  domain.JobStatus{Status: jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateSucceeded}},
+		saved:  domain.JobStatus{JobID: "job-1", State: jobfirestore.StateSucceeded},
 		getErr: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable),
 	}
 
@@ -758,7 +760,8 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			Status:    jobfirestore.Status{JobID: "job-1", State: jobfirestore.StateQueued},
+			JobID:     "job-1",
+			State:     jobfirestore.StateQueued,
 			Mode:      "tech_duet",
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
 		},

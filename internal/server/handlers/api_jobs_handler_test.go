@@ -635,7 +635,7 @@ func TestAPIJobStatusReturnsRecord(t *testing.T) {
 	t.Parallel()
 
 	h := apiHandler(t, &statusRepo{status: domain.JobStatus{
-		Status:   jobfirestore.Status{State: jobfirestore.StateRunning},
+		State:    jobfirestore.StateRunning,
 		AudioURI: "gs://test/voice/x/audio.wav",
 	}})
 	rec := getJobStatus(t, h)
