@@ -159,8 +159,8 @@ github.com/shouni/go-gemini-client v1.21.4 h1:+UVIAAQTZupa6eJk2Mgv59CdpLTceZDy4l
 github.com/shouni/go-gemini-client v1.21.4/go.mod h1:IH4s5hvGttCWkhn2GGXGJrr9Rbb0BC5B3j6CmjUxE9g=
 github.com/shouni/go-http-kit v1.10.0 h1:2L5zPnZpbEgxGeTsdDP5fKFcS6efpXOOvMBCcbzzlHQ=
 github.com/shouni/go-http-kit v1.10.0/go.mod h1:rk5iB0MB/Z3cnMGrQlTubCoDA+QUFHGMF7g7PA7ArQo=
-github.com/shouni/go-job-firestore v1.0.3 h1:HIIOfcw2QvHNXSU3KwSPSIsTIgeRf0cdfCfu+xdVnpo=
-github.com/shouni/go-job-firestore v1.0.3/go.mod h1:12oCOhGT4gW+JScIysDjQuNHtk6v97zTGgv0BaGZ4f8=
+github.com/shouni/go-job-firestore v1.1.0 h1:EWONJ0+n/WMxvoZvWRJXiTDlvueeT0R9GZ3E8rLIHn8=
+github.com/shouni/go-job-firestore v1.1.0/go.mod h1:12oCOhGT4gW+JScIysDjQuNHtk6v97zTGgv0BaGZ4f8=
 github.com/shouni/go-notify v1.3.1 h1:fzaSiT0fX2IKXd7hH1pZSXsFXzMc8DrpHXZJRaoF1rk=
 github.com/shouni/go-notify v1.3.1/go.mod h1:vgnXQGdz8LnWReoqrTEAMKjEJlTzeCmVwiUL1Qfb2Vw=
 github.com/shouni/go-prompt-kit v1.7.0 h1:uOma6R5jJh1ywy0TepXnRSRYtGX41B3/tN7su7E4vcs=
