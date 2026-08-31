@@ -49,19 +49,133 @@
         }
     }
 
+    // 上限はサーバーが持つ数を読みます（#script-form の data-max-lines）。
+    // 超えた台本は保存時に弾かれ、そのとき画面は保存済みの台本を読み直すので
+    // 編集中の内容が消えます。足せなくすることで、その経路を塞ぎます。
+    //
+    // 数をここへ写しません。写すと、どちらかを直したときにもう一方が古いまま
+    // 残ります。読めなければ上限なしとして扱い、判断をサーバーへ返します。
+    function maxLines() {
+        var form = document.getElementById('script-form');
+        var value = form ? parseInt(form.dataset.maxLines, 10) : NaN;
+        return value > 0 ? value : Infinity;
+    }
+
+    // rowsOf は台本の行（tbody の tr）を並び順のまま返します。
+    function rowsOf(body) {
+        return Array.prototype.slice.call(body.querySelectorAll('tr'));
+    }
+
+    // refresh は、行を足し引きしたあとの見出しの行数を合わせます。
+    function refresh(body) {
+        var count = rowsOf(body).length;
+        document.querySelectorAll('.js-line-count').forEach(function (node) {
+            node.textContent = String(count);
+        });
+    }
+
+    // fillRow は、1 行のスタイル選択肢を話者ぶんへ広げます。
+    function fillRow(row) {
+        var speakerSelect = row.querySelector('.js-speaker');
+        var styleSelect = row.querySelector('.js-style');
+        if (speakerSelect && styleSelect) {
+            fillStyles(speakerSelect, styleSelect);
+        }
+    }
+
+    // addAfter は、指定の行の下に空の行を差し込みます。
+    //
+    // 行はテンプレートから組み立てず、元の行を写して作ります。話者の選択肢も
+    // スタイルの初期値も画面に既にあるので、同じ並びを JS 側へ書き写さずに済みます
+    // （書き写すと assets/speakers.json と二重になります）。
+    function addAfter(body, row) {
+        if (rowsOf(body).length >= maxLines()) {
+            return null;
+        }
+        var added = row.cloneNode(true);
+        var text = added.querySelector('.js-text');
+        if (text) {
+            text.value = '';
+        }
+        var reading = added.querySelector('.js-reading');
+        if (reading) {
+            reading.textContent = '';
+        }
+        row.parentNode.insertBefore(added, row.nextSibling);
+        fillRow(added);
+        refresh(body);
+        if (text) {
+            text.focus();
+        }
+        return added;
+    }
+
+    // move は、行を 1 つ上（または下）へ入れ替えます。話す順序は台本そのものなので、
+    // 入れ替えるのに本文を切り貼りさせる理由がありません。
+    function move(row, up) {
+        var sibling = up ? row.previousElementSibling : row.nextElementSibling;
+        if (!sibling) {
+            return;
+        }
+        if (up) {
+            row.parentNode.insertBefore(row, sibling);
+        } else {
+            row.parentNode.insertBefore(sibling, row);
+        }
+    }
+
+    // remove は行ごと取り除きます。話者・スタイル・本文は 3 つの並びとして送るので、
+    // 行ごと消せば数が揃ったままです（本文だけ空にする従来の消し方も残ります）。
+    function remove(body, row) {
+        if (rowsOf(body).length <= 1) {
+            // 最後の 1 行は消しません。空の台本は保存できず、行が 0 だと
+            // 写して増やす元も無くなります。
+            var text = row.querySelector('.js-text');
+            if (text) {
+                text.value = '';
+                text.focus();
+            }
+            return;
+        }
+        row.remove();
+        refresh(body);
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('tr').forEach(function (row) {
-            var speakerSelect = row.querySelector('.js-speaker');
-            var styleSelect = row.querySelector('.js-style');
-            if (!speakerSelect || !styleSelect) {
+        var body = document.querySelector('#script-form tbody');
+        if (!body) {
+            return;
+        }
+
+        // 行は増えるので、行ごとではなく表に 1 つだけ張ります。写した行にも
+        // そのまま効くため、複製のたびにイベントを張り直す必要がありません。
+        body.addEventListener('change', function (event) {
+            var row = event.target.closest('tr');
+            if (row && event.target.classList.contains('js-speaker')) {
+                fillRow(row);
+            }
+        });
+
+        body.addEventListener('click', function (event) {
+            var button = event.target.closest('button');
+            var row = event.target.closest('tr');
+            if (!button || !row) {
                 return;
             }
-            speakerSelect.addEventListener('change', function () {
-                fillStyles(speakerSelect, styleSelect);
-            });
-            // 初回。保存済みの値 1 つだけが入っている状態から、話者ぶんへ広げます。
-            fillStyles(speakerSelect, styleSelect);
+            if (button.classList.contains('js-move-up')) {
+                move(row, true);
+            } else if (button.classList.contains('js-move-down')) {
+                move(row, false);
+            } else if (button.classList.contains('js-add-row')) {
+                addAfter(body, row);
+            } else if (button.classList.contains('js-remove-row')) {
+                remove(body, row);
+            }
         });
+
+        // 初回。保存済みの値 1 つだけが入っている状態から、話者ぶんへ広げます。
+        rowsOf(body).forEach(fillRow);
+        refresh(body);
     });
 })();
 
@@ -76,9 +190,14 @@
 (function () {
     'use strict';
 
-    // 上限はサーバーと同じ 200 行です。ここで数えるのは、超えた分を送ってから
-    // 400 で返されるより、押した時点で理由を出すほうが分かるためです。
-    var MAX_LINES = 200;
+    // 上限はサーバーが持つ数を読みます（#script-form の data-max-lines）。
+    // ここで数えるのは、超えた分を送ってから 400 で返されるより、押した時点で
+    // 理由を出すほうが分かるためです。読めなければ送って判断を委ねます。
+    function maxLines() {
+        var form = document.getElementById('script-form');
+        var value = form ? parseInt(form.dataset.maxLines, 10) : NaN;
+        return value > 0 ? value : Infinity;
+    }
 
     // texts は表の各行の本文を、行の順序のまま返します。
     // 空の行も落としません。応答は要求と同じ並びで返るので、番号がずれます。
@@ -129,8 +248,9 @@
         if (fields.length === 0) {
             return;
         }
-        if (fields.length > MAX_LINES) {
-            status.textContent = '行が多すぎます（' + fields.length + ' 行、上限 ' + MAX_LINES + ' 行）';
+        var limit = maxLines();
+        if (fields.length > limit) {
+            status.textContent = '行が多すぎます（' + fields.length + ' 行、上限 ' + limit + ' 行）';
             return;
         }
 

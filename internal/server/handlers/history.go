@@ -59,6 +59,11 @@ type detailView struct {
 	// Speakers は話者名の一覧、StylesJSON は話者ごとの実在スタイルです。
 	// 後者は選択肢を話者に応じて絞るために JS へ渡します。
 	Speakers []string
+	// MaxLines は 1 つの台本で受け付ける行数の上限です。画面へ渡すのは、
+	// 行を足せる以上、画面側にも同じ上限が要るためです。JS 側に数を写すと、
+	// どちらかを直したときにもう一方が古いままになります（超えた台本は保存時に
+	// 弾かれ、そのとき画面は保存済みの台本を読み直すので編集中の内容が消えます）。
+	MaxLines int
 	// StylesJSON は data 属性へ入れるため素の string です。template.JS にすると
 	// html/template が素通しし、値に </script> が入ったときブレイクアウトを許します。
 	// 属性コンテキストなら確実にエスケープされ、画面側は dataset から読み戻せます。
@@ -152,6 +157,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 		baseView: h.base(r),
 		JobID:    jobID,
 		Speakers: h.speakers.SpeakerNames(),
+		MaxLines: maxScriptLines,
 		Message:  message,
 		Error:    errMsg,
 	}

@@ -35,7 +35,8 @@
        ジョブの通常の姿だからです。開けないと、削除もここからしかできない以上、
        履歴に残ったまま消せなくなります。 */}}
   {{ if .HasScript }}
-  <form method="post" action="/history/{{ .JobID }}/script" id="script-form">
+  <form method="post" action="/history/{{ .JobID }}/script" id="script-form"
+        data-max-lines="{{ .MaxLines }}">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 
     <div class="mb-3">
@@ -46,7 +47,8 @@
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-2">
-      <h2 class="h6 mb-0">台本（{{ len .Script.Lines }} 行）</h2>
+      {{/* 行数は追加・削除で動くので、画面側が書き換えられるよう印を付けます。 */}}
+      <h2 class="h6 mb-0">台本（<span class="js-line-count">{{ len .Script.Lines }}</span> 行）</h2>
 
       {{/* 読みは自明ではありません（「水面」は ミナモ ではなく スイメン）。
            合成してから気付くと、台本ぶんの合成時間がそのまま無駄になります。
@@ -57,7 +59,8 @@
       <span class="form-text m-0 js-reading-status" role="status" aria-live="polite"></span>
     </div>
     <div class="form-text mb-2">
-      本文を空にした行は保存時に削除されます。スタイルの選択肢は話者に応じて変わります。
+      行は追加・並べ替え・削除できます。本文を空にした行も保存時に落ちます。
+      スタイルの選択肢は話者に応じて変わります。
     </div>
 
     {{/* 3 列とも最低幅を持つため、狭い画面では表がはみ出します。
@@ -65,7 +68,7 @@
     <div class="table-responsive">
     <table class="table table-sm align-middle script-table">
       <thead>
-        <tr><th>話者</th><th>スタイル</th><th>テキスト</th></tr>
+        <tr><th>話者</th><th>スタイル</th><th>テキスト</th><th class="text-nowrap">行</th></tr>
       </thead>
       <tbody>
         {{ range .Script.Lines }}
@@ -87,6 +90,25 @@
               <textarea class="form-control form-control-sm js-text" name="text" rows="2">{{ .Text }}</textarea>
               {{/* 読みの差し込み先です。押されるまでは空で、行の高さも変わりません。 */}}
               <div class="form-text js-reading"></div>
+            </td>
+            {{/* 行の操作です。話す順序は台本そのものなので、入れ替えるのに
+                 本文を切り貼りさせる必要はありません。追加した行は
+                 直前の行の話者を引き継ぎます（続けて同じ話者が話すことが多いため）。 */}}
+            <td class="text-nowrap align-top">
+              <div class="btn-group btn-group-sm" role="group" aria-label="行の操作">
+                <button type="button" class="btn btn-outline-secondary js-move-up" title="上へ" aria-label="上へ">
+                  <i class="bi bi-arrow-up" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary js-move-down" title="下へ" aria-label="下へ">
+                  <i class="bi bi-arrow-down" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary js-add-row" title="下に行を追加" aria-label="下に行を追加">
+                  <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-outline-danger js-remove-row" title="この行を削除" aria-label="この行を削除">
+                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+              </div>
             </td>
           </tr>
         {{ end }}

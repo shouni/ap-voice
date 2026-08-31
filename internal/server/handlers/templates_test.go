@@ -144,6 +144,7 @@ func TestTemplatesRender(t *testing.T) {
 				HasScript:  true,
 				HasAudio:   true,
 				State:      jobfirestore.StateSucceeded,
+				MaxLines:   maxScriptLines,
 				Speakers:   []string{"ずんだもん", "四国めたん"},
 				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
 			},
@@ -167,6 +168,10 @@ func TestTemplatesRender(t *testing.T) {
 				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
 				`data-endpoint="/api/jobs/voice-1/status"`,
 				`data-state="succeeded"`,
+				// 行の操作。順序は台本そのものなので、本文の切り貼りでは直せません。
+				"js-move-up", "js-move-down", "js-add-row", "js-remove-row",
+				// 行数の上限はサーバーの値を渡します（画面側に写さないため）。
+				`data-max-lines="200"`,
 			},
 		},
 		{

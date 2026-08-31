@@ -119,7 +119,7 @@ go run .        # SERVER_ROLE が必須
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
-`POST /history/{jobID}/script`（台本を保存して音声を作る）、`POST /history/{jobID}/delete`（削除）、
+`POST /history/{jobID}/script`（台本を保存して音声を作る。行の追加・並べ替え・削除も画面から）、`POST /history/{jobID}/delete`（削除）、
 `GET /history/{jobID}/audio`（署名付き URL へ 302）、
 `GET /history/{jobID}/script`（**保存済み**の台本を `<jobID>.json` として添付ダウンロード）です。
 台本は読み込み済みの小さな JSON なので、音声と違って署名付き URL を挟まずそのまま返します。
