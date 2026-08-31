@@ -294,16 +294,21 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
     is nothing to fix. **It needs no new branching**: `resolveScript` treats anything that is not
     `synthesize` as a generation, and `publish` treats anything that is not `generate` as going
     all the way to audio, so the third value lands on the wanted side of both.
-  - `synthesize` — never touches Gemini. It uses `Request.Script` when present and otherwise
-    loads the stored script by `JobID` (`domain.ScriptStore`). The web face always takes the
-    second path: **the script is not carried in the task payload**, because a long one can reach
-    Cloud Tasks' 1MB limit. `PublishStep.Run` rewrites the script *and* writes the WAV, so an
+  - `synthesize` — never touches Gemini. It loads the stored script by `JobID`
+    (`domain.ScriptStore`), and that is the only way in: **the script is not carried in the task
+    payload**, because a long one can reach Cloud Tasks' 1MB limit. `Request` used to have a
+    `Script` field that `resolveScript` preferred when set, and once every enqueue path saved the
+    script and passed the ID alone — including the two that accept a caller's own script, the
+    `/api/jobs` body and the form's script tab — nothing could set it. It went the way the
+    "skipped" notification did, and for the same reason: tests were its only callers.
+    `PublishStep.Run` rewrites the script *and* writes the WAV, so an
     edited script cannot drift from the audio that was actually spoken. **The script goes
     first**: in the combined command it exists only in memory until then, so writing audio first
     would lose a generated script to a synthesis timeout, leaving nothing to retry from.
 
   `Request.Command` has **no default**: an empty command is an error, because silently treating it
-  as `generate` would discard a caller's `script` and bill them for generation. `Request.Validate`
+  as `generate` would discard the `script` a caller put in the `/api/jobs` body and bill them for
+  generation. `Request.Validate`
   lives in `domain` so the web form can reuse it, and runs before anything external is touched
   (`TestPipelineExecute_InvalidRequest`).
 - **`domain.StorageLayout` owns every object name**, and artifacts live under one prefix per job

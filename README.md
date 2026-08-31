@@ -134,18 +134,17 @@ go run .        # SERVER_ROLE が必須
 | `command` | 何をするか | 必須フィールド |
 | --- | --- | --- |
 | `generate` | 入力ソースから台本を作る。**音声は作りません** | `input_uri`, `output_uri` |
-| `synthesize` | 台本から音声を作る（Gemini を呼ばない） | `output_uri` と、`script` または `job_id` |
+| `synthesize` | 保存済みの台本から音声を作る（Gemini を呼ばない） | `output_uri`, `job_id` |
 | `generate_and_synthesize` | 台本を作ってそのまま音声まで作る。**確認を挟みません** | `input_uri`, `output_uri` |
 
 | フィールド | 説明 |
 | --- | --- |
-| `command` | `generate` / `synthesize` / `generate_and_synthesize`。**省略できません**（`script` を渡したまま書き忘れると、台本が黙って捨てられて生成が走るため）。 |
+| `command` | `generate` / `synthesize` / `generate_and_synthesize`。**省略できません**（台本を持ち込んだまま書き忘れると、その台本が黙って捨てられて生成が走るため）。 |
 | `input_uri` | **入力ソースURI**。Web URL、GCS (`gs://`)を指定します。`generate` で必須。 |
-| `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` で `script` を省くとき、保存済み台本の在り処になります。 |
+| `job_id` | ジョブの識別子。成果物の置き場もこれで決まります。`synthesize` では保存済み台本の在り処でもあり、**必須**です。 |
 | `output_uri` | **WAV の出力先URI**。台本は拡張子だけ `.json` に替えた隣に置かれます。Web 面から投入する場合は入力しません（ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます）。 |
 | `mode` | 台本の形式。`generate` のみ。**`assets/prompts/<ジャンル>_<形式>.md` を置けばモードが増えます。** 表示名と説明はファイル冒頭の front matter（`label` / `direction` / `use_when`）から出ます。選択肢の並びは同じ front matter の `order`（10 刻み、小さいほうが先）で決まります。<br>一覧は `GET /modes` で見られます。 |
 | `ai_model` | 使用する Gemini モデル名。空なら `GEMINI_MODELS` の先頭を使います。`generate` のみ。 |
-| `script` | 台本の行（`ScriptLine` の配列）。`synthesize` で `job_id` を省くときに必須。保存された `audio.json` の `lines` がそのまま入ります。 |
 
 ```json
 {
@@ -164,18 +163,10 @@ go run .        # SERVER_ROLE が必須
 }
 ```
 
-台本を直接載せることもできます。ただし**Web 面はこの形を使いません** — 長い台本は
-Cloud Tasks の 1MB 上限に当たりうるため、保存済みのものを `job_id` で指します。
-
-```json
-{
-  "command": "synthesize",
-  "output_uri": "gs://my-bucket/voice/.../audio.wav",
-  "script": [
-    { "speaker": "ずんだもん", "style": "ノーマル", "text": "直した台本なのだ" }
-  ]
-}
-```
+**台本はペイロードに載りません。** 長い台本は Cloud Tasks の 1MB 上限に当たりうるため、
+投入側が先に保存して `job_id` だけを渡します。自分で書いた台本を喋らせる場合も同じで、
+`POST /api/jobs`（`command: "synthesize"` と `script`）か画面の「台本 JSON」タブへ渡すと、
+そこで保存されてからこの形のタスクになります。
 
 ---
 

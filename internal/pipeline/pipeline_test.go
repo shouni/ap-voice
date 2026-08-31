@@ -263,19 +263,24 @@ func TestPipelineExecute(t *testing.T) {
 	})
 }
 
-// synthesize は台本を生成しません。渡された台本がそのまま公開処理へ渡り、
+// synthesize は台本を生成しません。保存済みの台本がそのまま公開処理へ渡り、
 // Gemini を呼ぶ経路には一切入らないことを固定します。
+//
+// 台本の在り処は JobID だけです。かつてはペイロードの台本を優先する分岐があり、
+// このテストもそちらを通っていましたが、投入側はどれも台本を載せません
+// （長い台本が Cloud Tasks の 1MB 上限に当たるため、先に保存して ID を渡します）。
 func TestPipelineExecute_Synthesize(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	script := []domain.ScriptLine{
 		{Speaker: "めたん", Style: "ノーマル", Text: "手で直した台本"},
 	}
 	req := domain.Request{
 		Command:   domain.CommandSynthesize,
+		JobID:     jobID,
 		OutputURI: "gs://bucket/output.wav",
-		Script:    script,
 	}
 
 	generateCalled := false
@@ -295,7 +300,14 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 			},
 		},
 		&MockNotifier{},
-		&MockScriptStore{},
+		&MockScriptStore{
+			LoadFunc: func(_ context.Context, gotJobID string) (domain.Script, error) {
+				if gotJobID != jobID {
+					t.Errorf("Load(%q), want %q", gotJobID, jobID)
+				}
+				return domain.Script{Title: "保存済みの題名", Lines: script}, nil
+			},
+		},
 		nil,
 		0,
 	)
@@ -333,7 +345,8 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 			req:  domain.Request{Command: domain.CommandGenerate, OutputURI: "gs://bucket/o.wav"},
 		},
 		{
-			name: "synthesize なのに台本が無い",
+			// 台本の在り処は JobID だけです。無ければ何を喋らせるのか決まりません。
+			name: "synthesize なのに台本を指していない",
 			req:  domain.Request{Command: domain.CommandSynthesize, OutputURI: "gs://bucket/o.wav"},
 		},
 		{

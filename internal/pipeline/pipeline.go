@@ -190,21 +190,13 @@ func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domai
 
 // resolveScript は、Command に応じて合成対象の台本を用意します。
 //
-// generate は入力ソースから作ります。synthesize は渡された台本を使い、
-// 無ければ JobID で保存済みのものを読みます。台本をタスクのペイロードで
-// 運ばないのは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
+// generate は入力ソースから作ります。synthesize は JobID で保存済みの台本を読みます。
+// 台本をタスクのペイロードで運ばないのは、長い台本が Cloud Tasks の 1MB 上限に
+// 当たりうるためです。持ち込みの台本も投入側が先に保存するので、読み出しは 1 経路です
+// （ペイロードの台本を優先する分岐がかつてありましたが、投入側がどれも
+// 台本を載せなくなったあとは、テストだけが通る道になっていました）。
 func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.Command == domain.CommandSynthesize {
-		// API から直接渡された台本を優先します。タイトルは保存済みのものを引き継ぎます。
-		if len(req.Script) > 0 {
-			stored, err := p.scripts.Load(ctx, req.JobID)
-			if err != nil {
-				// 新規の貼り戻しならまだ保存されていないこともあります。
-				return domain.Script{Lines: req.Script}, nil
-			}
-			return domain.Script{Title: stored.Title, Lines: req.Script}, nil
-		}
-
 		script, err := p.scripts.Load(ctx, req.JobID)
 		if err != nil {
 			return domain.Script{}, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)

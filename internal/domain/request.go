@@ -18,8 +18,8 @@ const (
 	// CommandGenerate は、入力ソースから台本を生成して保存します。音声は作りません。
 	// 台本を確認・修正してから合成へ進めるようにするためです。
 	CommandGenerate Command = "generate"
-	// CommandSynthesize は、台本から音声を作ります。台本は Script で直接渡すか、
-	// JobID で保存済みのものを指します。Gemini は呼ばれません。
+	// CommandSynthesize は、保存済みの台本から音声を作ります。台本は JobID で指します。
+	// Gemini は呼ばれません。
 	CommandSynthesize Command = "synthesize"
 	// CommandGenerateAndSynthesize は、台本を作ってそのまま音声まで作ります。
 	//
@@ -45,13 +45,19 @@ type Request struct {
 	// 台本が成果物であると同時に入力でもあるためです。読みや話者を直してから
 	// 合成できるようにすると、直したい 1 行のために生成をやり直さずに済みます。
 	//
-	// 空を generate とみなさないのは、Script を渡したのに command を書き忘れた場合に、
-	// 渡した台本が黙って捨てられ、Gemini の生成が走ってしまうためです。
+	// 空を generate とみなさないのは、台本を持ち込んだ呼び出し側が command を
+	// 書き忘れた場合に、その台本が黙って捨てられて Gemini の生成が走ってしまう
+	// ためです（/api/jobs は body の script を保存してからここへ渡します）。
 	// 課金と出力の両方が変わる取り違えを、既定値で吸収する価値はありません。
 	Command Command `json:"command"`
 
 	// JobID は 1 回の実行を識別します。成果物の置き場もこの ID から決まります。
 	// 発行するのは投入側（Web 面）で、Worker 面はログと通知で使うだけです。
+	//
+	// synthesize では台本の在り処でもあります。台本そのものはここに載りません—
+	// 長い台本は Cloud Tasks の 1MB 上限に当たりうるので、投入側が先に保存して
+	// ID だけを渡します。持ち込みの台本（/api/jobs の body の script、画面の
+	// 「台本 JSON」タブ）も同じ経路で、保存してからこの ID で指します。
 	JobID string `json:"job_id,omitempty"`
 
 	// InputURI は generate の入力ソース（Web URL / gs://）です。
@@ -62,10 +68,6 @@ type Request struct {
 	Mode string `json:"mode,omitempty"`
 	// AIModel は generate に使う Gemini モデル名です。空なら GEMINI_MODELS の先頭を使います。
 	AIModel string `json:"ai_model,omitempty"`
-
-	// Script は synthesize の入力となる台本です。
-	// PublishStep が書き出した audio.json の lines をそのまま貼り戻せる形にしてあります。
-	Script []ScriptLine `json:"script,omitempty"`
 }
 
 // Validate は、Command と、その Command に必要なフィールドが揃っているかを確かめます。
@@ -82,9 +84,9 @@ func (r Request) Validate() error {
 			return errors.New("入力ソース(input_uri)が指定されていません")
 		}
 	case CommandSynthesize:
-		// 台本は直接渡すか、保存済みのものを JobID で指すかのどちらかです。
-		if len(r.Script) == 0 && strings.TrimSpace(r.JobID) == "" {
-			return errors.New("台本が特定できません。script を直接渡すか、保存済み台本の job_id を指定してください")
+		// 台本は保存済みのものを JobID で指します。ペイロードには載りません。
+		if strings.TrimSpace(r.JobID) == "" {
+			return errors.New("台本が特定できません。保存済み台本の job_id を指定してください")
 		}
 	case "":
 		return fmt.Errorf("%w: command が指定されていません（%q / %q / %q）",
