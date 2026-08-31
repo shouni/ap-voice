@@ -51,18 +51,15 @@ type Handler struct {
 	repo ScriptRepository
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer Signer
-	// status は投入時に queued を記録します。投入より先に書きます—
-	// Worker は配信されたタスクより先に状態を読むため、順序が逆だと
-	// 1 つ前の記録を読んでしまいます（ap-story が実際に踏んだ順序です）。
+	// status は投入時に queued を記録します（順序の理由は recordQueued）。
 	status *jobfirestore.Recorder[domain.JobStatus]
 	// reading は、合成前に読みを確かめるために使います。
 	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
 	// 生成時と同じ組み立てを通すので、画面に出るものと Gemini へ渡るものが一致します。
 	renderer PromptRenderer
-	// speakers は編集画面の選択肢です。話者ごとに実在するスタイルだけを出すために持ちます。
-	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
-	// 落ちて指示が無視されます。
+	// speakers は編集画面の選択肢です。話者ごとに実在するスタイルだけを出すために持ちます
+	// （実在しない組み合わせを弾く理由は validateScript）。
 	speakers *speaker.Registry
 	// styles は話者名からその話者のスタイルへの対応、stylesJSON はその JSON です。
 	// 話者一覧は起動から変わらないので、構築時に 1 度だけ組みます。詳細画面は
@@ -233,7 +230,7 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	status.QueuedAt = time.Now().UTC()
 
 	h.status.Record(ctx, req.JobID, status, func(next, prev *domain.JobStatus) {
-		// 作り直しでは、前回の成果物の在り処とモードを残します。
+		// 作り直しでは、今回の組み立てでは分からない値を残します（一覧は CarryFrom）。
 		next.CarryFrom(prev)
 	})
 }

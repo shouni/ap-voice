@@ -62,7 +62,7 @@ func putScript(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder
 // 通ることを検証します。
 //
 // 片方だけ緩いと、そちらから実在しない組み合わせが入ります。合成時に
-// getStyleID が既定へ黙って落とすため、保存できてしまうと「指定したのに
+// 合成時に既定へ黙って落ちるため、保存できてしまうと「指定したのに
 // 違う声で喋る」形でしか現れません。
 func TestAPIUpdateScriptSharesValidationWithTheForm(t *testing.T) {
 	t.Parallel()

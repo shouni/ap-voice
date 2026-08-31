@@ -18,8 +18,8 @@ type Voice interface {
 
 // ScriptStore は、保存済みの台本を読み書きします。
 //
-// generate が書き、synthesize と詳細画面が読みます。台本を Cloud Tasks の
-// ペイロードで運ばないのは、長い台本が 1MB の上限に当たりうるためです。
+// generate が書き、synthesize と詳細画面が読みます。この口があるのは、台本を
+// タスクのペイロードで運ばないためです（理由は Request.JobID）。
 type ScriptStore interface {
 	Load(ctx context.Context, jobID string) (Script, error)
 }

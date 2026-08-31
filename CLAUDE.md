@@ -77,8 +77,9 @@ is easy to break by editing.
   **measurement says the second term is the binding one**: a 12-segment job took 50s at 0.24
   segments/sec while the limiter (then 500ms) allowed 2.0/sec, so the rate limit never came into
   play in that job. **It is not free while it fails to bind, though** — the limiter's burst is 1,
-  so `(parallel - 1) x rate` lands on the head of every batch: 3.5s at the old 500ms with 8
-  parallel. And "it never binds" turned out to hold only for long scripts. 90 days of the
+  so `(parallel - 1) x rate` lands on the head of every batch: the old 500ms cost 3.5s at the
+  parallelism of the time (8), and would still cost 1.5s at today's 4. And "it never binds"
+  turned out to hold only for long scripts. 90 days of the
   worker's own batch logs (29 batches, `segment_duration_*` against the elapsed time) put a
   segment anywhere between 1.0s and 35.3s; **13 of the 29 contained a segment under the 4s
   threshold and 4 averaged under it** — all of them 4-segment jobs that took 4.5-6.4s wall clock
@@ -134,7 +135,7 @@ diagram for the full call graph; the summary here is the mental model to keep wh
 ```
 main.go         logger setup -> config.LoadConfig -> ValidateEssentialConfig -> server.Run
   -> internal/server    chi router + graceful shutdown; routes are registered per role
-       -> .../handlers        web face: form, history, detail, synthesize, delete, audio
+       -> .../handlers        web face: form, history, detail, regenerate, delete, audio, api
   -> internal/builder   wires everything together (DI root, no business logic)
        -> internal/app        Container: Config, RemoteIO, HTTPClient, Notifier, Pipeline, Speakers
        -> internal/pipeline   orchestrates resolve script -> publish -> notify
@@ -210,7 +211,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `?state=` on the history screen is `WithState` with the recorded spelling, and an unknown value
   is a 400 rather than a silent full listing (a typo answering "no failures" is worse than an
   error). **The filtered query needs a composite index** (`state` asc + `queued_at` desc) that the
-  deployment owns, so an environment without it fails only when the filter is used. **Listing reads no artifacts at all**: title, audio presence and creation time all come
+  deployment owns, so an environment without it fails only when the filter is used.
+  **Listing reads no artifacts at all**: title, audio presence and creation time all come
   out of the record, so a page costs one query plus a count instead of a full bucket scan.
   `script_test.go` keeps the bucket empty and still expects a page — without that, "just in case"
   reads of the artifacts creep back.
@@ -224,7 +226,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `preview-reading` from its own JS (`X-CSRF-Token`, which `gcp-kit/auth` accepts alongside the
   form field), because the audience that most needs to hear a reading before spending the minutes
   is the person editing the line. **It sends what is in the table, not the stored script** —
-  needing to save first to check a reading puts the check on the wrong side of the edit. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
+  needing to save first to check a reading puts the check on the wrong side of the edit.
+  `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
   always fails and everything falls through to the session, so the failure mode of forgetting it is
   "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).
   **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
@@ -247,13 +250,18 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   synthesizing and deleting. Saving and synthesizing are one button — with the script editable,
   a re-synthesis that skips the save would only ever reproduce the same audio.
   **The edited script is not put in the task.** `UpdateScript` writes it to GCS and enqueues the
-  job ID alone, so a long script cannot reach Cloud Tasks' 1MB limit and the worker keeps using
-  the stored-script path it already had. Speaker and style come from the registry and are
-  re-checked on submit: the browser offers only valid pairs, but the form accepts anything, and
-  an impossible pair is not rejected downstream — `getStyleID` silently falls back.
-- **`internal/repository` serves the history screens** — `List`, `Load`, `Save`, `HasAudio`, and
-  `Delete`, which removes the whole job prefix rather than a fixed list of names. A record with no
-  title yet leaves the job listed under its ID, so a job that failed before naming anything can
+  job ID alone (the reason is under `synthesize` below), so the worker keeps using the
+  stored-script path it already had. Speaker and style come from the registry and are re-checked
+  on submit: the browser offers only valid pairs, but the form accepts anything, and an
+  impossible pair survives every later check (see the response schema below).
+  Rows can be added, moved and removed, since the speaking order *is* the script; the row cap
+  travels to the page as `data-max-lines` rather than being written into the JS a second time.
+  The screen also calls `preview-reading` and, while a job is queued or running, polls
+  `status` and reloads when it changes — both are the server's answers, not a second rendering.
+- **`internal/repository` serves the history screens** — `List`, `Load`, `SaveScript`, `HasAudio`,
+  `Get`/`Save` (the job record) and `Delete`, which removes the whole job prefix rather than a
+  fixed list of names. A record with no title yet leaves the job listed under its ID, so a job
+  that failed before naming anything can
   still be deleted — and until recently *only in principle*: **a job with no objects at all could
   not be deleted from anywhere.** `Delete` refused an empty prefix with "not found", the detail
   screen (which holds the only delete button) 502'd because there was no script to read, and the
@@ -381,7 +389,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   an object (`{title, lines}`), not a bare array, so the history list has something to show
   besides job IDs. The title comes from the same call; there is no second request for it.
   `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
-  has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
+  has these styles" — an impossible pairing is not rejected, synthesis quietly falls back to
   that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
   therefore live in the prompt text, and **every prompt currently pins `style` to `"ノーマル"`**,
   so the enum's width does not matter in practice. If you change `ScriptLine`'s fields, update the

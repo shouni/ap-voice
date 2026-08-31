@@ -180,11 +180,11 @@ func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domai
 
 // resolveScript は、Command に応じて合成対象の台本を用意します。
 //
-// generate は入力ソースから作ります。synthesize は JobID で保存済みの台本を読みます。
-// 台本をタスクのペイロードで運ばないのは、長い台本が Cloud Tasks の 1MB 上限に
-// 当たりうるためです。持ち込みの台本も投入側が先に保存するので、読み出しは 1 経路です
-// （ペイロードの台本を優先する分岐がかつてありましたが、投入側がどれも
-// 台本を載せなくなったあとは、テストだけが通る道になっていました）。
+// generate は入力ソースから作ります。synthesize は JobID で保存済みの台本を読みます
+// （台本はペイロードに載りません。理由は domain.Request.JobID）。持ち込みの台本も
+// 投入側が先に保存するので、読み出しは 1 経路です — ペイロードの台本を優先する分岐が
+// かつてありましたが、投入側がどれも台本を載せなくなったあとは、テストだけが
+// 通る道になっていました。
 func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.Command == domain.CommandSynthesize {
 		script, err := p.scripts.Load(ctx, req.JobID)

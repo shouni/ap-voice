@@ -23,7 +23,7 @@ import (
 // 画面と同じミドルウェアの下にあります。ProtectedMiddleware が OIDC の
 // Bearer とセッションの両方を通すため、同じ URL を人も機械も叩けます。
 //
-// 台本の検証は画面と同じ scriptFromLines を通します。別に書くと、
+// 台本の検証は画面と同じ validateScript を通します。別に書くと、
 // どちらか一方だけが実在しない話者を受け付けるようになります。
 
 // apiTimeFormat は、一覧が返す時刻の書式です。
@@ -128,7 +128,6 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 
 	// 持ち込まれた台本は、投入の前に保存します。保存先はジョブ ID から決まるので、
 	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
-	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
 	if command == domain.CommandSynthesize {
 		if body.Script == nil {
 			respond.ErrorJSON(w, r, http.StatusBadRequest, "synthesize には script が要ります")
@@ -171,8 +170,7 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 画面と同じ検証です。実在しない話者・スタイルは、合成時に既定へ黙って
-	// 落ちて指示が消えるため、保存する前に弾きます。
+	// 画面と同じ検証です（validateScript）。
 	cleaned, err := h.validateScript(script)
 	if err != nil {
 		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())

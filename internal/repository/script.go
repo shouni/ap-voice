@@ -99,9 +99,8 @@ func NewRepository(store remoteio.Store, bucket string, firestore *firestore.Cli
 
 // SaveScript は、編集された台本を保存済みのものへ書き戻します。
 //
-// 編集内容をタスクのペイロードに載せません。Cloud Tasks は 1MB が上限で、
-// 長い台本はそこに当たりえます。先に保存してから JobID だけを渡せば、
-// Worker は既存の「保存済み台本を読む」経路をそのまま使えます。
+// 書き戻す先は Load が読む場所と同じです（どちらも StorageLayout が決めます）。
+// ずれると、編集したのに古い台本で合成される、という気付きにくい壊れ方をします。
 func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain.Script) error {
 	if err := jobid.Validate(jobID); err != nil {
 		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)

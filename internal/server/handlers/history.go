@@ -131,9 +131,8 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 
 // UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
 //
-// 台本はタスクに載せません。先に保存してから JobID だけを渡すことで、
-// Cloud Tasks の 1MB 上限に台本の長さが当たらず、Worker 側も
-// 「保存済み台本を読む」既存の経路をそのまま使えます。
+// 保存が先で、タスクへ渡すのはジョブ ID だけです（理由は domain.Request.JobID）。
+// Worker 側は「保存済み台本を読む」既存の経路をそのまま使います。
 func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.jobID(w, r)
 	if !ok {
