@@ -164,6 +164,9 @@ func TestTemplatesRender(t *testing.T) {
 				// 送り先はルーターが登録しているパスと一致している必要があります。
 				`data-endpoint="/api/preview-reading"`,
 				"js-reading",
+				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
+				`data-endpoint="/api/jobs/voice-1/status"`,
+				`data-state="succeeded"`,
 			},
 		},
 		{

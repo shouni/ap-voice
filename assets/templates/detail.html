@@ -16,9 +16,9 @@
       {{ with .JobError }}<div class="small text-break mt-1">{{ . }}</div>{{ end }}
     </div>
   {{ else if eq .State "running" }}
-    <div class="alert alert-info">実行中です。完了すると通知が届きます（この画面は自動では更新されません）。</div>
+    <div class="alert alert-info">実行中です。状態が変わるとこの画面は自動で更新されます。</div>
   {{ else if eq .State "queued" }}
-    <div class="alert alert-info">実行を待っています。完了すると通知が届きます（この画面は自動では更新されません）。</div>
+    <div class="alert alert-info">実行を待っています。状態が変わるとこの画面は自動で更新されます。</div>
   {{ end }}
 
   {{ if .HasAudio }}
@@ -131,6 +131,10 @@
     </div>
   </div>
 </main>
+{{/* 実行中のジョブだけ、状態が変わったかを見張ります。終わっているジョブでは
+     data-state が終了状態なので、画面側は何もしません（開くたびの 1 往復を
+     増やさないため、判断は画面側ではなくこの値で決まります）。 */}}
+<div id="job-state" data-endpoint="/api/jobs/{{ .JobID }}/status" data-state="{{ .State }}" hidden></div>
 {{/* 話者ごとのスタイル対応表は data 属性で渡します。インラインスクリプトにすると
      CSP の script-src を 'self' だけにできません。空のときは {} を入れて、
      画面側が JSON.parse に失敗しないようにします。 */}}
@@ -139,4 +143,5 @@
 
 {{ define "scripts" }}
 <script src="/static/js/script_edit.js"></script>
+<script src="/static/js/job_status.js"></script>
 {{ end }}
