@@ -4,26 +4,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-utils/jobid"
+	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// API は、ブラウザではなく機械（MCP サーバーなど）から使う口です。
+// このファイルは、画面に対応するページが無く、機械だけが使う操作です
+// （JSON で投入する、台本を差し替える、合成を指示する）。人と機械の両方が使うものは
+// /api の外にあります — ジョブの状態は negotiated.go、読みの確認は reading.go です。
 //
 // 画面と同じミドルウェアの下にあります。ProtectedMiddleware が OIDC の
 // Bearer とセッションの両方を通すため、同じ URL を人も機械も叩けます。
 //
-// 台本の検証は画面と同じ scriptFromLines を通します。別に書くと、
+// 台本の検証は画面と同じ validateScript を通します。別に書くと、
 // どちらか一方だけが実在しない話者を受け付けるようになります。
 
 // apiTimeFormat は、一覧が返す時刻の書式です。
@@ -35,6 +36,10 @@ type apiJob struct {
 	Title     string `json:"title"`
 	CreatedAt string `json:"created_at"`
 	HasAudio  bool   `json:"has_audio"`
+	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
+	// 区別できません。1 件ずつ status を引かずに一覧で見分けるために載せます。
+	// 記録の無い古いジョブでは空になるので omitempty です。
+	State string `json:"state,omitempty"`
 }
 
 // apiAccepted は投入を受け付けたときの応答です。
@@ -124,7 +129,6 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 
 	// 持ち込まれた台本は、投入の前に保存します。保存先はジョブ ID から決まるので、
 	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
-	// タスクには載せないため、長い台本でも Cloud Tasks の 1MB 上限に当たりません。
 	if command == domain.CommandSynthesize {
 		if body.Script == nil {
 			respond.ErrorJSON(w, r, http.StatusBadRequest, "synthesize には script が要ります")
@@ -141,17 +145,13 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := req.Validate(); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		respond.ErrorJSON(w, r, status, err.Error())
 		return
 	}
 
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
 }
 
 // APIUpdateScript は、台本を差し替えます。合成はしません。
@@ -171,8 +171,7 @@ func (h *Handler) APIUpdateScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 画面と同じ検証です。実在しない話者・スタイルは、合成時に既定へ黙って
-	// 落ちて指示が消えるため、保存する前に弾きます。
+	// 画面と同じ検証です（validateScript）。
 	cleaned, err := h.validateScript(script)
 	if err != nil {
 		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
@@ -198,105 +197,12 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
-	if err := req.Validate(); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		respond.ErrorJSON(w, r, status, err.Error())
 		return
 	}
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
-		return
-	}
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
-}
-
-// APIJobStatus は、ジョブの進行状況を返します。
-//
-// 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
-// まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
-// jobfirestore.Status で、姉妹サービスと同じ形です。
-//
-// 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
-// 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
-//
-// 読めなかっただけの場合は 404 と混ぜません。権限や GCS 障害（ErrUnavailable）
-// まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
-// ポーリング側が unknown として静かに受け入れてしまいます。
-func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.apiJobID(w, r)
-	if !ok {
-		return
-	}
-
-	status, err := h.repo.Get(r.Context(), jobID)
-	switch {
-	case errors.Is(err, jobfirestore.ErrNotFound):
-		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
-		return
-	case err != nil:
-		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
-		respond.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
-		return
-	}
-	respond.JSON(w, r, http.StatusOK, status)
-}
-
-// apiReadingRequest は POST /api/preview-reading の要求です。
-type apiReadingRequest struct {
-	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
-	Lines []domain.ScriptLine `json:"lines"`
-}
-
-// apiReadingLine は 1 行分の読みです。
-type apiReadingLine struct {
-	Text string `json:"text"`
-	// Reading は合成時に実際に読まれるカタカナです。
-	Reading string `json:"reading"`
-	// Changed は、変換で表記が変わったかどうかです。確かめる価値がある行の目印で、
-	// カタカナだけの行は変換しても変わらないため false になります。
-	Changed bool `json:"changed"`
-}
-
-// apiReadingResponse は POST /api/preview-reading の応答です。
-type apiReadingResponse struct {
-	Lines []apiReadingLine `json:"lines"`
-}
-
-// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。合成はしません。
-//
-// 読みは自明ではありません。「田中」「同姓同名」のような語がどう読まれるかは、
-// 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
-// 気付くことになるため、その前に確かめられるようにします。
-//
-// 意図と違う読みになる語は、その部分をカタカナで書けば直せます。
-func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
-	var body apiReadingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
-		return
-	}
-	if len(body.Lines) == 0 {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, "lines が空です")
-		return
-	}
-	if len(body.Lines) > maxScriptLines {
-		respond.ErrorJSON(w, r, http.StatusBadRequest,
-			fmt.Sprintf("行が多すぎます（%d 行、上限 %d 行）", len(body.Lines), maxScriptLines))
-		return
-	}
-
-	out := make([]apiReadingLine, 0, len(body.Lines))
-	for _, line := range body.Lines {
-		reading, err := h.reading.ConvertToReading(line.Text)
-		if err != nil {
-			respond.ErrorJSON(w, r, http.StatusInternalServerError, err.Error())
-			return
-		}
-		out = append(out, apiReadingLine{
-			Text: line.Text, Reading: reading, Changed: reading != line.Text,
-		})
-	}
-	respond.JSON(w, r, http.StatusOK, apiReadingResponse{Lines: out})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
 }
 
 // apiAudio は GET /api/jobs/{jobID}/audio の応答です。
@@ -311,9 +217,13 @@ type apiAudio struct {
 }
 
 // apiJobID は、URL のジョブ ID を取り出して検証します。
+//
+// 検証そのものは jobIDParam です。ここが持つのは返し方だけで、JSON に固定するのは
+// この経路が成功時も無条件に JSON を返すためです（Accept を送らない呼び出し側が、
+// 成功と失敗で本文の読み方を変えずに済みます）。
 func (h *Handler) apiJobID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
+	jobID, ok := jobIDParam(r)
+	if !ok {
 		respond.ErrorJSON(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}
@@ -356,13 +266,15 @@ func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	return domain.Script{Title: strings.TrimSpace(script.Title), Lines: lines}, nil
 }
 
-// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を返します。
-// 編集画面の選択肢と /api/speakers の両方がここを見ます。
-func (h *Handler) stylesBySpeaker() map[string][]string {
-	names := h.speakers.SpeakerNames()
+// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を組み立てます。
+//
+// 呼ぶのは NewHandler だけです。話者一覧は起動から変わらないので、編集画面と
+// /api/speakers はその結果（h.styles / h.stylesJSON）を使い回します。
+func stylesBySpeaker(speakers *speaker.Registry) map[string][]string {
+	names := speakers.SpeakerNames()
 	out := make(map[string][]string, len(names))
 	for _, name := range names {
-		if styles, ok := h.speakers.StylesFor(name); ok {
+		if styles, ok := speakers.StylesFor(name); ok {
 			out[name] = styles
 		}
 	}

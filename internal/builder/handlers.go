@@ -113,13 +113,6 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		return fmt.Errorf("生成モードの読み込みに失敗しました: %w", err)
 	}
 
-	// カタログでプロンプト本文を見せるために、生成側と同じ組み立てを使います。
-	// 別に持つと、画面に出るものと実際に渡すものがずれます。
-	renderer, err := adapters.NewPromptAdapter()
-	if err != nil {
-		return fmt.Errorf("プロンプトの組み立てに失敗しました: %w", err)
-	}
-
 	webHandler, err := handlers.NewHandler(handlers.HandlerOptions{
 		Queue:       appCtx.TaskQueue,
 		Templates:   tmpl,
@@ -130,9 +123,11 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Repo:        appCtx.Repository,
 		Signer:      appCtx.Store,
 		Speakers:    appCtx.Speakers,
-		Renderer:    renderer,
-		Reading:     adapters.NewReadingAdapter(),
-		JobStatus:   appCtx.JobStatus,
+		// カタログでプロンプト本文を見せるのに、生成側と同じ組み立てを渡します。
+		// 別に持つと、画面に出るものと実際に渡すものがずれます。
+		Renderer:  appCtx.Prompt,
+		Reading:   adapters.NewReadingAdapter(),
+		JobStatus: appCtx.JobStatus,
 	})
 	if err != nil {
 		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)

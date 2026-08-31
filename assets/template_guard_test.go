@@ -138,9 +138,12 @@ func TestPagesUseTheSharedLayout(t *testing.T) {
 			if strings.Contains(strings.ToLower(text), "<!doctype") {
 				t.Error("画面が外枠を自前で持っています（layout.html に寄せてください）")
 			}
-			// layout.html は title / content / scripts を呼びます。1 つでも欠けると
-			// その画面だけ描画時に落ちます（他の画面は無事なので気付きにくい）。
-			for _, block := range []string{"title", "content", "scripts"} {
+			// layout.html は title と content を呼びます。1 つでも欠けるとその画面だけ
+			// 描画時に落ちます（他の画面は無事なので気付きにくい）。
+			//
+			// スクリプトはここにありません。どの画面が何を読むかは handlers の
+			// pageScripts が持ち、レイアウトが .JS から読み込みます。
+			for _, block := range []string{"title", "content"} {
 				if !strings.Contains(text, `{{ define "`+block+`" }}`) {
 					t.Errorf("%q を define していません", block)
 				}

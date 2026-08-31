@@ -12,9 +12,15 @@ import (
 	"github.com/shouni/go-gemini-client/gemini"
 	"github.com/shouni/go-voicevox/speaker"
 
-	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
 )
+
+// minInputContentLength は、生成に進める入力テキストの最小長です。
+//
+// config ではなく、使う段が持ちます。デプロイ先が決める値ではない（env もありません）
+// うえ、この 1 つのために pipeline が config を import していました。これより短い
+// 入力からは、何を読ませたいのかが決まりません。
+const minInputContentLength = 10
 
 // PromptBuilder は、プロンプト文字列を生成する責務を定義します。
 type PromptBuilder interface {
@@ -127,7 +133,7 @@ func (gr *ScriptStep) readContent(ctx context.Context, sourceURL string) (string
 	}
 
 	trimmedContent := strings.TrimSpace(string(body))
-	if len(trimmedContent) < config.MinInputContentLength {
+	if len(trimmedContent) < minInputContentLength {
 		return "", fmt.Errorf("入力されたコンテンツが短すぎます")
 	}
 	return trimmedContent, nil

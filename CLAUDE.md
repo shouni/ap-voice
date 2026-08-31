@@ -42,7 +42,7 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
 is easy to break by editing.
 
 - `SERVER_ROLE` — **required**, one of `web` / `worker` / `both` (`both` is for local
-  development). Parsed by `gcp-kit/serverrole` in `Config.normalize`; an empty or unknown value
+  development). Parsed by `go-serve-kit/serverrole` in `Config.normalize`; an empty or unknown value
   fails startup rather than defaulting, because treating unset as `both` would restore the
   worker routes on the public service the moment one env var went missing. It selects which
   dependency graph `builder` assembles and which routes `server.setupRoutes` registers.
@@ -77,8 +77,9 @@ is easy to break by editing.
   **measurement says the second term is the binding one**: a 12-segment job took 50s at 0.24
   segments/sec while the limiter (then 500ms) allowed 2.0/sec, so the rate limit never came into
   play in that job. **It is not free while it fails to bind, though** — the limiter's burst is 1,
-  so `(parallel - 1) x rate` lands on the head of every batch: 3.5s at the old 500ms with 8
-  parallel. And "it never binds" turned out to hold only for long scripts. 90 days of the
+  so `(parallel - 1) x rate` lands on the head of every batch: the old 500ms cost 3.5s at the
+  parallelism of the time (8), and would still cost 1.5s at today's 4. And "it never binds"
+  turned out to hold only for long scripts. 90 days of the
   worker's own batch logs (29 batches, `segment_duration_*` against the elapsed time) put a
   segment anywhere between 1.0s and 35.3s; **13 of the 29 contained a segment under the 4s
   threshold and 4 averaged under it** — all of them 4-segment jobs that took 4.5-6.4s wall clock
@@ -134,7 +135,7 @@ diagram for the full call graph; the summary here is the mental model to keep wh
 ```
 main.go         logger setup -> config.LoadConfig -> ValidateEssentialConfig -> server.Run
   -> internal/server    chi router + graceful shutdown; routes are registered per role
-       -> .../handlers        web face: form, history, detail, synthesize, delete, audio
+       -> .../handlers        web face: form, history, detail, regenerate, delete, audio, api
   -> internal/builder   wires everything together (DI root, no business logic)
        -> internal/app        Container: Config, RemoteIO, HTTPClient, Notifier, Pipeline, Speakers
        -> internal/pipeline   orchestrates resolve script -> publish -> notify
@@ -184,7 +185,14 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   produced what. `synthesize` carries no mode (the script already exists), so
   `JobStatus.CarryFrom` brings it forward along with the artifact URIs — **one method for every
   value a later write cannot re-derive**, since the web face and the pipeline both rebuild the
-  record from scratch and used to carry it in two separate places. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
+  record from scratch and used to carry it in two separate places. `domain.NewJobStatus` is the
+  other half — the rebuild itself — so a value worth keeping is added once rather than in both
+  faces. The record also holds `input_uri` and `ai_model`, and that is what makes **"regenerate
+  from the same input"** possible: a job that failed before writing a script has no artifact
+  naming what it read, so without them the URL survives only in the operator's memory. The redo
+  keeps the job ID (a redo does not deserve a second row in the history), and rewriting the record
+  to `queued` is what carries it past the re-run guard.
+  The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
   **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
   and the worker reads state before it works, so the reverse order lets a stale record overwrite
   a live one; ap-story hit exactly this. That ordering is also what makes the re-run guard safe:
@@ -199,7 +207,12 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   un-cancelled notification context for the same reason the notification is: a timed-out context
   records nothing.
   `Repository` satisfies `jobfirestore.StatusStore`, which is why the store is assembled in one
-  place. **Listing reads no artifacts at all**: title, audio presence and creation time all come
+  place. `List` takes `jobfirestore.ListOption` and does not invent a filter vocabulary of its own;
+  `?state=` on the history screen is `WithState` with the recorded spelling, and an unknown value
+  is a 400 rather than a silent full listing (a typo answering "no failures" is worse than an
+  error). **The filtered query needs a composite index** (`state` asc + `queued_at` desc) that the
+  deployment owns, so an environment without it fails only when the filter is used.
+  **Listing reads no artifacts at all**: title, audio presence and creation time all come
   out of the record, so a page costs one query plus a count instead of a full bucket scan.
   `script_test.go` keeps the bucket empty and still expects a page — without that, "just in case"
   reads of the artifacts creep back.
@@ -207,9 +220,18 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
   keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; the MCP server calls the `/history/…` paths directly.
-- **`/api/*` still holds what only machines have**: enqueue by JSON body, `status`, `synthesize`,
-  `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
-  same line `gcp-kit/negotiate` draws. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
+- **`/api/*` is what only machines call**: enqueue by JSON body, `synthesize`, the script `PUT`,
+  `speakers`, `DELETE`. **Anything the screen also calls lives outside it**, even without a page
+  of its own — `POST /preview-reading` and `GET /history/{jobID}/status`. Both started under
+  `/api` and moved when the screen began calling them; leaving them there would have made the
+  prefix mean "JSON" rather than "machines", and the next reader would have had to open the
+  templates to find out which. The status sits beside `audio` and `script` because it is another
+  read of the same job; the reading check hangs off no job at all (it sends what is in the table,
+  not the stored script — needing to save first puts the check on the wrong side of the edit), so
+  it sits at the root. A browser calling either sends `X-CSRF-Token` on the POST, which
+  `gcp-kit/auth` accepts alongside the form field; a machine on a Bearer never reaches that check.
+  **The MCP server still calls the old `/api` paths** and has to move with them.
+  `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
   always fails and everything falls through to the session, so the failure mode of forgetting it is
   "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).
   **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
@@ -232,16 +254,48 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   synthesizing and deleting. Saving and synthesizing are one button — with the script editable,
   a re-synthesis that skips the save would only ever reproduce the same audio.
   **The edited script is not put in the task.** `UpdateScript` writes it to GCS and enqueues the
-  job ID alone, so a long script cannot reach Cloud Tasks' 1MB limit and the worker keeps using
-  the stored-script path it already had. Speaker and style come from the registry and are
-  re-checked on submit: the browser offers only valid pairs, but the form accepts anything, and
-  an impossible pair is not rejected downstream — `getStyleID` silently falls back.
-- **`internal/repository` serves the history screens** — `List`, `Load`, `Save`, `HasAudio`, and
-  `Delete`, which removes the whole job prefix rather than a fixed list of names. A record with no
-  title yet leaves the job listed under its ID, so a job that failed before naming anything can
-  still be deleted. **`HasAudio` deliberately disagrees with the listing**: the listing trusts the
+  job ID alone (the reason is under `synthesize` below), so the worker keeps using the
+  stored-script path it already had. Speaker and style come from the registry and are re-checked
+  on submit: the browser offers only valid pairs, but the form accepts anything, and an
+  impossible pair survives every later check (see the response schema below).
+  Rows can be added, moved and removed, since the speaking order *is* the script; the row cap
+  travels to the page as `data-max-lines` rather than being written into the JS a second time.
+  The screen also calls `preview-reading` and, while a job is queued or running, polls
+  `status` and reloads when it changes — both are the server's answers, not a second rendering.
+- **`internal/repository` serves the history screens** — `List`, `Load`, `SaveScript`, `HasAudio`,
+  `Get`/`Save` (the job record) and `Delete`, which removes the whole job prefix rather than a
+  fixed list of names. A record with no title yet leaves the job listed under its ID, so a job
+  that failed before naming anything can
+  still be deleted — and until recently *only in principle*: **a job with no objects at all could
+  not be deleted from anywhere.** `Delete` refused an empty prefix with "not found", the detail
+  screen (which holds the only delete button) 502'd because there was no script to read, and the
+  record therefore sat in the listing forever. `Delete` now removes the record alone when the
+  prefix is empty, and reserves `ErrJobNotFound` for a job that has neither objects nor a record —
+  the two have to stay apart, or a 404 becomes indistinguishable from tidying up a failed job.
+  `Load` draws the same line with `ErrScriptNotFound`: it re-asks storage whether the object
+  exists rather than reading the backend's error value (the spelling differs per backend), so a
+  missing script and an unreadable one land on the state page and a 502 respectively.
+  `List` carries `State` and `Error` for the same reason the badge needs them: the artifacts alone
+  cannot separate "still running" from "finished with a script" from "failed". They come out of
+  the record the listing already reads, so the page costs nothing extra.
+  **`HasAudio` deliberately disagrees with the listing**: the listing trusts the
   recorded `audio_uri`, while the detail screen asks storage whether the object is really there.
   A record that outlived its object would otherwise offer a player that 404s.
+- **The detail screen opens for a job with no script.** It is the entry point to a job *and* the
+  only place delete lives, so refusing to render it is what stranded failed jobs in the listing.
+  Without a script it shows the recorded state and error and offers delete alone; the state alert
+  is shown even when a script exists, because a failed `synthesize` leaves the script behind and
+  its artifacts look exactly like a job that stopped at `generate`. The recorded error reaches a
+  person here and in the Slack notification, nowhere else.
+- **A page's scripts are declared in Go, not in the template.** `handlers.pageScripts` maps the
+  template name to its JS, `renderTemplate` puts the list on the view and `layout.html` renders it
+  with `defer`; `app.js` (what every page needs — currently the `data-confirm` guard) is loaded by
+  the layout itself. This is the shape the siblings use, and file names follow theirs
+  (`job_status.js` is the same file in three services). Because the paths now live in Go rather
+  than in a `{{ define "scripts" }}` block, the assets guard cannot see them —
+  `TestPageScriptsExist` and `TestRenderTemplateLoadsThePageScripts` take that job over: one
+  checks the files exist, the other that the table, the view and the layout are still connected.
+  A missing script is invisible otherwise, since the page still renders.
 - **Templates are only evaluated at request time.** A renamed view field still compiles, so
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).
@@ -272,16 +326,21 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
     is nothing to fix. **It needs no new branching**: `resolveScript` treats anything that is not
     `synthesize` as a generation, and `publish` treats anything that is not `generate` as going
     all the way to audio, so the third value lands on the wanted side of both.
-  - `synthesize` — never touches Gemini. It uses `Request.Script` when present and otherwise
-    loads the stored script by `JobID` (`domain.ScriptStore`). The web face always takes the
-    second path: **the script is not carried in the task payload**, because a long one can reach
-    Cloud Tasks' 1MB limit. `PublishStep.Run` rewrites the script *and* writes the WAV, so an
+  - `synthesize` — never touches Gemini. It loads the stored script by `JobID`
+    (`domain.ScriptStore`), and that is the only way in: **the script is not carried in the task
+    payload**, because a long one can reach Cloud Tasks' 1MB limit. `Request` used to have a
+    `Script` field that `resolveScript` preferred when set, and once every enqueue path saved the
+    script and passed the ID alone — including the two that accept a caller's own script, the
+    `/api/jobs` body and the form's script tab — nothing could set it. It went the way the
+    "skipped" notification did, and for the same reason: tests were its only callers.
+    `PublishStep.Run` rewrites the script *and* writes the WAV, so an
     edited script cannot drift from the audio that was actually spoken. **The script goes
     first**: in the combined command it exists only in memory until then, so writing audio first
     would lose a generated script to a synthesis timeout, leaving nothing to retry from.
 
   `Request.Command` has **no default**: an empty command is an error, because silently treating it
-  as `generate` would discard a caller's `script` and bill them for generation. `Request.Validate`
+  as `generate` would discard the `script` a caller put in the `/api/jobs` body and bill them for
+  generation. `Request.Validate`
   lives in `domain` so the web form can reuse it, and runs before anything external is touched
   (`TestPipelineExecute_InvalidRequest`).
 - **`domain.StorageLayout` owns every object name**, and artifacts live under one prefix per job
@@ -343,7 +402,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   an object (`{title, lines}`), not a bare array, so the history list has something to show
   besides job IDs. The title comes from the same call; there is no second request for it.
   `speaker` and `style` are **independent enums**, so the schema cannot express "this speaker only
-  has these styles" — an impossible pairing is not rejected, `getStyleID` quietly falls back to
+  has these styles" — an impossible pairing is not rejected, synthesis quietly falls back to
   that speaker's default and the instruction is ignored. Per-speaker and per-mode constraints
   therefore live in the prompt text, and **every prompt currently pins `style` to `"ノーマル"`**,
   so the enum's width does not matter in practice. If you change `ScriptLine`'s fields, update the
@@ -379,33 +438,25 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   lists, fills defaults) → `ValidateEssentialConfig()`, whose worker-only checks are skipped for
   `web`.
 
-## Notable external dependencies
+## What the dependencies do that their names do not say
 
-First-party (`github.com/shouni/*`):
+`go.mod` lists them; this section is only for the ones that behave in a way you would not guess,
+and it is where the actual behaviour lives when you are editing an adapter. Check `go.mod` for the
+pinned version before assuming a signature.
 
-- `go-gemini-client` — Gemini/Vertex AI client (structured JSON generation)
-- `go-voicevox` — parallel VOICEVOX synthesis wrapper. It parses `/speakers` but ships no roster;
-  the vocabulary is this repo's `assets/speakers.json` (see above). Throughput comes from
-  `config.Voicevox`, not from constants here.
-- `go-web-reader` — reads `https://` and `gs://` input sources transparently
-- `go-remote-io` — local/GCS read/write + signed URL abstraction (`remoteio.Store`,
-  `remoteio.Writer`, `remoteio.Factory`)
-- `go-prompt-kit` — loads and renders the embedded prompt templates
-- `go-http-kit` — HTTP client with retries; note `builder` passes
-  `WithSkipNetworkValidation(true)`, which disables the SSRF guard for the whole client
-- `go-notify` — Slack message assembly (`notify.Pipeline`, `notify.Body`); `adapters/slack.go`
-  only decides *what* to say
-- `go-utils/jobid` — issues and validates job IDs. **Never sort job IDs lexically** — the prefix
-  outranks the timestamp; use `jobid.SortKey`.
-- `gcp-kit` — `serverrole` (role vocabulary), `worker` (Cloud Tasks target handler), `auth`
-  (OAuth login, CSRF, Cloud Tasks OIDC verification), `tasks` (enqueue), `cloudlog`
-  (Cloud Logging format + trace correlation)
-
-Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct),
-`gopkg.in/yaml.v3` (prompt front matter).
-
-When touching adapter code the actual behavior often lives in these modules rather than in this
-repo — check `go.mod` for pinned versions before assuming a signature.
+- `go-voicevox` — parses `/speakers` but **ships no roster**: the vocabulary is this repo's
+  `assets/speakers.json`. Throughput comes from `config.Voicevox`, not from constants here, and
+  an impossible speaker/style pair falls back to that speaker's default instead of failing.
+- `go-http-kit` — `builder` passes `WithSkipNetworkValidation(true)`, which **disables the SSRF
+  guard for the whole client**. It is shared by the VOICEVOX calls and the Slack webhook, and one
+  round trip is capped by `HTTP_TIMEOUT` while the retry sits inside `VOICEVOX_SEGMENT_TIMEOUT`.
+- `go-utils/jobid` — **never sort job IDs lexically**: the prefix outranks the timestamp, so use
+  `jobid.SortKey`.
+- `go-notify` — assembles the message; `adapters/slack.go` only decides *what* to say.
+- `gcp-kit` and `go-serve-kit` split on whether the thing is Google Cloud specific, and the two are
+  easy to mix up. Cloud: `worker`, `auth`, `tasks`, `cloudlog`, `cloudrun`. HTTP: `serverrole`
+  (the `web`/`worker`/`both` vocabulary), `respond` (JSON and the `Accept` decision), and
+  `secureheaders` (the CSP the templates are written against).
 
 ## Conventions
 

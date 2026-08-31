@@ -74,6 +74,9 @@ func TestTemplatesRender(t *testing.T) {
 		// want は必ず出ていてほしい断片です。描画できるだけでは、値が
 		// 抜け落ちた画面を通してしまいます。
 		want []string
+		// notWant は出てはいけない断片です。存在しないフォームを指すボタンは
+		// 描画としては成功するので、出ていないことを言わないと拾えません。
+		notWant []string
 	}{
 		{
 			name:     "投入フォーム",
@@ -111,16 +114,29 @@ func TestTemplatesRender(t *testing.T) {
 			view: historyView{
 				baseView: testBaseView("/history"),
 				Page:     jobfirestore.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
+				Filter:   "failed",
 				Jobs: []repository.Job{
-					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true},
+					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true,
+						State: jobfirestore.StateSucceeded},
 					// 台本が読めなかった場合はジョブ ID が題名に入ります。
-					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false},
+					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false,
+						State: jobfirestore.StateFailed},
+					// 実行中は「台本のみ」と見分けが付かなければなりません。
+					{ID: "voice-3", Title: "実行中のジョブ", CreatedAt: time.Now(),
+						State: jobfirestore.StateRunning},
 				},
 			},
 			want: []string{
 				"一覧のタイトル", "voice-2",
+				// 絞り込みはページ送りへ持ち回します。外れると 2 ページ目で全件に戻り、
+				// 絞ったはずの一覧が黙って広がります。
+				`href="/history?page=1&amp;state=failed"`,
+				`href="/history?state=failed"`,
+				// 状態は成果物の有無より先に出ます。待てば出るのか、
+				// 消してやり直すのかが一覧で分かる必要があります。
+				">音声あり<", ">失敗<", ">実行中<",
 				// ページ送りは 2 ページ以上のときだけ出ます。
-				`href="/history?page=1"`, `href="/history?page=3"`, "全 120 件",
+				`href="/history?page=3&amp;state=failed"`, "全 120 件",
 			},
 		},
 		{
@@ -130,7 +146,10 @@ func TestTemplatesRender(t *testing.T) {
 				baseView:   testBaseView("/history/voice-1"),
 				JobID:      "voice-1",
 				Script:     script,
+				HasScript:  true,
 				HasAudio:   true,
+				State:      jobfirestore.StateSucceeded,
+				MaxLines:   maxScriptLines,
 				Speakers:   []string{"ずんだもん", "四国めたん"},
 				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
 			},
@@ -147,19 +166,62 @@ func TestTemplatesRender(t *testing.T) {
 				// 保存済みのスタイルは選ばれた状態で戻ること。
 				`data-selected="ノーマル"`,
 				"こんにちはなのだ",
+				// 読みの確認は、直している最中に使えなければ意味がありません。
+				// 送り先はルーターが登録しているパスと一致している必要があります。
+				`data-endpoint="/preview-reading"`,
+				"js-reading",
+				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
+				`data-endpoint="/history/voice-1/status"`,
+				`data-state="succeeded"`,
+				// 行の操作。順序は台本そのものなので、本文の切り貼りでは直せません。
+				"js-move-up", "js-move-down", "js-add-row", "js-remove-row",
+				// 行数の上限はサーバーの値を渡します（画面側に写さないため）。
+				`data-max-lines="200"`,
 			},
 		},
 		{
 			name:     "詳細（音声なし）",
 			template: "detail.html",
 			view: detailView{
-				baseView: testBaseView("/history/voice-2"),
-				JobID:    "voice-2",
-				Script:   script,
-				HasAudio: false,
-				Speakers: []string{"ずんだもん"},
+				baseView:  testBaseView("/history/voice-2"),
+				JobID:     "voice-2",
+				Script:    script,
+				HasScript: true,
+				HasAudio:  false,
+				Speakers:  []string{"ずんだもん"},
 			},
 			want: []string{"保存して音声を作成"},
+			// 入力ソースの記録が無いジョブ（持ち込みの台本）では、作り直しは
+			// 押しても必ず失敗するのでボタンごと出しません。
+			notWant: []string{"同じ入力で台本を作り直す"},
+		},
+		{
+			// 台本を書く前に失敗したジョブです。この画面が開かないと、履歴に
+			// 並んだまま消せません（削除はここからしかできません）。
+			name:     "詳細（台本なし・失敗）",
+			template: "detail.html",
+			view: detailView{
+				baseView: testBaseView("/history/voice-3"),
+				JobID:    "voice-3",
+				State:    jobfirestore.StateFailed,
+				JobError: "AIモデルが空のスクリプトを返しました",
+				InputURI: "https://example.com/article",
+				Speakers: []string{"ずんだもん"},
+			},
+			want: []string{
+				"このジョブは失敗しました",
+				// 失敗の理由が人の目に触れるのは、Slack 通知を除けばここだけです。
+				"AIモデルが空のスクリプトを返しました",
+				"台本はまだありません",
+				"このジョブを削除",
+				// 何を読ませたかは記録にあります。貼り直させる理由がありません。
+				"同じ入力で台本を作り直す",
+				`action="/history/voice-3/regenerate"`,
+				"https://example.com/article",
+			},
+			// 直す台本が無いので、保存も合成も読みの確認もできません。ボタンだけ残すと、
+			// 押しても何も起きない（指す先のフォームや行が無い）ものが並びます。
+			notWant: []string{"保存して音声", "台本JSONをダウンロード", "読みを確認"},
 		},
 	}
 
@@ -178,6 +240,11 @@ func TestTemplatesRender(t *testing.T) {
 			for _, want := range tt.want {
 				if !strings.Contains(got, want) {
 					t.Errorf("%s に %q が含まれていません", tt.template, want)
+				}
+			}
+			for _, notWant := range tt.notWant {
+				if strings.Contains(got, notWant) {
+					t.Errorf("%s に %q が残っています", tt.template, notWant)
 				}
 			}
 		})
@@ -240,11 +307,12 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 			Form:        domain.Request{Command: domain.CommandGenerate},
 		},
 		"detail.html": detailView{
-			baseView: testBaseView("/history/voice-1"),
-			JobID:    "voice-1",
-			Script:   domain.Script{Title: "T"},
-			HasAudio: true,
-			Speakers: []string{"ずんだもん"},
+			baseView:  testBaseView("/history/voice-1"),
+			JobID:     "voice-1",
+			Script:    domain.Script{Title: "T"},
+			HasScript: true,
+			HasAudio:  true,
+			Speakers:  []string{"ずんだもん"},
 		},
 	}
 

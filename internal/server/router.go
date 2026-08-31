@@ -96,30 +96,29 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Get("/modes", h.Web.Modes)
 		r.Get("/modes/{mode}", h.Web.ModeDetail)
 
-		// 台本ができたら履歴に並び、詳細から音声を作ります。
-		// ここは人と機械が同じものを見るので、ルートは 1 本です。表現は
-		// Accept で決まります（handlers/negotiated.go）。
+		// ページを持たない操作ですが、画面も叩くので /api の下には置きません。
+		r.Post("/preview-reading", h.Web.PreviewReading)
+
+		// 人と機械が同じものを見るため、ルートは 1 本です（表現は handlers/negotiated.go）。
 		r.Route("/history", func(r chi.Router) {
 			r.Get("/", h.Web.Jobs)
 			r.Get("/{jobID}", h.Web.Detail)
 			r.Post("/{jobID}/script", h.Web.UpdateScript)
+			r.Post("/{jobID}/regenerate", h.Web.Regenerate)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
 			r.Get("/{jobID}/script", h.Web.Script)
+			r.Get("/{jobID}/status", h.Web.JobStatus)
 		})
 
-		// 機械にしか無い操作です。画面には対応するページがありません。
+		// 機械だけが叩く操作です。画面も叩くものはこの外にあります。
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/speakers", h.Web.APISpeakers)
-			r.Post("/preview-reading", h.Web.APIPreviewReading)
 			r.Route("/jobs", func(r chi.Router) {
 				r.Post("/", h.Web.APIEnqueue)
-				r.Get("/{jobID}/status", h.Web.APIJobStatus)
 				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
 				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
-
-				// 削除は機械にしかありません。画面のボタンは DELETE を出せないため
-				// POST /history/{jobID}/delete を叩きます（実装は同じ Delete です）。
+				// 画面は POST /history/{jobID}/delete を叩きます（実装は同じ Delete です）。
 				r.Delete("/{jobID}", h.Web.Delete)
 			})
 		})

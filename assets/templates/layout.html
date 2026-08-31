@@ -3,8 +3,8 @@
      移したとき同じ 3 行を 5 ファイル直すことになり、1 つ直し漏らせばその画面だけ
      スタイルが崩れる状態だったので、ここへ集約しています。
 
-     ページ側は title / content / scripts の 3 つを define します。scripts は読み込む JS が
-     無い画面でも空で define してください（テンプレートセットに無いと描画時に落ちます）。 */}}
+     ページ側が define するのは title と content です。読み込む JS は .JS が運びます
+     （どの画面が何を読むかは handlers の pageScripts が持ちます）。 */}}
 {{ define "layout.html" }}<!doctype html>
 <html lang="ja">
 <head>
@@ -20,6 +20,8 @@
 
 {{ template "content" . }}
 <script src="/static/vendor/bootstrap-5.3.8/bootstrap.bundle.min.js"></script>
-{{ template "scripts" . }}
+<script src="/static/js/app.js" defer></script>
+{{ range .JS }}<script src="{{ . }}" defer></script>
+{{ end }}
 </body>
 </html>{{ end }}

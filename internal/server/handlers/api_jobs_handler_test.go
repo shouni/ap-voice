@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,7 +61,7 @@ func putScript(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder
 // 通ることを検証します。
 //
 // 片方だけ緩いと、そちらから実在しない組み合わせが入ります。合成時に
-// getStyleID が既定へ黙って落とすため、保存できてしまうと「指定したのに
+// 合成時に既定へ黙って落ちるため、保存できてしまうと「指定したのに
 // 違う声で喋る」形でしか現れません。
 func TestAPIUpdateScriptSharesValidationWithTheForm(t *testing.T) {
 	t.Parallel()
@@ -357,67 +356,6 @@ func (f fakeReading) ConvertToReading(text string) (string, error) {
 	return text, nil
 }
 
-// TestAPIPreviewReadingMarksChangedLines は、変換で表記が変わった行に印が付くことを
-// 検証します。
-//
-// 確かめる価値がある行の目印です。台本が 30 行あっても、変わったのが 2 行なら
-// そこだけ読めば済みます。印が無いと全行を目で追うことになります。
-func TestAPIPreviewReadingMarksChangedLines(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &savingRepo{})
-	h.reading = fakeReading{}
-
-	rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading",
-		`{"lines":[{"text":"水面"},{"text":"カタカナ"}]}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-
-	var got apiReadingResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("応答のデコードに失敗しました: %v", err)
-	}
-	if len(got.Lines) != 2 {
-		t.Fatalf("行数 = %d, want 2", len(got.Lines))
-	}
-	if got.Lines[0].Reading != "スイメン" || !got.Lines[0].Changed {
-		t.Errorf("変わった行に印がありません: %+v", got.Lines[0])
-	}
-	if got.Lines[1].Changed {
-		t.Errorf("変わっていない行に印が付いています: %+v", got.Lines[1])
-	}
-	// 元のテキストも返します。並べて読めないと、どこが変わったか分かりません。
-	if got.Lines[0].Text != "水面" {
-		t.Errorf("元のテキストが欠けています: %+v", got.Lines[0])
-	}
-}
-
-// TestAPIPreviewReadingRejectsEmptyAndOversized は、入力の境界を検証します。
-func TestAPIPreviewReadingRejectsEmptyAndOversized(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &savingRepo{})
-	h.reading = fakeReading{}
-
-	if rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading", `{"lines":[]}`); rec.Code != http.StatusBadRequest {
-		t.Errorf("空: status = %d, want 400", rec.Code)
-	}
-
-	var b strings.Builder
-	b.WriteString(`{"lines":[`)
-	for i := 0; i <= maxScriptLines; i++ {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(`{"text":"あ"}`)
-	}
-	b.WriteString(`]}`)
-	if rec := postJSON(t, h.APIPreviewReading, "/api/preview-reading", b.String()); rec.Code != http.StatusBadRequest {
-		t.Errorf("上限超過: status = %d, want 400", rec.Code)
-	}
-}
-
 // postJSON は JSON ボディの POST を呼びます。
 func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -587,70 +525,4 @@ type statusRepo struct {
 
 func (r *statusRepo) Get(context.Context, string) (domain.JobStatus, error) {
 	return r.status, r.err
-}
-
-// getJobStatus は GET /api/jobs/{jobID}/status を呼びます。
-func getJobStatus(t *testing.T, h *Handler) *httptest.ResponseRecorder {
-	t.Helper()
-
-	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
-	req := httptest.NewRequest("GET", "/api/jobs/"+jobID+"/status", nil)
-	ctx := chi.NewRouteContext()
-	ctx.URLParams.Add("jobID", jobID)
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
-
-	rec := httptest.NewRecorder()
-	h.APIJobStatus(rec, req)
-	return rec
-}
-
-// 未記録（ErrNotFound）は 404。MCP サーバーが unknown として扱う正常系。
-func TestAPIJobStatusNotRecordedIs404(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobfirestore.ErrNotFound)})
-	if rec := getJobStatus(t, h); rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
-	}
-}
-
-// 読めなかっただけ（ErrUnavailable）のときに 404 と答えないこと。
-// 混ぜると、ストレージ障害の間すべてのジョブが「記録が無い」ように見え、
-// ポーリング側が unknown として静かに受け入れてしまう。
-func TestAPIJobStatusUnreadableIsNot404(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable)})
-	rec := getJobStatus(t, h)
-	if rec.Code == http.StatusNotFound {
-		t.Fatalf("status = 404: 読めないだけのジョブを未記録と答えている: %s", rec.Body.String())
-	}
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want 502: %s", rec.Code, rec.Body.String())
-	}
-}
-
-// 読めたら 200 で jobfirestore.Status のフラットな形のまま返すこと。
-func TestAPIJobStatusReturnsRecord(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &statusRepo{status: domain.JobStatus{
-		State:    jobfirestore.StateRunning,
-		AudioURI: "gs://test/voice/x/audio.wav",
-	}})
-	rec := getJobStatus(t, h)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("応答が JSON ではない: %v", err)
-	}
-	if got["state"] != string(jobfirestore.StateRunning) {
-		t.Errorf("state = %v, want running", got["state"])
-	}
-	if got["audio_uri"] != "gs://test/voice/x/audio.wav" {
-		t.Errorf("audio_uri = %v（埋め込みのフラット展開が崩れている）", got["audio_uri"])
-	}
 }

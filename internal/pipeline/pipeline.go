@@ -43,17 +43,7 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobfire
 	if p.status == nil || req.JobID == "" {
 		return
 	}
-	p.status.Record(ctx, req.JobID, p.newStatus(req, state), apply...)
-}
-
-// newStatus は今回の記録ぶんの状態を組み立てます。
-func (p *Pipeline) newStatus(req domain.Request, state jobfirestore.State) domain.JobStatus {
-	return domain.JobStatus{
-		JobID:   req.JobID,
-		Command: string(req.Command),
-		State:   state,
-		Mode:    req.Mode,
-	}
+	p.status.Record(ctx, req.JobID, domain.NewJobStatus(req, state), apply...)
 }
 
 // begin は、そのジョブが既に完了していれば true を返し、未完了なら処理開始を記録して
@@ -69,7 +59,7 @@ func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) 
 		return false, nil
 	}
 
-	done, err := p.status.Begin(ctx, req.JobID, p.newStatus(req, jobfirestore.StateRunning),
+	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobfirestore.StateRunning),
 		func(next, prev *domain.JobStatus) {
 			next.Attempts++
 			next.CarryFrom(prev)
@@ -190,21 +180,13 @@ func (p *Pipeline) publish(ctx context.Context, req domain.Request, script domai
 
 // resolveScript は、Command に応じて合成対象の台本を用意します。
 //
-// generate は入力ソースから作ります。synthesize は渡された台本を使い、
-// 無ければ JobID で保存済みのものを読みます。台本をタスクのペイロードで
-// 運ばないのは、長い台本が Cloud Tasks の 1MB 上限に当たりうるためです。
+// generate は入力ソースから作ります。synthesize は JobID で保存済みの台本を読みます
+// （台本はペイロードに載りません。理由は domain.Request.JobID）。持ち込みの台本も
+// 投入側が先に保存するので、読み出しは 1 経路です — ペイロードの台本を優先する分岐が
+// かつてありましたが、投入側がどれも台本を載せなくなったあとは、テストだけが
+// 通る道になっていました。
 func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domain.Script, error) {
 	if req.Command == domain.CommandSynthesize {
-		// API から直接渡された台本を優先します。タイトルは保存済みのものを引き継ぎます。
-		if len(req.Script) > 0 {
-			stored, err := p.scripts.Load(ctx, req.JobID)
-			if err != nil {
-				// 新規の貼り戻しならまだ保存されていないこともあります。
-				return domain.Script{Lines: req.Script}, nil
-			}
-			return domain.Script{Title: stored.Title, Lines: req.Script}, nil
-		}
-
 		script, err := p.scripts.Load(ctx, req.JobID)
 		if err != nil {
 			return domain.Script{}, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)

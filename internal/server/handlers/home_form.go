@@ -170,15 +170,10 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 	}
 
 	// worker 側でも Execute の冒頭で検証しますが、投入前に弾けば
-	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます。
-	if err := req.Validate(); err != nil {
-		h.renderError(w, r, http.StatusBadRequest, req, tab, err.Error())
-		return
-	}
-
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderError(w, r, http.StatusBadGateway, req, tab, err.Error())
+	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます（submit の中です）。
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderError(w, r, status, req, tab, err.Error())
 		return
 	}
 
@@ -196,7 +191,6 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 // Gemini を通しません。貼られた台本をそのまま合成します。ジョブ ID を発行して
 // その場所へ保存するので、既存ジョブの差し替えと同じ経路が新規作成になります
 // （保存先はジョブ ID から決まり、ジョブが既にあるかどうかは問いません）。
-// 台本はタスクに載せないため、長くても Cloud Tasks の 1MB 上限に当たりません。
 func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimSpace(r.FormValue("script_json"))
 	if raw == "" {
@@ -210,8 +204,7 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 話者とスタイルは API と同じ検証を通します。実在しない組み合わせは、
-	// 通っても合成側が既定スタイルへ黙って落とすため、ここで弾きます。
+	// 話者とスタイルは API と同じ検証を通します（validateScript）。
 	cleaned, err := h.validateScript(script)
 	if err != nil {
 		h.renderScriptError(w, r, http.StatusBadRequest, raw, err.Error())
@@ -234,14 +227,9 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
-	if err := req.Validate(); err != nil {
-		h.renderScriptError(w, r, http.StatusBadRequest, raw, err.Error())
-		return
-	}
-
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderScriptError(w, r, http.StatusBadGateway, raw, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderScriptError(w, r, status, raw, err.Error())
 		return
 	}
 
@@ -280,5 +268,5 @@ func (h *Handler) renderScriptError(w http.ResponseWriter, r *http.Request, stat
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, view formView) {
-	h.renderTemplate(w, status, "home.html", view)
+	h.renderTemplate(w, status, "home.html", &view)
 }

@@ -7,6 +7,17 @@
     <a class="btn btn-primary btn-sm" href="/">台本を作成</a>
   </div>
 
+  {{/* 絞り込みは記録の状態そのままです（jobfirestore の語彙）。画面側で別の
+       呼び名を作ると、記録に書かれている値と選べる値が別物になります。
+       ページ送りにも state を持ち回さないと、2 ページ目で外れます。 */}}
+  <div class="btn-group btn-group-sm mb-3" role="group" aria-label="状態で絞り込む">
+    <a class="btn btn-outline-secondary{{ if eq .Filter "" }} active{{ end }}" href="/history">すべて</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "queued" }} active{{ end }}" href="/history?state=queued">待機中</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "running" }} active{{ end }}" href="/history?state=running">実行中</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "succeeded" }} active{{ end }}" href="/history?state=succeeded">完了</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "failed" }} active{{ end }}" href="/history?state=failed">失敗</a>
+  </div>
+
   {{ if .Jobs }}
     <div class="list-group">
       {{ range .Jobs }}
@@ -18,11 +29,19 @@
               {{ if not .CreatedAt.IsZero }}{{ .CreatedAt.Format "2006/01/02 15:04" }} ・ {{ end }}<code>{{ .ID }}</code>
             </small>
           </span>
-          {{ if .HasAudio }}<span class="badge bg-success flex-shrink-0">音声あり</span>
+          {{/* 状態を成果物より先に見ます。「台本のみ」は generate が成功した姿でもあり、
+               まだ実行中の姿でも、失敗した姿でもあります。区別が付かないと、
+               待てば出るのか、消してやり直すのかを一覧から判断できません。 */}}
+          {{ if eq .State "failed" }}<span class="badge bg-danger flex-shrink-0">失敗</span>
+          {{ else if eq .State "running" }}<span class="badge bg-primary flex-shrink-0">実行中</span>
+          {{ else if eq .State "queued" }}<span class="badge bg-secondary flex-shrink-0">待機中</span>
+          {{ else if .HasAudio }}<span class="badge bg-success flex-shrink-0">音声あり</span>
           {{ else }}<span class="badge bg-secondary flex-shrink-0">台本のみ</span>{{ end }}
         </a>
       {{ end }}
     </div>
+  {{ else if .Filter }}
+    <p class="text-secondary">この状態のジョブはありません。<a href="/history">すべて</a>を見てください。</p>
   {{ else }}
     <p class="text-secondary">まだ何もありません。<a href="/">台本を作成</a>してください。</p>
   {{ end }}
@@ -31,18 +50,15 @@
   {{ if gt .Page.TotalPages 1 }}
     <nav class="d-flex justify-content-between align-items-center border-top pt-3 mt-3">
       {{ if .Page.HasPrev }}
-        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.PrevPage }}">← 新しい方へ</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.PrevPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">← 新しい方へ</a>
       {{ else }}<span></span>{{ end }}
       <span class="text-secondary small">
         {{ .Page.From }}〜{{ .Page.To }} 件目 / 全 {{ .Page.Total }} 件（{{ .Page.Page }}/{{ .Page.TotalPages }} ページ）
       </span>
       {{ if .Page.HasNext }}
-        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.NextPage }}">古い方へ →</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.NextPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">古い方へ →</a>
       {{ else }}<span></span>{{ end }}
     </nav>
   {{ end }}
 </main>
 {{ end }}
-
-{{/* この画面は固有の JS を読み込みません。 */}}
-{{ define "scripts" }}{{ end }}

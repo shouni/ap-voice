@@ -3,9 +3,9 @@ package assets
 
 import "embed"
 
-// promptDir はテンプレートの置き場です。ファイル名がそのままモード名になります
-// （prompts/duet.md → mode="duet"）。ディレクトリで区切っている以上、ファイル名側の
-// 接頭辞は重複なので付けません。
+// promptDir はプロンプトの置き場です。ファイル名がそのままモード名になります
+// （prompts/tech_duet.md → mode="tech_duet"）。接頭辞はジャンルで、一覧が
+// ジャンルごとに固まって並ぶためのものです（入力の型は front matter が持ちます）。
 const promptDir = "prompts"
 
 // PromptFiles は埋め込まれたプロンプトファイル群です。

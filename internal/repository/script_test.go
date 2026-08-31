@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -122,13 +124,26 @@ type fakeStatus struct {
 	statuses []domain.JobStatus
 }
 
-func (f *fakeStatus) Get(context.Context, string) (domain.JobStatus, error) {
+// Get は持っている記録から探します。無ければ実物と同じく ErrNotFound です。
+// 「記録がある」と「無い」で削除の返し方が変わるため、ここを一律にはできません。
+func (f *fakeStatus) Get(_ context.Context, jobID string) (domain.JobStatus, error) {
+	for _, status := range f.statuses {
+		if status.JobID == jobID {
+			return status, nil
+		}
+	}
 	return domain.JobStatus{}, jobfirestore.ErrNotFound
 }
 
 func (f *fakeStatus) Save(context.Context, string, domain.JobStatus) error { return nil }
 
-func (f *fakeStatus) Delete(context.Context, string) error { return nil }
+// Delete は記録を取り除きます。実際に消えたことを呼び出し側が確かめられるようにします。
+func (f *fakeStatus) Delete(_ context.Context, jobID string) error {
+	f.statuses = slices.DeleteFunc(f.statuses, func(status domain.JobStatus) bool {
+		return status.JobID == jobID
+	})
+	return nil
+}
 
 func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error) {
 	// 実物と同じく、返すのはページ分だけです。
@@ -293,6 +308,94 @@ func TestDeleteRemovesTheWholeJobPrefix(t *testing.T) {
 	}
 	if len(remaining) != 2 {
 		t.Errorf("他のジョブまで消えています: %v", remaining)
+	}
+}
+
+// TestDeleteRemovesTheRecordOfAJobWithNoArtifacts は、成果物を 1 つも持たない
+// ジョブが削除できることを検証します。
+//
+// 台本を書く前に失敗したジョブがこの姿です。以前はここで「見つかりません」と
+// 返しており、しかも詳細画面は台本が無いと開けなかったため、履歴に並んだまま
+// どこからも消せませんでした。消したいのはまさにこのジョブです。
+func TestDeleteRemovesTheRecordOfAJobWithNoArtifacts(t *testing.T) {
+	t.Parallel()
+
+	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
+	status := &fakeStatus{statuses: []domain.JobStatus{
+		{JobID: jobID, State: jobfirestore.StateFailed, Error: "生成に失敗しました"},
+	}}
+	repo := newRepo(t, newFakeStore())
+	repo.status = status
+
+	if err := repo.Delete(context.Background(), jobID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if len(status.statuses) != 0 {
+		t.Error("記録が残っています。履歴から消えません")
+	}
+}
+
+// TestDeleteReportsUnknownJob は、成果物も記録も無いジョブが ErrJobNotFound に
+// なることを検証します。
+//
+// 「知らないジョブを指した」と「作りかけで失敗したジョブを片付けた」は別物です。
+// 混ぜると、前者に 404 を返せなくなります。
+func TestDeleteReportsUnknownJob(t *testing.T) {
+	t.Parallel()
+
+	repo := withStatuses(t, newFakeStore())
+
+	err := repo.Delete(context.Background(), "voice-20260830-090000-aaaaaaaaaaaa")
+	if !errors.Is(err, ErrJobNotFound) {
+		t.Errorf("Delete() error = %v, want ErrJobNotFound", err)
+	}
+}
+
+// TestLoadReportsMissingScript は、まだ書かれていない台本が ErrScriptNotFound に
+// なることを検証します。
+//
+// 「まだ無い」と「読めなかった」を呼び出し側が区別できないと、生成中のジョブと
+// GCS の障害が同じ失敗になります。詳細画面は前者では状態を出し、後者では
+// 502 を返す必要があります。
+func TestLoadReportsMissingScript(t *testing.T) {
+	t.Parallel()
+
+	repo := newRepo(t, newFakeStore())
+
+	_, err := repo.Load(context.Background(), "voice-20260830-090000-aaaaaaaaaaaa")
+	if !errors.Is(err, ErrScriptNotFound) {
+		t.Errorf("Load() error = %v, want ErrScriptNotFound", err)
+	}
+}
+
+// TestListCarriesState は、一覧が進行状態を運ぶことを検証します。
+//
+// 成果物の有無だけでは、実行中のジョブと台本で終わったジョブが同じ姿になります。
+// 待てば出るのか、消してやり直すのかを一覧で判断できません。
+func TestListCarriesState(t *testing.T) {
+	t.Parallel()
+
+	repo := withStatuses(t, newFakeStore(),
+		domain.JobStatus{
+			JobID: "voice-20260830-090000-aaaaaaaaaaaa",
+			State: jobfirestore.StateFailed,
+			Error: "AIモデルが空のスクリプトを返しました",
+		},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb", State: jobfirestore.StateRunning},
+	)
+
+	jobs, _, err := repo.List(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if jobs[0].State != jobfirestore.StateFailed {
+		t.Errorf("State = %q, want failed", jobs[0].State)
+	}
+	if jobs[0].Error == "" {
+		t.Error("失敗理由が運ばれていません")
+	}
+	if jobs[1].State != jobfirestore.StateRunning {
+		t.Errorf("State = %q, want running", jobs[1].State)
 	}
 }
 

@@ -24,6 +24,18 @@ type JobStatus struct {
 	AudioURI string `json:"audio_uri,omitempty" firestore:"audio_uri,omitempty"`
 	// ScriptURI は台本の保存先（gs://）です。generate の時点から入ります。
 	ScriptURI string `json:"script_uri,omitempty" firestore:"script_uri,omitempty"`
+	// InputURI は台本の元になった入力ソースです。generate 系のジョブにだけ入ります。
+	//
+	// これが無いと、失敗したジョブを画面からやり直せません。何を読ませたかは
+	// 台本にも成果物にも残らず、失敗したジョブには台本すらありません。投入した
+	// 画面を閉じた時点で、元の URL は利用者の記憶の中にしかなくなります。
+	InputURI string `json:"input_uri,omitempty" firestore:"input_uri,omitempty"`
+	// AIModel は台本を書かせたモデルです。空なら投入時の既定モデルでした。
+	//
+	// やり直しで同じモデルを使うために残します。既定モデルは GEMINI_MODELS の
+	// 先頭で、デプロイのたびに変わりうるので、「空＝そのときの既定」を後から
+	// 復元することはできません。
+	AIModel string `json:"ai_model,omitempty" firestore:"ai_model,omitempty"`
 	// Mode は台本を作ったときの形式（tech_solo など）です。
 	//
 	// 状態に残さないと、後から振り返る手段がありません。出来上がった台本から
@@ -55,5 +67,30 @@ func (s *JobStatus) CarryFrom(prev *JobStatus) {
 	}
 	if s.Mode == "" {
 		s.Mode = prev.Mode
+	}
+	// 入力ソースとモデルも同じです。synthesize はどちらも持たないので、
+	// 引き継がないと 2 段で進めたジョブがやり直しの手がかりを失います。
+	if s.InputURI == "" {
+		s.InputURI = prev.InputURI
+	}
+	if s.AIModel == "" {
+		s.AIModel = prev.AIModel
+	}
+}
+
+// NewJobStatus は、リクエストから今回の記録ぶんの状態を組み立てます。
+//
+// 記録は Web 面（queued）と Worker 面（running / succeeded / failed）の両方が
+// 書き、どちらも毎回リクエストから組み立て直します。組み立てが 2 箇所にあると、
+// 残すべき値を足したときに片方だけが残す状態になり、そのときだけ値が消えます。
+// 引き継ぎ（CarryFrom）と対で、ここが「リクエストから分かること」の唯一の定義です。
+func NewJobStatus(req Request, state jobfirestore.State) JobStatus {
+	return JobStatus{
+		JobID:    req.JobID,
+		Command:  string(req.Command),
+		State:    state,
+		Mode:     req.Mode,
+		InputURI: req.InputURI,
+		AIModel:  req.AIModel,
 	}
 }

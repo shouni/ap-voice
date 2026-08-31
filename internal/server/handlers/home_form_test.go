@@ -359,3 +359,57 @@ func TestEnqueueSaysWhichButtonWasPressed(t *testing.T) {
 		t.Error("まとめて作ったことが文面に出ていません")
 	}
 }
+
+// TestSubmitValidatesBeforeEnqueuing は、投入の作法が 1 箇所にまとまったことを
+// 検証します。
+//
+// 検証 → 記録 → 投入の 3 つは 5 箇所へ写されており、1 箇所（詳細画面の保存経路）
+// では検証が抜けていました。抜けても画面は普通に動き、必ず失敗するタスクが
+// 積まれるだけなので、気付く機会がありません。
+func TestSubmitValidatesBeforeEnqueuing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("検証に落ちたら投入しない", func(t *testing.T) {
+		t.Parallel()
+
+		queue := &capturingQueue{}
+		h := &Handler{queue: queue}
+
+		// command が空のリクエストです。Validate が弾きます。
+		status, err := h.submit(context.Background(), domain.Request{OutputURI: "gs://b/o.wav"})
+
+		if err == nil {
+			t.Fatal("検証に落ちるはずのリクエストが通りました")
+		}
+		if status != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if queue.calls != 0 {
+			t.Errorf("検証に落ちたのに %d 回投入しています", queue.calls)
+		}
+	})
+
+	t.Run("通ったら投入して 202 を返す", func(t *testing.T) {
+		t.Parallel()
+
+		queue := &capturingQueue{}
+		h := &Handler{queue: queue}
+		req := domain.Request{
+			Command:   domain.CommandSynthesize,
+			JobID:     "voice-20260814-020913-b1b8b2f9e8d7",
+			OutputURI: "gs://b/o.wav",
+		}
+
+		status, err := h.submit(context.Background(), req)
+
+		if err != nil {
+			t.Fatalf("submit() error = %v", err)
+		}
+		if status != http.StatusAccepted {
+			t.Errorf("status = %d, want %d", status, http.StatusAccepted)
+		}
+		if queue.calls != 1 || queue.got.JobID != req.JobID {
+			t.Errorf("投入されていません: calls=%d got=%+v", queue.calls, queue.got)
+		}
+	})
+}
