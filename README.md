@@ -63,9 +63,9 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `VOICEVOX_API_URL` | エンジンの URL。未設定なら `http://localhost:50021` を使います（ローカル実行と Cloud Run のサイドカー構成のどちらもこの値でよいため）。 |
 | `VOICEVOX_MAX_PARALLEL_SEGMENTS` | 1ジョブ内で同時に投げるセグメント数 (Default: `4` = エンジンの vCPU 数)。**スループットを縛っているのはこの値です。** 合成は CPU バウンドなので 4 vCPU は同時4本で飽和し、実測でも 8 にするとスループットは横ばいのまま1件あたりの所要が倍になりました。上書きは戻すための口です。 |
 | `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `100ms`)。**スループットのつまみではありません**（実測の実効 0.24 件/秒 に対し、100ms は 10 件/秒 を許容）。起動時にエンジンを一斉に叩かないための保険で、同時実行数を縛るのは `VOICEVOX_MAX_PARALLEL_SEGMENTS` です。 |
-| `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。 |
+| `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。**「1件」はクエリと合成の2往復ぶん**で、各往復は 1 回までリトライします。1往復ぶんの上限は `HTTP_TIMEOUT` です。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
-| `HTTP_TIMEOUT` | 外部 HTTP 通信のタイムアウト (Default: `60s`)。 |
+| `HTTP_TIMEOUT` | 外部 HTTP 通信（**HTTP 1往復**）のタイムアウト (Default: `60s`)。セグメント1件の上限（`VOICEVOX_SEGMENT_TIMEOUT`）の半分にしてあります — 同じ値まで上げると、最初の1往復がセグメントの持ち時間を使い切ってリトライが入らなくなります。1往復を延ばしたいときにセグメント側を上げても効きません（小さいほうが先に効きます）。Slack への通知も同じクライアントを使うため、応答が無いときの待ち時間もこの値です。 |
 | `PIPELINE_TIMEOUT` | ジョブ1件の実行上限 (Default: `25m`)。**Cloud Tasks より先にアプリが諦める**ための値で、超えると失敗を通知して終わります。 |
 | `TASK_DISPATCH_DEADLINE` | Cloud Tasks がワーカーの応答を待つ上限 (Default: `30m`、Cloud Tasks の上限)。`PIPELINE_TIMEOUT` より長くします。 |
 | `AP_MUSIC_BUCKET` | 楽曲レシピ（`music.Recipe` 形式の `recipe.json`）の置き場 (Default: `ap-music`)。作成画面の「楽曲レシピ」タブが、楽曲生成サービスのジョブ ID から `gs://<bucket>/music/<jobID>/recipe.json` を組み立てるために使います。**動画生成サービスと同じ変数名・同じ規則です。** |

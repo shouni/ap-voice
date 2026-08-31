@@ -16,6 +16,7 @@ const (
 	// DefaultShutdownGrace はサーバー停止時の猶予時間のデフォルト値です。
 	DefaultShutdownGrace = 15 * time.Second
 	// DefaultHTTPTimeout は外部 HTTP 通信のタイムアウトのデフォルト値です。
+	// 縛るのは HTTP 1 往復で、セグメント 1 件ではありません（HTTPConfig 参照）。
 	DefaultHTTPTimeout = 60 * time.Second
 	// MinInputContentLength は生成に必要な入力テキストの最小長です。
 	MinInputContentLength = 10
@@ -185,6 +186,10 @@ type VoicevoxConfig struct {
 
 	// SegmentTimeout はセグメント 1 件あたりの上限です。
 	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
+	//
+	// 「1 件」はクエリ（audio_query）と合成（synthesis）の 2 往復ぶんで、それぞれ
+	// リトライが 1 回まで入ります。1 往復ぶんの上限は HTTP_TIMEOUT です—
+	// 小さいほうが先に効くので、こちらだけ延ばしても往復は延びません（HTTPConfig 参照）。
 	SegmentTimeout time.Duration `env:"VOICEVOX_SEGMENT_TIMEOUT"`
 }
 
@@ -244,6 +249,25 @@ type NotificationConfig struct {
 }
 
 // HTTPConfig は外部 HTTP 通信の設定です。
+//
+// 合成の上限は 2 段になっています。**この値が縛るのは HTTP 1 往復**
+// （http.Client.Timeout）で、セグメント 1 件はクエリと合成の 2 往復、しかも
+// go-http-kit が 1 回ずつリトライするため（builder の WithMaxRetries(1)）、
+// セグメント全体を縛るのは VOICEVOX_SEGMENT_TIMEOUT のほうです。
+//
+// 60 秒と 120 秒は食い違いではなく、この 2 段です。**往復の上限をセグメントの
+// 上限まで上げてはいけません** — 最初の 1 往復が budget を使い切れるようになり、
+// 上限に達した往復のやり直しが入らなくなります。半分にしておけば、時間切れの
+// 往復をもう一度試してもセグメントの budget に収まります。
+//
+// 段を跨いだ勘違いに注意してください。1 往復を 60 秒より延ばしたいときに
+// VOICEVOX_SEGMENT_TIMEOUT を上げても効きません（小さいほうが先に効きます）。
+// 逆にこの値を上げると通知にも効きます— Slack へ投げるのは同じクライアント
+// （リトライだけ外したもの）なので、Webhook が応答しないときの待ちが
+// そのまま伸びます。
+//
+// なお実測のセグメントは最大 35.3 秒で、どちらの上限にも遠いところにあります。
+// 所要を決めているのは並列数のほうです（VoicevoxConfig を参照）。
 type HTTPConfig struct {
 	// 既定値は LocationID と同じ理由で normalize が埋めます。
 	Timeout time.Duration `env:"HTTP_TIMEOUT"`
