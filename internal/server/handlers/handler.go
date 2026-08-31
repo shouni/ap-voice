@@ -85,7 +85,7 @@ type PromptRenderer interface {
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
-	List(ctx context.Context, page, perPage int) ([]repository.Job, jobfirestore.PageMeta, error)
+	List(ctx context.Context, page, perPage int, opts ...jobfirestore.ListOption) ([]repository.Job, jobfirestore.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
 	SaveScript(ctx context.Context, jobID string, script domain.Script) error
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)

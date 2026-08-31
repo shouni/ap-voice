@@ -5,8 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
 
@@ -55,8 +57,22 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 		perPage = min(n, maxPerPage)
 	}
 
-	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)
+	state, ok := stateParam(r)
+	if !ok {
+		respond.Error(w, r, http.StatusBadRequest, "state は "+strings.Join(listableStates(), " / ")+" です")
+		return
+	}
+
+	var opts []jobfirestore.ListOption
+	if state != "" {
+		opts = append(opts, jobfirestore.WithState(state))
+	}
+
+	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage, opts...)
 	if err != nil {
+		// 絞り込みは複合索引を要ります（state と queued_at）。索引はデプロイ設定が
+		// 持つので、無い環境では絞り込んだときだけここに来ます。
+		slog.ErrorContext(r.Context(), "履歴の取得に失敗しました", "state", state, "error", err)
 		respond.Error(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
 		return
 	}
@@ -74,7 +90,9 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 		return
 	}
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{baseView: h.base(r), Jobs: jobs, Page: meta})
+	h.renderTemplate(w, http.StatusOK, "history.html", historyView{
+		baseView: h.base(r), Jobs: jobs, Page: meta, Filter: string(state),
+	})
 }
 
 // Modes は、選べる指示モードを返します。

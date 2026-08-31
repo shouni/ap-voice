@@ -4,7 +4,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/shouni/go-job-firestore/jobfirestore"
 
@@ -36,6 +38,37 @@ type historyView struct {
 	baseView
 	Jobs []repository.Job
 	Page jobfirestore.PageMeta
+	// Filter は絞り込み中の状態です（空なら全件）。ページ送りのリンクに
+	// 引き継がないと、2 ページ目で絞り込みが外れます。
+	Filter string
+}
+
+// listableStates は ?state= に指定できる値です。
+//
+// jobfirestore の語彙をそのまま使います。ここで独自の綴りを作ると、記録に
+// 書かれている値と画面が受け付ける値が別物になります。
+func listableStates() []string {
+	return []string{
+		string(jobfirestore.StateQueued),
+		string(jobfirestore.StateRunning),
+		string(jobfirestore.StateSucceeded),
+		string(jobfirestore.StateFailed),
+	}
+}
+
+// stateParam は ?state= を読みます。空なら絞り込みなし、未知の値は false です。
+//
+// page と違って黙って無視しません。打ち間違えた絞り込みが全件を返すと、
+// 「失敗したジョブは無い」と読めてしまいます。
+func stateParam(r *http.Request) (jobfirestore.State, bool) {
+	value := strings.TrimSpace(r.URL.Query().Get("state"))
+	if value == "" {
+		return "", true
+	}
+	if !slices.Contains(listableStates(), value) {
+		return "", false
+	}
+	return jobfirestore.State(value), true
 }
 
 // detailView は詳細画面に渡す値です。

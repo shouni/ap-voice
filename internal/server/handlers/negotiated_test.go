@@ -95,14 +95,16 @@ func TestJobIDErrorFollowsTheRequestedFormat(t *testing.T) {
 	}
 }
 
-// listingRepo は、要求されたページ幅を覚えておくフェイクです。
+// listingRepo は、要求されたページ幅と絞り込みを覚えておくフェイクです。
 type listingRepo struct {
 	ScriptRepository
 	perPage int
+	opts    int
 }
 
-func (r *listingRepo) List(_ context.Context, _, perPage int) ([]repository.Job, jobfirestore.PageMeta, error) {
+func (r *listingRepo) List(_ context.Context, _, perPage int, opts ...jobfirestore.ListOption) ([]repository.Job, jobfirestore.PageMeta, error) {
 	r.perPage = perPage
+	r.opts = len(opts)
 	return nil, jobfirestore.PageMeta{}, nil
 }
 
@@ -140,6 +142,47 @@ func TestJobsCapsPerPage(t *testing.T) {
 
 			if repo.perPage != tt.want {
 				t.Errorf("perPage = %d, want %d", repo.perPage, tt.want)
+			}
+		})
+	}
+}
+
+// TestJobsFiltersByState は、?state= が絞り込みとして渡ることを検証します。
+//
+// 記録には状態が入っているのに、一覧は全件しか出せませんでした。「失敗した
+// ジョブだけ」を見るのに、人が目で探すことになります。
+func TestJobsFiltersByState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		query      string
+		wantStatus int
+		wantOpts   int
+	}{
+		{query: "", wantStatus: http.StatusOK, wantOpts: 0},
+		{query: "?state=failed", wantStatus: http.StatusOK, wantOpts: 1},
+		{query: "?state=running", wantStatus: http.StatusOK, wantOpts: 1},
+		// 打ち間違いを黙って全件にしません。「失敗は無い」と読めてしまいます。
+		{query: "?state=broken", wantStatus: http.StatusBadRequest, wantOpts: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
+
+			repo := &listingRepo{}
+			h := &Handler{repo: repo, templates: parseTemplates(t)}
+			req := httptest.NewRequest(http.MethodGet, "/history"+tt.query, nil)
+			req.Header.Set("Accept", "application/json")
+
+			rec := httptest.NewRecorder()
+			h.Jobs(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if repo.opts != tt.wantOpts {
+				t.Errorf("絞り込みの数 = %d, want %d", repo.opts, tt.wantOpts)
 			}
 		})
 	}

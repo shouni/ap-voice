@@ -114,6 +114,7 @@ func TestTemplatesRender(t *testing.T) {
 			view: historyView{
 				baseView: testBaseView("/history"),
 				Page:     jobfirestore.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
+				Filter:   "failed",
 				Jobs: []repository.Job{
 					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true,
 						State: jobfirestore.StateSucceeded},
@@ -127,11 +128,15 @@ func TestTemplatesRender(t *testing.T) {
 			},
 			want: []string{
 				"一覧のタイトル", "voice-2",
+				// 絞り込みはページ送りへ持ち回します。外れると 2 ページ目で全件に戻り、
+				// 絞ったはずの一覧が黙って広がります。
+				`href="/history?page=1&amp;state=failed"`,
+				`href="/history?state=failed"`,
 				// 状態は成果物の有無より先に出ます。待てば出るのか、
 				// 消してやり直すのかが一覧で分かる必要があります。
 				">音声あり<", ">失敗<", ">実行中<",
 				// ページ送りは 2 ページ以上のときだけ出ます。
-				`href="/history?page=1"`, `href="/history?page=3"`, "全 120 件",
+				`href="/history?page=3&amp;state=failed"`, "全 120 件",
 			},
 		},
 		{

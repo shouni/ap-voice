@@ -231,14 +231,16 @@ type Job struct {
 	Error string
 }
 
-// List は、指定ページのジョブを新しい順に返します。
+// List は、指定ページのジョブを新しい順に返します。絞り込みは呼び出し側が決めます
+// （jobfirestore.WithState など）。ここで絞り込みの語彙を作り直すと、ライブラリが
+// 既に持っているものが 2 つになります。
 //
 // 成果物を一切読みません。以前はバケット配下を全走査してジョブ ID と音声の
 // 有無を集め、ページ分の台本を並行に読んで題名を得ていました。ジョブが増えるほど
 // 走査が伸び、件数に上限がありません。いまは 1 ページ分をクエリで取り、必要な
 // 3 つの値（題名・音声の有無・作成時刻）をすべて状態から導きます。
-func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, jobfirestore.PageMeta, error) {
-	statuses, meta, err := r.status.List(ctx, page, perPage)
+func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobfirestore.ListOption) ([]Job, jobfirestore.PageMeta, error) {
+	statuses, meta, err := r.status.List(ctx, page, perPage, opts...)
 	if err != nil {
 		return nil, jobfirestore.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
 	}

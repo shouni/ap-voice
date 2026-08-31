@@ -206,7 +206,11 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   un-cancelled notification context for the same reason the notification is: a timed-out context
   records nothing.
   `Repository` satisfies `jobfirestore.StatusStore`, which is why the store is assembled in one
-  place. **Listing reads no artifacts at all**: title, audio presence and creation time all come
+  place. `List` takes `jobfirestore.ListOption` and does not invent a filter vocabulary of its own;
+  `?state=` on the history screen is `WithState` with the recorded spelling, and an unknown value
+  is a 400 rather than a silent full listing (a typo answering "no failures" is worse than an
+  error). **The filtered query needs a composite index** (`state` asc + `queued_at` desc) that the
+  deployment owns, so an environment without it fails only when the filter is used. **Listing reads no artifacts at all**: title, audio presence and creation time all come
   out of the record, so a page costs one query plus a count instead of a full bucket scan.
   `script_test.go` keeps the bucket empty and still expects a page — without that, "just in case"
   reads of the artifacts creep back.
