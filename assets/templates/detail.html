@@ -45,7 +45,17 @@
       <div class="form-text">履歴の一覧に出ます。60 文字以内。</div>
     </div>
 
-    <h2 class="h6">台本（{{ len .Script.Lines }} 行）</h2>
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <h2 class="h6 mb-0">台本（{{ len .Script.Lines }} 行）</h2>
+
+      {{/* 読みは自明ではありません（「水面」は ミナモ ではなく スイメン）。
+           合成してから気付くと、台本ぶんの合成時間がそのまま無駄になります。
+           サーバーは合成の直前と同じ変換を通すので、ここに出るものが実際に読まれるものです。
+           意図と違う語は、その部分をカタカナで書き直せば直せます。 */}}
+      <button class="btn btn-outline-secondary btn-sm js-preview-reading" type="button"
+              data-endpoint="/api/preview-reading">読みを確認</button>
+      <span class="form-text m-0 js-reading-status" role="status" aria-live="polite"></span>
+    </div>
     <div class="form-text mb-2">
       本文を空にした行は保存時に削除されます。スタイルの選択肢は話者に応じて変わります。
     </div>
@@ -75,6 +85,8 @@
             </td>
             <td>
               <textarea class="form-control form-control-sm js-text" name="text" rows="2">{{ .Text }}</textarea>
+              {{/* 読みの差し込み先です。押されるまでは空で、行の高さも変わりません。 */}}
+              <div class="form-text js-reading"></div>
             </td>
           </tr>
         {{ end }}

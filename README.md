@@ -99,6 +99,7 @@ go run .        # SERVER_ROLE が必須
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を
 送れば JSON が、ブラウザの `Accept` なら画面が返ります。下表に残る `/api/...` は、
 画面に対応物が無いもの（投入・状態・合成・読み確認・話者一覧・削除）だけです。
+機械専用という意味ではありません — 読み確認は編集画面の「読みを確認」からも呼ばれます。
 
 | メソッド | パス | 用途 |
 | --- | --- | --- |
@@ -215,6 +216,8 @@ sequenceDiagram
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
     Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
+    User->>Web: POST /api/preview-reading （「読みを確認」／表の中身をそのまま）
+    Web-->>User: 行ごとの読み（合成の直前と同じ変換）
 
     Note over User, Slack: 3. 音声を作る (command=synthesize)
     User->>Web: POST /history/{jobID}/script （必要なら直してから）

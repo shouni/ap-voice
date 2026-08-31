@@ -207,9 +207,13 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
   keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; the MCP server calls the `/history/…` paths directly.
-- **`/api/*` still holds what only machines have**: enqueue by JSON body, `status`, `synthesize`,
+- **`/api/*` holds what has no page of its own**: enqueue by JSON body, `status`, `synthesize`,
   `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
-  same line `gcp-kit/negotiate` draws. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
+  same line `gcp-kit/negotiate` draws. Not "machines only": the edit screen calls
+  `preview-reading` from its own JS (`X-CSRF-Token`, which `gcp-kit/auth` accepts alongside the
+  form field), because the audience that most needs to hear a reading before spending the minutes
+  is the person editing the line. **It sends what is in the table, not the stored script** —
+  needing to save first to check a reading puts the check on the wrong side of the edit. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
   always fails and everything falls through to the session, so the failure mode of forgetting it is
   "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).
   **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
