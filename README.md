@@ -266,7 +266,8 @@ ap-voice/
 主要な direct dependency（`go.mod`）:
 
 * **[go-chi/chi](https://github.com/go-chi/chi)**: HTTP ルーティング
-* **[shouni/gcp-kit](https://github.com/shouni/gcp-kit)**: SERVER_ROLE の語彙・Cloud Tasks ハンドラ・OIDC 検証・Cloud Logging
+* **[shouni/gcp-kit](https://github.com/shouni/gcp-kit)**: Cloud Tasks ハンドラ・OIDC 検証・Cloud Logging・ヘルスチェックのパス
+* **[shouni/go-serve-kit](https://github.com/shouni/go-serve-kit)**: SERVER_ROLE の語彙 (`serverrole`)・JSON 応答と `Accept` の判定 (`respond`)・セキュリティヘッダー (`secureheaders`)
 * **[shouni/go-gemini-client](https://github.com/shouni/go-gemini-client)**: Gemini / Vertex AI への生成リクエスト
 * **[shouni/go-voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンによる音声合成
 * **[shouni/go-web-reader](https://github.com/shouni/go-web-reader)**: `https://` / `gs://` 入力の読み込み

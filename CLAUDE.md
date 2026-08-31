@@ -42,7 +42,7 @@ dictionary are all compiled in (~54 MB), so nothing else needs to be copied.
 is easy to break by editing.
 
 - `SERVER_ROLE` — **required**, one of `web` / `worker` / `both` (`both` is for local
-  development). Parsed by `gcp-kit/serverrole` in `Config.normalize`; an empty or unknown value
+  development). Parsed by `go-serve-kit/serverrole` in `Config.normalize`; an empty or unknown value
   fails startup rather than defaulting, because treating unset as `both` would restore the
   worker routes on the public service the moment one env var went missing. It selects which
   dependency graph `builder` assembles and which routes `server.setupRoutes` registers.
@@ -456,9 +456,12 @@ First-party (`github.com/shouni/*`):
   only decides *what* to say
 - `go-utils/jobid` — issues and validates job IDs. **Never sort job IDs lexically** — the prefix
   outranks the timestamp; use `jobid.SortKey`.
-- `gcp-kit` — `serverrole` (role vocabulary), `worker` (Cloud Tasks target handler), `auth`
-  (OAuth login, CSRF, Cloud Tasks OIDC verification), `tasks` (enqueue), `cloudlog`
-  (Cloud Logging format + trace correlation)
+- `gcp-kit` — the Google Cloud side: `worker` (Cloud Tasks target handler), `auth` (OAuth login,
+  CSRF, Cloud Tasks OIDC verification), `tasks` (enqueue), `cloudlog` (Cloud Logging format +
+  trace correlation), `cloudrun` (health path)
+- `go-serve-kit` — the HTTP side, with nothing cloud-specific in it: `serverrole` (the
+  `web`/`worker`/`both` vocabulary), `respond` (JSON, and the `Accept` decision `negotiated.go`
+  makes), `secureheaders` (the CSP the templates are written against)
 
 Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct),
 `gopkg.in/yaml.v3` (prompt front matter).
