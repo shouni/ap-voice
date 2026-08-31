@@ -106,7 +106,7 @@ go run .        # SERVER_ROLE が必須
 | `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
 | `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
 | `POST` | `/api/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
-| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定 50、**上限 100**）/ `?state=`（`queued` / `running` / `succeeded` / `failed`）を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。**`?state=` は Firestore の複合索引（`state` 昇順 + `queued_at` 降順）が要ります** — 索引が無い環境では絞り込んだときだけ失敗します。 |
+| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定・上限とも 100）/ `?state=`（`queued` / `running` / `succeeded` / `failed`）を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。**`?state=` は Firestore の複合索引（`state` 昇順 + `queued_at` 降順）が要ります** — 索引が無い環境では絞り込んだときだけ失敗します。 |
 | `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
 | `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
