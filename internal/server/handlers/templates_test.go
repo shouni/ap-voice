@@ -168,10 +168,10 @@ func TestTemplatesRender(t *testing.T) {
 				"こんにちはなのだ",
 				// 読みの確認は、直している最中に使えなければ意味がありません。
 				// 送り先はルーターが登録しているパスと一致している必要があります。
-				`data-endpoint="/api/preview-reading"`,
+				`data-endpoint="/preview-reading"`,
 				"js-reading",
 				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
-				`data-endpoint="/api/jobs/voice-1/status"`,
+				`data-endpoint="/history/voice-1/status"`,
 				`data-state="succeeded"`,
 				// 行の操作。順序は台本そのものなので、本文の切り貼りでは直せません。
 				"js-move-up", "js-move-down", "js-add-row", "js-remove-row",

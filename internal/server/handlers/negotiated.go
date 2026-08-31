@@ -212,3 +212,37 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// 消した先の詳細は開けないため、一覧へ戻します。
 	http.Redirect(w, r, "/history", http.StatusSeeOther)
 }
+
+// JobStatus は、ジョブの進行状況を返します。
+//
+// 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
+// まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
+// jobfirestore.Status で、姉妹サービスと同じ形です。
+//
+// 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
+// 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
+//
+// 読めなかっただけの場合は 404 と混ぜません。権限や GCS 障害（ErrUnavailable）
+// まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
+// ポーリング側が unknown として静かに受け入れてしまいます。
+//
+// 表現は 1 つ（JSON）です。読者で分かれないので Accept は見ませんが、詳細画面の
+// 自動更新と MCP のポーリングが同じものを読む以上、置き場は /api ではありません。
+func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.apiJobID(w, r)
+	if !ok {
+		return
+	}
+
+	status, err := h.repo.Get(r.Context(), jobID)
+	switch {
+	case errors.Is(err, jobfirestore.ErrNotFound):
+		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
+		respond.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
+		return
+	}
+	respond.JSON(w, r, http.StatusOK, status)
+}

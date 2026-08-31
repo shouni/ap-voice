@@ -96,40 +96,29 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		r.Get("/modes", h.Web.Modes)
 		r.Get("/modes/{mode}", h.Web.ModeDetail)
 
-		// 台本ができたら履歴に並び、詳細から音声を作ります。
-		// ここは人と機械が同じものを見るので、ルートは 1 本です。表現は
-		// Accept で決まります（handlers/negotiated.go）。
+		// ページを持たない操作ですが、画面も叩くので /api の下には置きません。
+		r.Post("/preview-reading", h.Web.PreviewReading)
+
+		// 人と機械が同じものを見るため、ルートは 1 本です（表現は handlers/negotiated.go）。
 		r.Route("/history", func(r chi.Router) {
 			r.Get("/", h.Web.Jobs)
 			r.Get("/{jobID}", h.Web.Detail)
 			r.Post("/{jobID}/script", h.Web.UpdateScript)
-			// 作り直しは台本の保存とは別の操作です（入力ソースから書き直します）。
 			r.Post("/{jobID}/regenerate", h.Web.Regenerate)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
 			r.Get("/{jobID}/script", h.Web.Script)
+			r.Get("/{jobID}/status", h.Web.JobStatus)
 		})
 
-		// 対応するページを持たない操作です。**機械専用ではありません** —
-		// 下の 2 本は詳細画面の JS も叩きます（読みの確認と、実行中のジョブの見張り）。
-		// ページが無いことと読者が機械であることは別で、ここを分ける基準は前者です。
-		//
-		// 画面から叩く POST は CSRF トークンが要ります。ブラウザは fetch の
-		// X-CSRF-Token で送り、セッション認証の側がそれを検証します
-		// （機械は OIDC の Bearer なので、そもそもこの検証に入りません）。
+		// 機械だけが叩く操作です。画面も叩くものはこの外にあります。
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/speakers", h.Web.APISpeakers)
-			// 画面（編集中の表）と機械の両方が使います。
-			r.Post("/preview-reading", h.Web.APIPreviewReading)
 			r.Route("/jobs", func(r chi.Router) {
 				r.Post("/", h.Web.APIEnqueue)
-				// 画面（詳細のポーリング）と機械の両方が使います。
-				r.Get("/{jobID}/status", h.Web.APIJobStatus)
 				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
 				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
-
-				// 削除は機械にしかありません。画面のボタンは DELETE を出せないため
-				// POST /history/{jobID}/delete を叩きます（実装は同じ Delete です）。
+				// 画面は POST /history/{jobID}/delete を叩きます（実装は同じ Delete です）。
 				r.Delete("/{jobID}", h.Web.Delete)
 			})
 		})

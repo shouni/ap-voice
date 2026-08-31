@@ -220,13 +220,17 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
   keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; the MCP server calls the `/history/…` paths directly.
-- **`/api/*` holds what has no page of its own**: enqueue by JSON body, `status`, `synthesize`,
-  `preview-reading`, `speakers`. Those have no page to negotiate with, so they stay separate — the
-  same line `gcp-kit/negotiate` draws. Not "machines only": the edit screen calls
-  `preview-reading` from its own JS (`X-CSRF-Token`, which `gcp-kit/auth` accepts alongside the
-  form field), because the audience that most needs to hear a reading before spending the minutes
-  is the person editing the line. **It sends what is in the table, not the stored script** —
-  needing to save first to check a reading puts the check on the wrong side of the edit.
+- **`/api/*` is what only machines call**: enqueue by JSON body, `synthesize`, the script `PUT`,
+  `speakers`, `DELETE`. **Anything the screen also calls lives outside it**, even without a page
+  of its own — `POST /preview-reading` and `GET /history/{jobID}/status`. Both started under
+  `/api` and moved when the screen began calling them; leaving them there would have made the
+  prefix mean "JSON" rather than "machines", and the next reader would have had to open the
+  templates to find out which. The status sits beside `audio` and `script` because it is another
+  read of the same job; the reading check hangs off no job at all (it sends what is in the table,
+  not the stored script — needing to save first puts the check on the wrong side of the edit), so
+  it sits at the root. A browser calling either sends `X-CSRF-Token` on the POST, which
+  `gcp-kit/auth` accepts alongside the form field; a machine on a Bearer never reaches that check.
+  **The MCP server still calls the old `/api` paths** and has to move with them.
   `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
   always fails and everything falls through to the session, so the failure mode of forgetting it is
   "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).

@@ -53,7 +53,7 @@
            サーバーは合成の直前と同じ変換を通すので、ここに出るものが実際に読まれるものです。
            意図と違う語は、その部分をカタカナで書き直せば直せます。 */}}
       <button class="btn btn-outline-secondary btn-sm js-preview-reading" type="button"
-              data-endpoint="/api/preview-reading">読みを確認</button>
+              data-endpoint="/preview-reading">読みを確認</button>
       <span class="form-text m-0 js-reading-status" role="status" aria-live="polite"></span>
     </div>
     <div class="form-text mb-2">
@@ -172,7 +172,7 @@
 {{/* 実行中のジョブだけ、状態が変わったかを見張ります。終わっているジョブでは
      data-state が終了状態なので、画面側は何もしません（開くたびの 1 往復を
      増やさないため、判断は画面側ではなくこの値で決まります）。 */}}
-<div id="job-state" data-endpoint="/api/jobs/{{ .JobID }}/status" data-state="{{ .State }}" hidden></div>
+<div id="job-state" data-endpoint="/history/{{ .JobID }}/status" data-state="{{ .State }}" hidden></div>
 {{/* 話者ごとのスタイル対応表は data 属性で渡します。インラインスクリプトにすると
      CSP の script-src を 'self' だけにできません。空のときは {} を入れて、
      画面側が JSON.parse に失敗しないようにします。 */}}

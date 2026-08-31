@@ -97,19 +97,21 @@ go run .        # SERVER_ROLE が必須
 両方を通すため、同じ URL を人も機械も叩けます（姉妹サービスと同じ形）。
 
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を
-送れば JSON が、ブラウザの `Accept` なら画面が返ります。下表に残る `/api/...` は、
-画面に対応物が無いもの（投入・状態・合成・読み確認・話者一覧・削除）だけです。
-**機械専用という意味ではありません** — 読み確認は編集画面の「読みを確認」から、
-状態は詳細画面の自動更新から、どちらもブラウザが叩きます（POST は CSRF トークンを
-`X-CSRF-Token` で送ります）。分ける基準は読者ではなく、対応するページがあるかどうかです。
+送れば JSON が、ブラウザの `Accept` なら画面が返ります。
+
+`/api/...` に残るのは**機械だけが使うもの**（JSON での投入・台本の差し替え・合成の指示・
+話者一覧・削除）です。人と機械の両方が使うものは `/api` の外に置きます — 読みの確認
+（`POST /preview-reading`）は編集画面の「読みを確認」から、進行状況
+（`GET /history/{jobID}/status`）は詳細画面の自動更新から、どちらもブラウザが叩きます。
+画面から叩く POST は CSRF トークンを `X-CSRF-Token` で送ります。
 
 | メソッド | パス | 用途 |
 | --- | --- | --- |
 | `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
 | `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
-| `POST` | `/api/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
+| `POST` | `/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
 | `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定・上限とも 100）/ `?state=`（`queued` / `running` / `succeeded` / `failed`）を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。**`?state=` は Firestore の複合索引（`state` 昇順 + `queued_at` 降順）が要ります** — 索引が無い環境では絞り込んだときだけ失敗します。 |
-| `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
+| `GET` | `/history/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
 | `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
 | `GET` | `/history/{jobID}/script` | 台本を取得。ブラウザから開くとファイルとして落ちます。 |
@@ -125,7 +127,8 @@ go run .        # SERVER_ROLE が必須
 `POST /history/{jobID}/regenerate`（**同じ入力ソースから台本を作り直す**。ジョブ ID は変わりません）、
 `POST /history/{jobID}/delete`（削除）、
 `GET /history/{jobID}/audio`（署名付き URL へ 302）、
-`GET /history/{jobID}/script`（**保存済み**の台本を `<jobID>.json` として添付ダウンロード）です。
+`GET /history/{jobID}/script`（**保存済み**の台本を `<jobID>.json` として添付ダウンロード）、
+`GET /history/{jobID}/status`（進行状況。詳細画面の自動更新と機械のポーリングが同じものを読みます）です。
 台本は読み込み済みの小さな JSON なので、音声と違って署名付き URL を挟まずそのまま返します。
 
 `POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
@@ -211,7 +214,7 @@ sequenceDiagram
     User->>Web: GET /history/{jobID}
     Web->>Store: audio.json を読む
     Web-->>User: 台本を表示（話者・スタイル・本文を編集できます）
-    User->>Web: POST /api/preview-reading （「読みを確認」／表の中身をそのまま）
+    User->>Web: POST /preview-reading （「読みを確認」／表の中身をそのまま）
     Web-->>User: 行ごとの読み（合成の直前と同じ変換）
 
     Note over User, Slack: 3. 音声を作る (command=synthesize)

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -18,7 +17,9 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// API は、ブラウザではなく機械（MCP サーバーなど）から使う口です。
+// このファイルは、画面に対応するページが無く、**機械だけが使う**操作です
+// （JSON で投入する、台本を差し替える、合成を指示する）。人と機械の両方が使うものは
+// /api の外にあります — ジョブの状態は negotiated.go、読みの確認は reading.go です。
 //
 // 画面と同じミドルウェアの下にあります。ProtectedMiddleware が OIDC の
 // Bearer とセッションの両方を通すため、同じ URL を人も機械も叩けます。
@@ -202,95 +203,6 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
-}
-
-// APIJobStatus は、ジョブの進行状況を返します。
-//
-// 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
-// まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
-// jobfirestore.Status で、姉妹サービスと同じ形です。
-//
-// 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
-// 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
-//
-// 読めなかっただけの場合は 404 と混ぜません。権限や GCS 障害（ErrUnavailable）
-// まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
-// ポーリング側が unknown として静かに受け入れてしまいます。
-func (h *Handler) APIJobStatus(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.apiJobID(w, r)
-	if !ok {
-		return
-	}
-
-	status, err := h.repo.Get(r.Context(), jobID)
-	switch {
-	case errors.Is(err, jobfirestore.ErrNotFound):
-		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
-		return
-	case err != nil:
-		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
-		respond.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
-		return
-	}
-	respond.JSON(w, r, http.StatusOK, status)
-}
-
-// apiReadingRequest は POST /api/preview-reading の要求です。
-type apiReadingRequest struct {
-	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
-	Lines []domain.ScriptLine `json:"lines"`
-}
-
-// apiReadingLine は 1 行分の読みです。
-type apiReadingLine struct {
-	Text string `json:"text"`
-	// Reading は合成時に実際に読まれるカタカナです。
-	Reading string `json:"reading"`
-	// Changed は、変換で表記が変わったかどうかです。確かめる価値がある行の目印で、
-	// カタカナだけの行は変換しても変わらないため false になります。
-	Changed bool `json:"changed"`
-}
-
-// apiReadingResponse は POST /api/preview-reading の応答です。
-type apiReadingResponse struct {
-	Lines []apiReadingLine `json:"lines"`
-}
-
-// APIPreviewReading は、合成したらどう読まれるかを行ごとに返します。合成はしません。
-//
-// 読みは自明ではありません。「田中」「同姓同名」のような語がどう読まれるかは、
-// 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
-// 気付くことになるため、その前に確かめられるようにします。
-//
-// 意図と違う読みになる語は、その部分をカタカナで書けば直せます。
-func (h *Handler) APIPreviewReading(w http.ResponseWriter, r *http.Request) {
-	var body apiReadingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, "JSONの解釈に失敗しました: "+err.Error())
-		return
-	}
-	if len(body.Lines) == 0 {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, "lines が空です")
-		return
-	}
-	if len(body.Lines) > maxScriptLines {
-		respond.ErrorJSON(w, r, http.StatusBadRequest,
-			fmt.Sprintf("行が多すぎます（%d 行、上限 %d 行）", len(body.Lines), maxScriptLines))
-		return
-	}
-
-	out := make([]apiReadingLine, 0, len(body.Lines))
-	for _, line := range body.Lines {
-		reading, err := h.reading.ConvertToReading(line.Text)
-		if err != nil {
-			respond.ErrorJSON(w, r, http.StatusInternalServerError, err.Error())
-			return
-		}
-		out = append(out, apiReadingLine{
-			Text: line.Text, Reading: reading, Changed: reading != line.Text,
-		})
-	}
-	respond.JSON(w, r, http.StatusOK, apiReadingResponse{Lines: out})
 }
 
 // apiAudio は GET /api/jobs/{jobID}/audio の応答です。
