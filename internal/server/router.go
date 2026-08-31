@@ -110,12 +110,20 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 			r.Get("/{jobID}/script", h.Web.Script)
 		})
 
-		// 機械にしか無い操作です。画面には対応するページがありません。
+		// 対応するページを持たない操作です。**機械専用ではありません** —
+		// 下の 2 本は詳細画面の JS も叩きます（読みの確認と、実行中のジョブの見張り）。
+		// ページが無いことと読者が機械であることは別で、ここを分ける基準は前者です。
+		//
+		// 画面から叩く POST は CSRF トークンが要ります。ブラウザは fetch の
+		// X-CSRF-Token で送り、セッション認証の側がそれを検証します
+		// （機械は OIDC の Bearer なので、そもそもこの検証に入りません）。
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/speakers", h.Web.APISpeakers)
+			// 画面（編集中の表）と機械の両方が使います。
 			r.Post("/preview-reading", h.Web.APIPreviewReading)
 			r.Route("/jobs", func(r chi.Router) {
 				r.Post("/", h.Web.APIEnqueue)
+				// 画面（詳細のポーリング）と機械の両方が使います。
 				r.Get("/{jobID}/status", h.Web.APIJobStatus)
 				r.Put("/{jobID}/script", h.Web.APIUpdateScript)
 				r.Post("/{jobID}/synthesize", h.Web.APISynthesize)
