@@ -87,56 +87,57 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `GET /`, `POST /`, `/modes/*`, `/history/*`, `/auth/*` |
+| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `/`, `/modes/*`, `/history/*`, `/preview-reading`, `/api/*`, `/auth/*` |
 | `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
 
-`GET /modes` は選べるモードの一覧、`GET /modes/{mode}` はその 1 つの詳細で、**実際に渡るプロンプト本文**を見せます。
+### 3. HTTP エンドポイント
 
-#### API
-
-**画面と同じ認証の下**にあります。`auth.Protected` が OIDC の Bearer とセッションの
-両方を通すため、同じ URL を人も機械も叩けます（姉妹サービスと同じ形）。
-
-**同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を
-送れば JSON が、ブラウザの `Accept` なら画面が返ります。
-
-`/api/...` に残るのは**機械だけが使うもの**（JSON での投入・台本の差し替え・合成の指示・
-話者一覧・削除）です。人と機械の両方が使うものは `/api` の外に置きます — 読みの確認
-（`POST /preview-reading`）は編集画面の「読みを確認」から、進行状況
-（`GET /history/{jobID}/status`）は詳細画面の自動更新から、どちらもブラウザが叩きます。
-画面から叩く POST は CSRF トークンを `X-CSRF-Token` で送ります。
+**認証は 1 つです。** `auth.Protected` が OIDC の Bearer とセッションの両方を通すため、
+同じ URL を人も機械も叩けます（姉妹サービスと同じ形）。`GET /health` と `/static/*` だけが
+認証の外側で、ロールに関係なく登録されます。
 
 | メソッド | パス | 用途 |
 | --- | --- | --- |
-| `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
-| `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
-| `POST` | `/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
-| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定・上限とも 100）/ `?state=`（`queued` / `running` / `succeeded` / `failed`）を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。**`?state=` は Firestore の複合索引（`state` 昇順 + `queued_at` 降順）が要ります** — 索引が無い環境では絞り込んだときだけ失敗します。 |
-| `GET` | `/history/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
-| `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
-| `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
-| `GET` | `/history/{jobID}/script` | 台本を取得。ブラウザから開くとファイルとして落ちます。 |
-| `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
-| `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る。 |
-| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。成果物を 1 つも持たないジョブ（台本を書く前に失敗したもの）は記録だけを消します。記録も無ければ 404。 |
+| `GET` | `/health` | ヘルスチェック（`/healthz` は Cloud Run の既定ドメイン側で予約パス扱いになりコンテナまで届かないため使いません）。認証不要 |
+| `GET` | `/static/*` | 埋め込みの CSS / JS と `vendor/` 配下の Bootstrap。認証不要。バージョンがパスに入る `vendor/` は `public, max-age=31536000, immutable`、URL が変わらない自前アセットは `public, max-age=300, must-revalidate` |
+| `GET` | `/auth/login` `/auth/callback` `/auth/logout` | Google OAuth のログイン・コールバック・ログアウト |
+| `GET` | `/` | 投入フォーム（入力ソース / 楽曲レシピ / 台本 JSON の 3 タブ） |
+| `POST` | `/` | フォームからの投入。`command` は `generate` か `generate_and_synthesize`（台本 JSON タブは `synthesize`）。受付は `202` |
+| `GET` | `/modes` | 選べるモードの一覧（キー・表示名・説明）。front matter が唯一の出所です |
+| `GET` | `/modes/{mode}` | モード 1 つの詳細。**実際に Gemini へ渡るプロンプト本文**（partial 展開済み）を見せます。一覧に無いキーは 404 |
+| `POST` | `/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。編集画面の「読みを確認」と機械の両方が使います |
+| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定・上限とも 100）/ `?state=`（`queued` / `running` / `succeeded` / `failed`）。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ引かずに見分けられます。**`?state=` は Firestore の複合索引（`state` 昇順 + `queued_at` 降順）が要ります** — 索引が無い環境では絞り込んだときだけ失敗します |
+| `GET` | `/history/{jobID}` | 詳細。**台本をここで直します**（行の追加・並べ替え・削除、読みの確認）。台本がまだ無いジョブでも開き、記録された状態と失敗理由を出します |
+| `GET` | `/history/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。詳細画面の自動更新と機械のポーリングが同じものを読みます |
+| `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1 時間）。ブラウザには 302、`Accept: application/json` には URL そのものを返します。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404 |
+| `GET` | `/history/{jobID}/script` | **保存済み**の台本。ブラウザから開くと `<jobID>.json` として落ちます。小さな JSON なので、音声と違って署名付き URL を挟まずそのまま返します |
+| `POST` | `/history/{jobID}/script` | 編集した台本を保存し、続けて合成を投入。**台本はタスクに載せません**（先に保存してジョブ ID だけを渡します） |
+| `POST` | `/history/{jobID}/regenerate` | **同じ入力ソースから台本を作り直す**。入力ソースは記録から復元するので貼り直し不要です。ジョブ ID は変わりません |
+| `POST` | `/history/{jobID}/delete` | 削除（画面用）。HTML のフォームは `DELETE` を出せないため、機械向けの `DELETE /api/jobs/{jobID}` と実装は同じです |
+| `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます |
+| `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません） |
+| `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます） |
+| `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る |
+| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。成果物を 1 つも持たないジョブ（台本を書く前に失敗したもの）は記録だけを消します。記録も無ければ 404 |
+| `POST` | `/tasks/generate` | Cloud Tasks 専用のワーカー。OIDC 検証を通らないリクエストは 401、`SERVER_ROLE=web` では**ルートごと登録されない**ため 404 |
 
-台本の検証（話者・スタイルが実在するか、行数の上限）は**画面と同じ関数**を通ります。
+**同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を送れば
+JSON が、ブラウザの `Accept` なら画面が返ります。エラー本文も同じ判定で `{"error": "..."}`
+になります。
 
-`GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
-履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
-`POST /history/{jobID}/script`（台本を保存して音声を作る。行の追加・並べ替え・削除も画面から）、
-`POST /history/{jobID}/regenerate`（**同じ入力ソースから台本を作り直す**。ジョブ ID は変わりません）、
-`POST /history/{jobID}/delete`（削除）、
-`GET /history/{jobID}/audio`（署名付き URL へ 302）、
-`GET /history/{jobID}/script`（**保存済み**の台本を `<jobID>.json` として添付ダウンロード）、
-`GET /history/{jobID}/status`（進行状況。詳細画面の自動更新と機械のポーリングが同じものを読みます）です。
-台本は読み込み済みの小さな JSON なので、音声と違って署名付き URL を挟まずそのまま返します。
+**`/api/...` は機械だけが叩くもの**（JSON での投入・台本の差し替え・合成の指示・話者一覧・削除）です。
+人と機械の両方が使うものは `/api` の外に置きます — 読みの確認と進行状況がそれで、どちらも
+ブラウザからも呼ばれます。分ける基準は読者ではなく、対応するページがあるかどうかです。
 
-`POST /tasks/generate` は Cloud Tasks 専用で、OIDC 検証を通らないリクエストは 401 になります。
-`SERVER_ROLE=web` のプロセスでは**ルートごと登録されない**ため 404 です。
+**副作用のあるメソッドには CSRF トークンが要ります。** フォームは `csrf_token` の hidden で、
+画面の JS は `X-CSRF-Token` ヘッダーで送ります。OIDC Bearer で認証した機械はこの検証に入りません
+（CSRF はクッキーの自動送出を悪用する攻撃への対策で、Bearer を明示的に付ける呼び出しには
+当てはまらないためです。代わりに `ALLOWED_M2M_SERVICE_ACCOUNTS` で呼び出し元を絞ります）。
 
-#### タスクのペイロード
+台本の検証（話者・スタイルが実在するか、行数の上限）は、画面も API も**同じ関数**を通ります。
+
+### 4. タスクのペイロード
 
 台本生成と音声合成は別の入口です（理由は[概要](#-概要-about)のとおり）。
 
