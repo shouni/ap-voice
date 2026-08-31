@@ -268,5 +268,5 @@ func (h *Handler) renderScriptError(w http.ResponseWriter, r *http.Request, stat
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, view formView) {
-	h.renderTemplate(w, status, "home.html", view)
+	h.renderTemplate(w, status, "home.html", &view)
 }

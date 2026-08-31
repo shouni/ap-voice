@@ -180,6 +180,33 @@ type baseView struct {
 	// DefaultModel は GEMINI_MODELS の先頭です。モデル ID は Google の都合で
 	// 変わるため、画面に文言で書かず設定から出します。
 	DefaultModel string
+	// JS はこの画面が追加で読み込むスクリプトです。renderTemplate が pageScripts から
+	// 埋めるため、ハンドラー側は指定しません（全画面共通の app.js はレイアウトが読みます）。
+	JS []string
+}
+
+// setScripts は、描画する画面に対応するスクリプトを載せます。
+// pageView を満たすのは baseView だけで、埋め込んだ各画面の view がそれを継ぎます。
+func (b *baseView) setScripts(js []string) { b.JS = js }
+
+// pageView は、renderTemplate が受け取る画面の値です。
+//
+// ポインタでしか満たせないので、値のまま渡すとコンパイルが通りません。テンプレートに
+// 直接渡していた頃は、スクリプトを足すのに define "scripts" を書き足す必要があり、
+// 書き忘れるとその画面だけ JS が読まれませんでした。今はどの画面が何を読むかを
+// pageScripts が持ち、画面側は何もしません。
+type pageView interface {
+	setScripts(js []string)
+}
+
+// pageScripts は、画面ごとに追加で読み込むスクリプトです。
+//
+// テンプレートではなくここに置くのは、対応が固定だからです。テンプレート側に書くと、
+// 画面を足した人が読み込みの書式（defer の有無、置く位置）まで写すことになります。
+// 全画面共通のものは app.js で、レイアウトが読みます。
+var pageScripts = map[string][]string{
+	"home.html":   {"/static/js/mode_description.js"},
+	"detail.html": {"/static/js/script_editor.js", "/static/js/job_status.js"},
 }
 
 // base は全画面共通の値を組み立てます。
@@ -247,7 +274,9 @@ func (h *Handler) defaultModel() string {
 //
 // 描き始める前にバッファへ書き出します。途中で失敗したときヘッダーは送信済みで
 // ステータスを変えられず、壊れた HTML が残ってしまうためです。
-func (h *Handler) renderTemplate(w http.ResponseWriter, status int, name string, view any) {
+func (h *Handler) renderTemplate(w http.ResponseWriter, status int, name string, view pageView) {
+	view.setScripts(pageScripts[name])
+
 	tmpl, ok := h.templates[name]
 	if !ok {
 		slog.Error("画面テンプレートが見つかりません", "page", name)

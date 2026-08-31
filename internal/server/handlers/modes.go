@@ -71,7 +71,7 @@ func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	view.Prompt = prompt
 
-	h.renderTemplate(w, http.StatusOK, "mode_detail.html", view)
+	h.renderTemplate(w, http.StatusOK, "mode_detail.html", &view)
 }
 
 // findMode は、キーに対応するモードを探します。

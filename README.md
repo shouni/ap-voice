@@ -248,6 +248,7 @@ ap-voice/
 ├── Dockerfile               # scratch イメージ（静的バイナリのみ）
 ├── cloudbuild.yaml          # ビルドして2サービスへデプロイ
 ├── assets/                  # 埋め込み（prompts/*.md・speakers.json・templates/*.html・static/）
+│                            #   static/js は app.js（全画面）＋ 画面ごと（handlers の pageScripts）
 └── internal/
     ├── config/              # 環境変数の読み込みとロール別検証
     ├── server/              # chi ルーター・グレースフルシャットダウン

@@ -90,7 +90,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
 		return
 	}
-	h.renderTemplate(w, http.StatusOK, "history.html", historyView{
+	h.renderTemplate(w, http.StatusOK, "history.html", &historyView{
 		baseView: h.base(r), Jobs: jobs, Page: meta, Filter: string(state),
 	})
 }
@@ -108,7 +108,7 @@ func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, r, http.StatusOK, modes)
 		return
 	}
-	h.renderTemplate(w, http.StatusOK, "modes.html", modesView{baseView: h.base(r), Modes: h.modes})
+	h.renderTemplate(w, http.StatusOK, "modes.html", &modesView{baseView: h.base(r), Modes: h.modes})
 }
 
 // Audio は、生成済み音声の署名付き URL を返します。

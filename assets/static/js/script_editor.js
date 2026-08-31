@@ -298,12 +298,3 @@
         });
     });
 })();
-
-// 送信前の確認は data-confirm で宣言します。onsubmit 属性のままだと CSP の
-// script-src に 'unsafe-inline' が必要になり、インラインスクリプト禁止が無意味になります。
-document.addEventListener('submit', function (event) {
-    var form = event.target.closest('form[data-confirm]');
-    if (form && !window.confirm(form.dataset.confirm)) {
-        event.preventDefault();
-    }
-});

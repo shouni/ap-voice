@@ -287,6 +287,15 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   is shown even when a script exists, because a failed `synthesize` leaves the script behind and
   its artifacts look exactly like a job that stopped at `generate`. The recorded error reaches a
   person here and in the Slack notification, nowhere else.
+- **A page's scripts are declared in Go, not in the template.** `handlers.pageScripts` maps the
+  template name to its JS, `renderTemplate` puts the list on the view and `layout.html` renders it
+  with `defer`; `app.js` (what every page needs — currently the `data-confirm` guard) is loaded by
+  the layout itself. This is the shape the siblings use, and file names follow theirs
+  (`job_status.js` is the same file in three services). Because the paths now live in Go rather
+  than in a `{{ define "scripts" }}` block, the assets guard cannot see them —
+  `TestPageScriptsExist` and `TestRenderTemplateLoadsThePageScripts` take that job over: one
+  checks the files exist, the other that the table, the view and the layout are still connected.
+  A missing script is invisible otherwise, since the page still renders.
 - **Templates are only evaluated at request time.** A renamed view field still compiles, so
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).

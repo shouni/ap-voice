@@ -178,8 +178,3 @@
      画面側が JSON.parse に失敗しないようにします。 */}}
 <div id="voice-styles" data-styles="{{ if .StylesJSON }}{{ .StylesJSON }}{{ else }}{}{{ end }}" hidden></div>
 {{ end }}
-
-{{ define "scripts" }}
-<script src="/static/js/script_edit.js"></script>
-<script src="/static/js/job_status.js"></script>
-{{ end }}

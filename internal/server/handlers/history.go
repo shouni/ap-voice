@@ -274,7 +274,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 
 	view.StylesJSON = h.stylesJSON
 
-	h.renderTemplate(w, status, "detail.html", view)
+	h.renderTemplate(w, status, "detail.html", &view)
 }
 
 // jobState は、記録された進行状態・失敗理由・入力ソースを返します。
