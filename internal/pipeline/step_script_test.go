@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
 
 	"github.com/shouni/go-gemini-client/gemini"
@@ -201,7 +200,7 @@ func TestScriptStepRun(t *testing.T) {
 	t.Run("異常系: 入力が短すぎるとエラーになること", func(t *testing.T) {
 		t.Parallel()
 
-		short := strings.Repeat("a", config.MinInputContentLength-1)
+		short := strings.Repeat("a", minInputContentLength-1)
 		runner := NewScriptStep(
 			&mockContentReader{
 				openFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {

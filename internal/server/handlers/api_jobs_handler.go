@@ -11,6 +11,7 @@ import (
 
 	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-utils/jobid"
+	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/internal/domain"
 
@@ -355,13 +356,15 @@ func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	return domain.Script{Title: strings.TrimSpace(script.Title), Lines: lines}, nil
 }
 
-// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を返します。
-// 編集画面の選択肢と /api/speakers の両方がここを見ます。
-func (h *Handler) stylesBySpeaker() map[string][]string {
-	names := h.speakers.SpeakerNames()
+// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を組み立てます。
+//
+// 呼ぶのは NewHandler だけです。話者一覧は起動から変わらないので、編集画面と
+// /api/speakers はその結果（h.styles / h.stylesJSON）を使い回します。
+func stylesBySpeaker(speakers *speaker.Registry) map[string][]string {
+	names := speakers.SpeakerNames()
 	out := make(map[string][]string, len(names))
 	for _, name := range names {
-		if styles, ok := h.speakers.StylesFor(name); ok {
+		if styles, ok := speakers.StylesFor(name); ok {
 			out[name] = styles
 		}
 	}

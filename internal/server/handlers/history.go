@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -176,12 +175,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 	}
 	view.HasAudio = hasAudio
 
-	stylesJSON, err := json.Marshal(h.stylesBySpeaker())
-	if err != nil {
-		http.Error(w, "話者一覧の組み立てに失敗しました", http.StatusInternalServerError)
-		return
-	}
-	view.StylesJSON = string(stylesJSON)
+	view.StylesJSON = h.stylesJSON
 
 	h.renderTemplate(w, status, "detail.html", view)
 }

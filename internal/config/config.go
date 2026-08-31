@@ -18,8 +18,6 @@ const (
 	// DefaultHTTPTimeout は外部 HTTP 通信のタイムアウトのデフォルト値です。
 	// 縛るのは HTTP 1 往復で、セグメント 1 件ではありません（HTTPConfig 参照）。
 	DefaultHTTPTimeout = 60 * time.Second
-	// MinInputContentLength は生成に必要な入力テキストの最小長です。
-	MinInputContentLength = 10
 	// DefaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数の既定です。
 	// エンジンの vCPU 数に合わせています（下の VoicevoxConfig の実測を参照）。
 	DefaultMaxParallelSegments = 4

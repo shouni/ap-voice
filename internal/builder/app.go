@@ -84,6 +84,13 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("話者一覧の読み込みに失敗しました: %w", err)
 	}
 
+	// プロンプトの組み立ても埋め込みリソースだけで作れます。生成する段と
+	// カタログの両方が同じものを使うので、ここで 1 つだけ組みます。
+	prompt, err := adapters.NewPromptAdapter()
+	if err != nil {
+		return nil, fmt.Errorf("プロンプトの組み立てに失敗しました: %w", err)
+	}
+
 	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
 	// worker は synthesize が保存済み台本を読むために。
 	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket, jobStatusClient)
@@ -96,6 +103,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
 		JobStatus:  jobfirestore.NewRecorder[domain.JobStatus](repo),
 		Speakers:   speakers,
+		Prompt:     prompt,
 		Repository: repo,
 		Storage:    storage,
 		Store:      store,

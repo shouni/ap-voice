@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/config"
 	"github.com/shouni/ap-voice/internal/domain"
 
@@ -28,6 +29,11 @@ type Container struct {
 	// Speakers は使用する話者・スタイルの一覧です。assets/speakers.json を
 	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
 	Speakers *speaker.Registry
+	// Prompt は埋め込みプロンプトの組み立てです。生成する段（worker）と、
+	// 本文を見せるカタログ（web）の両方が使います。role=both では 2 度組み立てて
+	// いたので、コンテナが 1 つ持ちます。同じ組み立てを通すことは、画面に出る
+	// ものと Gemini へ渡るものを一致させる条件でもあります。
+	Prompt *adapters.PromptAdapter
 	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。
 	TaskQueue domain.TaskQueue
 	// Repository は成果物の読み出しです。履歴の表示と、保存済み台本からの合成に使います。

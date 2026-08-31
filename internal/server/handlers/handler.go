@@ -4,7 +4,9 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -62,6 +64,11 @@ type Handler struct {
 	// 自由入力にすると、実在しない組み合わせを保存でき、合成時に既定スタイルへ黙って
 	// 落ちて指示が無視されます。
 	speakers *speaker.Registry
+	// styles は話者名からその話者のスタイルへの対応、stylesJSON はその JSON です。
+	// 話者一覧は起動から変わらないので、構築時に 1 度だけ組みます。詳細画面は
+	// 開くたびにこれを組み立て直し、JSON へ直していました。
+	styles     map[string][]string
+	stylesJSON string
 }
 
 // ReadingConverter は、テキストが合成時にどう読まれるかを返します。
@@ -141,6 +148,14 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		return nil, errors.New("読み変換が指定されていません")
 	}
 
+	styles := stylesBySpeaker(opts.Speakers)
+	stylesJSON, err := json.Marshal(styles)
+	if err != nil {
+		// 話者一覧は埋め込みリソースから来るので、ここが失敗するのは起動時だけです。
+		// 画面を開いてから気付くより、組み立てられないまま起動しないほうが早く分かります。
+		return nil, fmt.Errorf("話者スタイルの組み立てに失敗しました: %w", err)
+	}
+
 	return &Handler{
 		queue:       opts.Queue,
 		templates:   opts.Templates,
@@ -155,6 +170,8 @@ func NewHandler(opts HandlerOptions) (*Handler, error) {
 		renderer:    opts.Renderer,
 		reading:     opts.Reading,
 		status:      opts.JobStatus,
+		styles:      styles,
+		stylesJSON:  string(stylesJSON),
 	}, nil
 }
 
