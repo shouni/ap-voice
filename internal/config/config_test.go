@@ -40,7 +40,7 @@ func webEnv(overrides map[string]string) map[string]string {
 	envs := map[string]string{
 		"SERVER_ROLE":                       "web",
 		"CLOUD_TASKS_QUEUE_ID":              "voice-queue",
-		"WORKER_URL":                        "https://ap-voice-worker.example.run.app/tasks/generate",
+		"WORKER_URL":                        "https://ap-voice-worker.example.run.app",
 		"TASK_CALLER_SERVICE_ACCOUNT_EMAIL": "web-runner@example.iam.gserviceaccount.com",
 		"GOOGLE_CLIENT_ID":                  "client-id",
 		"GOOGLE_CLIENT_SECRET":              "client-secret",

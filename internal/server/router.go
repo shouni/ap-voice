@@ -15,6 +15,7 @@ import (
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
+	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/gcp-kit/auth"
 )
 
@@ -35,8 +36,8 @@ func setupCommonMiddleware(r *chi.Mux, projectID string) {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.CleanPath)
-	// 画面は日本語 UTF-8（1 文字 3 バイト）なので圧縮がよく効くが、これまで無圧縮で
-	// 配信していた。静的ファイルも同じ経路に乗る（vendor は immutable なので再圧縮は稀）。
+	// 画面は日本語 UTF-8（1 文字 3 バイト）なので圧縮がよく効きます。静的ファイルも
+	// 同じ経路に乗ります（vendor は immutable なので再圧縮は稀です）。
 	r.Use(middleware.Compress(compressionLevel))
 	r.Use(secureheaders.Middleware(secureheaders.Config{
 		MediaSources: []string{gcsOrigin},
@@ -137,7 +138,7 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 		// Cloud Tasks からの OIDC トークンを検証 (セッション不要)。
 		// 失敗はセッションへフォールバックせず、その場で止まります。
 		r.Use(auth.Require(h.TaskAuth))
-		r.Method(http.MethodPost, "/tasks/generate", h.Worker)
+		r.Post(domain.WorkerTaskPath, h.Worker.ProcessTask)
 	})
 }
 
