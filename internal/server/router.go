@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/shouni/gcp-kit/auth"
 	"github.com/shouni/gcp-kit/cloudlog"
 	"github.com/shouni/gcp-kit/cloudrun"
 	"github.com/shouni/go-serve-kit/secureheaders"
@@ -16,7 +17,6 @@ import (
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
 	"github.com/shouni/ap-voice/internal/domain"
-	"github.com/shouni/gcp-kit/auth"
 )
 
 // NewRouter は、ミドルウェアとルーティングを統合した http.Handler を構築します。

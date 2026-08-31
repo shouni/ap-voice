@@ -14,7 +14,6 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
-
 	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
 	"github.com/shouni/ap-voice/internal/config"
