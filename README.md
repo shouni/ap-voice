@@ -41,7 +41,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | 変数名 | 説明 |
 | --- | --- |
 | `CLOUD_TASKS_QUEUE_ID` | 投入先のキュー名。 |
-| `WORKER_URL` | タスクの配信先（Worker 面の `/tasks/generate`）。 |
+| `WORKER_URL` | worker **サービス**の URL。パスは含めません |
 | `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` | タスクに載せる caller SA。**トークンを発行するのは Cloud Tasks** であって、このプロセスが署名するわけではありません。 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth のクライアント。 |
 | `SESSION_SECRET` | セッションの署名鍵。**16バイト以上**。 |

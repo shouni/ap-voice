@@ -14,7 +14,6 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
-
 	"github.com/shouni/ap-voice/internal/adapters"
 	"github.com/shouni/ap-voice/internal/app"
 	"github.com/shouni/ap-voice/internal/config"
@@ -118,11 +117,16 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで
 	// 未使用の Cloud Tasks クライアントと CLOUD_TASKS_QUEUE_ID への依存を持たずに済みます。
 	if cfg.Server.Role.ServesWeb() {
+		taskURL, wErr := domain.WorkerTaskURL(cfg.Tasks.WorkerURL)
+		if wErr != nil {
+			return nil, wErr
+		}
+
 		queue, qErr := adapters.NewTaskQueueAdapter(ctx, tasks.Config{
 			ProjectID:           cfg.GCP.ProjectID,
 			LocationID:          cfg.GCP.LocationID,
 			QueueID:             cfg.Tasks.QueueID,
-			WorkerURL:           cfg.Tasks.WorkerURL,
+			WorkerURL:           taskURL,
 			ServiceAccountEmail: cfg.Tasks.CallerServiceAccountEmail,
 			Audience:            cfg.Tasks.TaskAudienceURL,
 			DispatchDeadline:    cfg.Tasks.DispatchDeadline,
