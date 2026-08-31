@@ -438,36 +438,25 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   lists, fills defaults) → `ValidateEssentialConfig()`, whose worker-only checks are skipped for
   `web`.
 
-## Notable external dependencies
+## What the dependencies do that their names do not say
 
-First-party (`github.com/shouni/*`):
+`go.mod` lists them; this section is only for the ones that behave in a way you would not guess,
+and it is where the actual behaviour lives when you are editing an adapter. Check `go.mod` for the
+pinned version before assuming a signature.
 
-- `go-gemini-client` — Gemini/Vertex AI client (structured JSON generation)
-- `go-voicevox` — parallel VOICEVOX synthesis wrapper. It parses `/speakers` but ships no roster;
-  the vocabulary is this repo's `assets/speakers.json` (see above). Throughput comes from
-  `config.Voicevox`, not from constants here.
-- `go-web-reader` — reads `https://` and `gs://` input sources transparently
-- `go-remote-io` — local/GCS read/write + signed URL abstraction (`remoteio.Store`,
-  `remoteio.Writer`, `remoteio.Factory`)
-- `go-prompt-kit` — loads and renders the embedded prompt templates
-- `go-http-kit` — HTTP client with retries; note `builder` passes
-  `WithSkipNetworkValidation(true)`, which disables the SSRF guard for the whole client
-- `go-notify` — Slack message assembly (`notify.Pipeline`, `notify.Body`); `adapters/slack.go`
-  only decides *what* to say
-- `go-utils/jobid` — issues and validates job IDs. **Never sort job IDs lexically** — the prefix
-  outranks the timestamp; use `jobid.SortKey`.
-- `gcp-kit` — the Google Cloud side: `worker` (Cloud Tasks target handler), `auth` (OAuth login,
-  CSRF, Cloud Tasks OIDC verification), `tasks` (enqueue), `cloudlog` (Cloud Logging format +
-  trace correlation), `cloudrun` (health path)
-- `go-serve-kit` — the HTTP side, with nothing cloud-specific in it: `serverrole` (the
-  `web`/`worker`/`both` vocabulary), `respond` (JSON, and the `Accept` decision `negotiated.go`
-  makes), `secureheaders` (the CSP the templates are written against)
-
-Third-party: `go-chi/chi` (routing), `caarlos0/env` (environment → config struct),
-`gopkg.in/yaml.v3` (prompt front matter).
-
-When touching adapter code the actual behavior often lives in these modules rather than in this
-repo — check `go.mod` for pinned versions before assuming a signature.
+- `go-voicevox` — parses `/speakers` but **ships no roster**: the vocabulary is this repo's
+  `assets/speakers.json`. Throughput comes from `config.Voicevox`, not from constants here, and
+  an impossible speaker/style pair falls back to that speaker's default instead of failing.
+- `go-http-kit` — `builder` passes `WithSkipNetworkValidation(true)`, which **disables the SSRF
+  guard for the whole client**. It is shared by the VOICEVOX calls and the Slack webhook, and one
+  round trip is capped by `HTTP_TIMEOUT` while the retry sits inside `VOICEVOX_SEGMENT_TIMEOUT`.
+- `go-utils/jobid` — **never sort job IDs lexically**: the prefix outranks the timestamp, so use
+  `jobid.SortKey`.
+- `go-notify` — assembles the message; `adapters/slack.go` only decides *what* to say.
+- `gcp-kit` and `go-serve-kit` split on whether the thing is Google Cloud specific, and the two are
+  easy to mix up. Cloud: `worker`, `auth`, `tasks`, `cloudlog`, `cloudrun`. HTTP: `serverrole`
+  (the `web`/`worker`/`both` vocabulary), `respond` (JSON and the `Accept` decision), and
+  `secureheaders` (the CSP the templates are written against).
 
 ## Conventions
 

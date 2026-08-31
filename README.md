@@ -34,6 +34,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `SERVER_ROLE` | `web` / `worker` / `both`（`both` はローカル開発用）。**未設定・未知の値は起動時エラー**です。担当する面だけを組み立て、ルートもその面のものだけを登録します。 |
 | `GEMINI_MODELS` | Gemini モデル名。**カンマ区切りで複数指定でき、先頭が既定モデル**です。タスクの `ai_model` が空ならこれを使います。**既定値は持たず、未設定なら起動時にエラー**になります。 |
 | `GCP_PROJECT_ID` | GCP Project ID。**Gemini は Vertex AI 経由でのみ呼びます**（API キー経路は持ちません）。ローカル実行では ADC が必要です。 |
+| `GCS_VOICE_BUCKET` | 台本と音声の置き場。出力先は利用者に入力させず、ジョブ ID から `gs://<bucket>/voice/<jobID>/audio.wav` を導きます。web は履歴の表示に、worker は保存済み台本の読み出しに使うため、**どちらのロールでも必須**です。 |
 
 **Web 面（`web` / `both`）で必須**
 
@@ -65,6 +66,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `VOICEVOX_SEGMENT_RATE_LIMIT` | セグメントの投入間隔 (Default: `100ms`)。**スループットのつまみではありません**（実測の実効 0.24 件/秒 に対し、100ms は 10 件/秒 を許容）。起動時にエンジンを一斉に叩かないための保険で、同時実行数を縛るのは `VOICEVOX_MAX_PARALLEL_SEGMENTS` です。 |
 | `VOICEVOX_SEGMENT_TIMEOUT` | セグメント1件あたりの上限 (Default: `120s`)。**「1件」はクエリと合成の2往復ぶん**で、各往復は 1 回までリトライします。1往復ぶんの上限は `HTTP_TIMEOUT` です。 |
 | `GCP_LOCATION_ID` | **Cloud Tasks キューのリージョン** (Default: `asia-northeast1`)。Vertex AI のエンドポイントとは別物で、そちらは `global` に固定してあります。 |
+| `FIRESTORE_DATABASE` | ジョブ状態を置く Firestore データベース名 (Default: `job-status`)。名前付きを使うのは `(default)` の枠を占めないためです。コレクション名は設定にしません（サービスの身元であってデプロイごとに変わらないため）。 |
 | `HTTP_TIMEOUT` | 外部 HTTP 通信（**HTTP 1往復**）のタイムアウト (Default: `60s`)。セグメント1件の上限（`VOICEVOX_SEGMENT_TIMEOUT`）の半分にしてあります — 同じ値まで上げると、最初の1往復がセグメントの持ち時間を使い切ってリトライが入らなくなります。1往復を延ばしたいときにセグメント側を上げても効きません（小さいほうが先に効きます）。Slack への通知も同じクライアントを使うため、応答が無いときの待ち時間もこの値です。 |
 | `PIPELINE_TIMEOUT` | ジョブ1件の実行上限 (Default: `25m`)。**Cloud Tasks より先にアプリが諦める**ための値で、超えると失敗を通知して終わります。 |
 | `TASK_DISPATCH_DEADLINE` | Cloud Tasks がワーカーの応答を待つ上限 (Default: `30m`、Cloud Tasks の上限)。`PIPELINE_TIMEOUT` より長くします。 |
@@ -260,32 +262,6 @@ ap-voice/
     ├── pipeline/            # command による分岐と各段（step_*.go）
     └── adapters/            # Gemini / VOICEVOX / Cloud Tasks / Slack / プロンプト
 ```
-
-## 🤝 依存関係 (Dependencies)
-
-主要な direct dependency（`go.mod`）:
-
-* **[go-chi/chi](https://github.com/go-chi/chi)**: HTTP ルーティング
-* **[shouni/gcp-kit](https://github.com/shouni/gcp-kit)**: Cloud Tasks ハンドラ・OIDC 検証・Cloud Logging・ヘルスチェックのパス
-* **[shouni/go-serve-kit](https://github.com/shouni/go-serve-kit)**: SERVER_ROLE の語彙 (`serverrole`)・JSON 応答と `Accept` の判定 (`respond`)・セキュリティヘッダー (`secureheaders`)
-* **[shouni/go-gemini-client](https://github.com/shouni/go-gemini-client)**: Gemini / Vertex AI への生成リクエスト
-* **[shouni/go-voicevox](https://github.com/shouni/go-voicevox)**: VOICEVOX エンジンによる音声合成
-* **[shouni/go-web-reader](https://github.com/shouni/go-web-reader)**: `https://` / `gs://` 入力の読み込み
-* **[shouni/go-remote-io](https://github.com/shouni/go-remote-io)**: ローカル/GCS への書き込み抽象化
-* **[shouni/go-http-kit](https://github.com/shouni/go-http-kit)**: HTTP クライアント（タイムアウト/リトライ）
-* **[shouni/go-prompt-kit](https://github.com/shouni/go-prompt-kit)**: プロンプトテンプレートのロードとレンダリング
-* **[caarlos0/env](https://github.com/caarlos0/env)**: 環境変数から設定構造体への読み込み
-* **[shouni/go-notify](https://github.com/shouni/go-notify)**: Slack 通知の組み立てと送信
-* **[shouni/go-job-firestore](https://github.com/shouni/go-job-firestore)**: ジョブ状態の記録 (`jobfirestore`)。Firestore の `job-status` データベース、コレクションは `ap-voice`
-* **[shouni/go-utils](https://github.com/shouni/go-utils)**: ジョブ ID の発行・検証 (`jobid`)
-* **[gopkg.in/yaml.v3](https://gopkg.in/yaml.v3)**: プロンプト冒頭の front matter の解析
-
-実行時の外部依存:
-
-* **Vertex AI**: スクリプト生成
-* **VOICEVOX Engine** (`VOICEVOX_API_URL`): 音声合成
-* **Google Cloud Storage**（任意）: `gs://` 入出力利用時
-
 
 ---
 
