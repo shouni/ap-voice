@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -40,6 +41,16 @@ type detailView struct {
 	JobID string
 	// Script は保存済みの台本です。ここで内容を確認・修正してから音声を作ります。
 	Script domain.Script
+	// HasScript は台本が保存済みかです。false のときは編集フォームの代わりに
+	// 状態を出します。台本が無いのは異常ではなく、生成の途中と生成に失敗した
+	// ジョブの通常の姿で、そこで画面ごと開けなくなると削除する手段まで失われます。
+	HasScript bool
+	// State は記録された進行状態（queued / running / succeeded / failed）です。
+	// 記録が読めなければ空になり、画面は状態の欄を出しません。
+	State jobfirestore.State
+	// JobError は記録された失敗理由です。State が failed のときだけ入ります。
+	// 画面の Error（この操作の失敗）とは別物なので名前を分けています。
+	JobError string
 	// HasAudio は音声が既にあるかです。無ければ「音声を作成」だけを出します。
 	HasAudio bool
 	// Speakers は話者名の一覧、StylesJSON は話者ごとの実在スタイルです。
@@ -127,6 +138,9 @@ func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 }
 
 // renderDetail は詳細画面を描画します。台本は毎回読み直します。
+//
+// 台本がまだ無くても描きます。この画面はジョブの入口でもあり、削除もここからしか
+// できないため、生成に失敗したジョブで開けなくなると、履歴に残ったまま消せません。
 func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status int, message, errMsg string) {
 	jobID := chi.URLParam(r, "jobID")
 	if err := jobid.Validate(jobID); err != nil {
@@ -134,10 +148,24 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 
+	view := detailView{
+		baseView: h.base(r),
+		JobID:    jobID,
+		Speakers: h.speakers.SpeakerNames(),
+		Message:  message,
+		Error:    errMsg,
+	}
+	view.State, view.JobError = h.jobState(r, jobID)
+
 	script, err := h.repo.Load(r.Context(), jobID)
-	if err != nil {
+	switch {
+	case errors.Is(err, repository.ErrScriptNotFound):
+		// 生成の途中か、生成に失敗したジョブです。状態だけの画面になります。
+	case err != nil:
 		http.Error(w, "台本の取得に失敗しました", http.StatusBadGateway)
 		return
+	default:
+		view.Script, view.HasScript = script, true
 	}
 
 	hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
@@ -145,21 +173,30 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status in
 		http.Error(w, "音声の有無を確認できませんでした", http.StatusBadGateway)
 		return
 	}
+	view.HasAudio = hasAudio
 
 	stylesJSON, err := json.Marshal(h.stylesBySpeaker())
 	if err != nil {
 		http.Error(w, "話者一覧の組み立てに失敗しました", http.StatusInternalServerError)
 		return
 	}
+	view.StylesJSON = string(stylesJSON)
 
-	h.renderTemplate(w, status, "detail.html", detailView{
-		baseView:   h.base(r),
-		JobID:      jobID,
-		Script:     script,
-		HasAudio:   hasAudio,
-		Speakers:   h.speakers.SpeakerNames(),
-		StylesJSON: string(stylesJSON),
-		Message:    message,
-		Error:      errMsg,
-	})
+	h.renderTemplate(w, status, "detail.html", view)
+}
+
+// jobState は、記録された進行状態と失敗理由を返します。
+//
+// 読めなくても画面は描きます。状態は成果物ではないので、記録が無い（状態機能より
+// 前のジョブ）ことも、一時的に読めないこともあります。そこで画面ごと止めると、
+// 台本を直すという本来の用が状態の都合で果たせなくなります。
+func (h *Handler) jobState(r *http.Request, jobID string) (jobfirestore.State, string) {
+	status, err := h.repo.Get(r.Context(), jobID)
+	if err != nil {
+		if !errors.Is(err, jobfirestore.ErrNotFound) {
+			slog.WarnContext(r.Context(), "ジョブ状態を読めませんでした", "job_id", jobID, "error", err)
+		}
+		return "", ""
+	}
+	return status.State, status.Error
 }

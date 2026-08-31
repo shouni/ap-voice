@@ -35,6 +35,10 @@ type apiJob struct {
 	Title     string `json:"title"`
 	CreatedAt string `json:"created_at"`
 	HasAudio  bool   `json:"has_audio"`
+	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
+	// 区別できません。1 件ずつ status を引かずに一覧で見分けるために載せます。
+	// 記録の無い古いジョブでは空になるので omitempty です。
+	State string `json:"state,omitempty"`
 }
 
 // apiAccepted は投入を受け付けたときの応答です。

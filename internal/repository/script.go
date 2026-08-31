@@ -22,6 +22,15 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
+// ErrJobNotFound は、成果物としても記録としても存在しないジョブを指したことを表します。
+//
+// 「成果物が無い」ではありません。台本を書く前に失敗したジョブは成果物を 1 つも
+// 持ちませんが、記録は残っており、消せなければ履歴に残り続けます。
+var ErrJobNotFound = errors.New("repository: job not found")
+
+// ErrScriptNotFound は、そのジョブの台本がまだ保存されていないことを表します。
+var ErrScriptNotFound = errors.New("repository: script not found")
+
 // Repository は、ジョブの成果物を読み出します。
 //
 // 書き込みは PublishStep が担い、ここは読むだけです。成果物がジョブ ID ごとの
@@ -145,15 +154,21 @@ func (r *Repository) refreshTitle(ctx context.Context, jobID, title string) {
 }
 
 // Load は、保存済みの台本を読み出します。domain.ScriptStore を満たします。
+//
+// まだ書かれていない場合は ErrScriptNotFound を返します。台本が無いのは異常では
+// なく、generate が終わる前と generate に失敗したジョブの通常の姿です。呼び出し側が
+// 「まだ無い」と「読めなかった」を区別できないと、どちらも同じ失敗として扱うしか
+// なくなり、詳細画面が状態を見せられません。
 func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, error) {
 	// ジョブ ID はフォームからも来るため、パスへ埋める前に必ず検証します。
 	if err := jobid.Validate(jobID); err != nil {
 		return domain.Script{}, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
 
-	stream, err := r.store.Open(ctx, r.layout.ScriptPath(jobID))
+	path := r.layout.ScriptPath(jobID)
+	stream, err := r.store.Open(ctx, path)
 	if err != nil {
-		return domain.Script{}, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
+		return domain.Script{}, r.openFailure(ctx, jobID, path, err)
 	}
 	defer func() {
 		if closeErr := stream.Close(); closeErr != nil {
@@ -171,6 +186,18 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 		return domain.Script{}, fmt.Errorf("台本のJSONデコードに失敗しました: %w", err)
 	}
 	return script, nil
+}
+
+// openFailure は、台本を開けなかった理由を「まだ無い」と「読めなかった」に分けます。
+//
+// 不在の綴りは保存先ごとに違う（GCS と local で別のエラー値）ので、返ってきた
+// エラーの中身は見ません。在るかどうかをもう一度だけ問い合わせて決めます。
+// 余分な 1 往復は失敗した経路にしか乗らず、成功する読み出しは今までどおりです。
+func (r *Repository) openFailure(ctx context.Context, jobID, path string, err error) error {
+	if exists, existsErr := r.store.Exists(ctx, path); existsErr == nil && !exists {
+		return fmt.Errorf("台本がまだありません (%s): %w", jobID, ErrScriptNotFound)
+	}
+	return fmt.Errorf("台本の読み込みに失敗しました: %w", err)
 }
 
 // HasAudio は、そのジョブの音声が既にあるかを返します。
@@ -197,6 +224,11 @@ type Job struct {
 	CreatedAt time.Time
 	// HasAudio は音声が既に作られているかです。台本だけの段階と区別します。
 	HasAudio bool
+	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
+	// 見分けられません。記録には最初から入っていた値で、一覧が読まずに捨てていました。
+	State jobfirestore.State
+	// Error は失敗理由です。State が failed のときだけ入ります。
+	Error string
 }
 
 // List は、指定ページのジョブを新しい順に返します。
@@ -219,6 +251,8 @@ func (r *Repository) List(ctx context.Context, page, perPage int) ([]Job, jobfir
 			// 音声を作ったのは synthesize だけです。generate は台本で終わるので
 			// 在り処が入りません（成果物を数えずに区別できます）。
 			HasAudio: status.AudioURI != "",
+			State:    status.State,
+			Error:    status.Error,
 		}
 		// 題名が無くても一覧から落としません。生成が題名の確定前に失敗した
 		// ジョブこそ消したいもので、一覧から消えると消す手段まで失われます。
@@ -250,8 +284,13 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 		}
 		entries = append(entries, entry)
 	}
+
+	// 成果物が 1 つも無いジョブは、台本を書く前に失敗したジョブです。以前はここで
+	// 「見つかりません」と返していましたが、消したいのはまさにそのジョブでした。
+	// 記録だけが履歴に残り、詳細画面は台本が無くて開けず、削除もこの分岐で
+	// 断られるため、どこからも消せないまま並び続けていました。
 	if len(entries) == 0 {
-		return fmt.Errorf("ジョブが見つかりません (%s)", jobID)
+		return r.deleteRecord(ctx, jobID)
 	}
 
 	for _, entry := range entries {
@@ -272,5 +311,29 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 	}
 
 	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(entries))
+	return nil
+}
+
+// deleteRecord は、成果物が残っていないジョブの記録だけを消します。
+//
+// 記録も無ければ ErrJobNotFound です。「知らないジョブを指した」のと
+// 「作りかけで失敗したジョブを片付けた」のとでは、呼び出し側の返し方が
+// 変わります（前者は 404、後者は成功）。
+//
+// 成果物がある経路と違い、記録の削除に失敗したらエラーを返します。あちらは
+// 依頼された成果物が既に消えているので警告で足りますが、こちらは記録が
+// 消せなければ何も起きていないためです。
+func (r *Repository) deleteRecord(ctx context.Context, jobID string) error {
+	if _, err := r.status.Get(ctx, jobID); err != nil {
+		if errors.Is(err, jobfirestore.ErrNotFound) {
+			return fmt.Errorf("ジョブが見つかりません (%s): %w", jobID, ErrJobNotFound)
+		}
+		return fmt.Errorf("ジョブ状態の確認に失敗しました (%s): %w", jobID, err)
+	}
+	if err := r.status.Delete(ctx, jobID); err != nil {
+		return fmt.Errorf("ジョブ状態の削除に失敗しました (%s): %w", jobID, err)
+	}
+
+	slog.InfoContext(ctx, "成果物の無いジョブの記録を削除しました", "job_id", jobID)
 	return nil
 }

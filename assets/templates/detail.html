@@ -7,6 +7,20 @@
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
+  {{/* 記録された状態です。台本があるジョブでも出します — 合成だけ失敗した場合は
+       台本が残るので、成果物を見ただけでは「台本で終わったジョブ」と区別が付きません。
+       失敗の理由が人の目に触れるのは、Slack 通知を除けばここだけです。 */}}
+  {{ if eq .State "failed" }}
+    <div class="alert alert-danger">
+      <div class="fw-semibold">このジョブは失敗しました。</div>
+      {{ with .JobError }}<div class="small text-break mt-1">{{ . }}</div>{{ end }}
+    </div>
+  {{ else if eq .State "running" }}
+    <div class="alert alert-info">実行中です。完了すると通知が届きます（この画面は自動では更新されません）。</div>
+  {{ else if eq .State "queued" }}
+    <div class="alert alert-info">実行を待っています。完了すると通知が届きます（この画面は自動では更新されません）。</div>
+  {{ end }}
+
   {{ if .HasAudio }}
     {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。 */}}
     <audio controls src="/history/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
@@ -15,7 +29,12 @@
   {{/* 台本は読むだけでなく直せます。**直せることが、分けた工程の理由です** —
        1 行の読みを直すために生成からやり直すと、直したかった行以外まで変わります。
        送信先が /script なのは、編集内容をタスクに載せないためです。先に保存して
-       ジョブ ID だけを渡すので、長い台本が Cloud Tasks の 1MB 上限に当たりません。 */}}
+       ジョブ ID だけを渡すので、長い台本が Cloud Tasks の 1MB 上限に当たりません。
+
+       台本がまだ無いジョブでも、この画面は開きます。生成の途中と生成に失敗した
+       ジョブの通常の姿だからです。開けないと、削除もここからしかできない以上、
+       履歴に残ったまま消せなくなります。 */}}
+  {{ if .HasScript }}
   <form method="post" action="/history/{{ .JobID }}/script" id="script-form">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 
@@ -63,6 +82,12 @@
     </table>
     </div>
   </form>
+  {{ else }}
+    <p class="text-secondary">
+      台本はまだありません。{{ if eq .State "failed" }}やり直すには、入力ソースを確かめて作成し直してください。
+      {{ else }}生成が終わると、ここで読みや話者を直してから音声にできます。{{ end }}
+    </p>
+  {{ end }}
 
   {{/* 操作はまとめて末尾に置きます。姉妹サービスの詳細画面と同じで、戻るを左、
        実行と削除を右に寄せます。台本を読んでから押すものなので、表の手前に
@@ -71,6 +96,9 @@
     <a class="btn btn-link text-secondary text-decoration-none" href="/history">← 履歴一覧へ戻る</a>
 
     <div class="d-flex gap-2 flex-wrap justify-content-end">
+      {{/* 台本に関わる操作は、台本があるときだけ出します。削除だけは常に出します —
+           台本を書く前に失敗したジョブこそ、消したいジョブだからです。 */}}
+      {{ if .HasScript }}
       {{/* 落ちてくるのは保存済みの台本です。表を編集しただけの内容はまだ GCS に無いので、
            手元に残したい変更があるなら先に保存してください。 */}}
       <a class="btn btn-outline-secondary" href="/history/{{ .JobID }}/script">台本JSONをダウンロード</a>
@@ -80,6 +108,7 @@
       <button class="btn btn-primary" type="submit" form="script-form">
         {{ if .HasAudio }}保存して音声を作り直す{{ else }}保存して音声を作成{{ end }}
       </button>
+      {{ end }}
 
       {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。 */}}
       <form method="post" action="/history/{{ .JobID }}/delete"

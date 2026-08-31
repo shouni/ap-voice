@@ -239,9 +239,27 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 - **`internal/repository` serves the history screens** — `List`, `Load`, `Save`, `HasAudio`, and
   `Delete`, which removes the whole job prefix rather than a fixed list of names. A record with no
   title yet leaves the job listed under its ID, so a job that failed before naming anything can
-  still be deleted. **`HasAudio` deliberately disagrees with the listing**: the listing trusts the
+  still be deleted — and until recently *only in principle*: **a job with no objects at all could
+  not be deleted from anywhere.** `Delete` refused an empty prefix with "not found", the detail
+  screen (which holds the only delete button) 502'd because there was no script to read, and the
+  record therefore sat in the listing forever. `Delete` now removes the record alone when the
+  prefix is empty, and reserves `ErrJobNotFound` for a job that has neither objects nor a record —
+  the two have to stay apart, or a 404 becomes indistinguishable from tidying up a failed job.
+  `Load` draws the same line with `ErrScriptNotFound`: it re-asks storage whether the object
+  exists rather than reading the backend's error value (the spelling differs per backend), so a
+  missing script and an unreadable one land on the state page and a 502 respectively.
+  `List` carries `State` and `Error` for the same reason the badge needs them: the artifacts alone
+  cannot separate "still running" from "finished with a script" from "failed". They come out of
+  the record the listing already reads, so the page costs nothing extra.
+  **`HasAudio` deliberately disagrees with the listing**: the listing trusts the
   recorded `audio_uri`, while the detail screen asks storage whether the object is really there.
   A record that outlived its object would otherwise offer a player that 404s.
+- **The detail screen opens for a job with no script.** It is the entry point to a job *and* the
+  only place delete lives, so refusing to render it is what stranded failed jobs in the listing.
+  Without a script it shows the recorded state and error and offers delete alone; the state alert
+  is shown even when a script exists, because a failed `synthesize` leaves the script behind and
+  its artifacts look exactly like a job that stopped at `generate`. The recorded error reaches a
+  person here and in the Slack notification, nowhere else.
 - **Templates are only evaluated at request time.** A renamed view field still compiles, so
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).

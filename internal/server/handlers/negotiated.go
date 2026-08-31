@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
+
+	"github.com/shouni/ap-voice/internal/repository"
 )
 
 // このファイルは、人と機械が同じリソースを見る経路をまとめています。
@@ -48,6 +52,7 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 				JobID: job.ID, Title: job.Title,
 				CreatedAt: job.CreatedAt.Format(apiTimeFormat),
 				HasAudio:  job.HasAudio,
+				State:     string(job.State),
 			})
 		}
 		respond.JSON(w, r, http.StatusOK, apiJobPage{Jobs: out, Page: meta})
@@ -127,8 +132,15 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 	}
 
 	script, err := h.repo.Load(r.Context(), jobID)
-	if err != nil {
+	switch {
+	case errors.Is(err, repository.ErrScriptNotFound):
 		respond.Error(w, r, http.StatusNotFound, "台本が見つかりません")
+		return
+	case err != nil:
+		// 読めなかっただけの場合を 404 に混ぜません。混ぜると、GCS の障害中は
+		// すべてのジョブが「台本が無い」ように見え、呼び出し側が静かに受け入れます。
+		slog.ErrorContext(r.Context(), "台本の取得に失敗しました", "job_id", jobID, "error", err)
+		respond.Error(w, r, http.StatusBadGateway, "台本を読めませんでした")
 		return
 	}
 
@@ -150,6 +162,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), jobID); err != nil {
+		if errors.Is(err, repository.ErrJobNotFound) {
+			respond.Error(w, r, http.StatusNotFound, "ジョブが見つかりません")
+			return
+		}
+		slog.ErrorContext(r.Context(), "ジョブの削除に失敗しました", "job_id", jobID, "error", err)
 		respond.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
 		return
 	}

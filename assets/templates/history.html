@@ -18,7 +18,13 @@
               {{ if not .CreatedAt.IsZero }}{{ .CreatedAt.Format "2006/01/02 15:04" }} ・ {{ end }}<code>{{ .ID }}</code>
             </small>
           </span>
-          {{ if .HasAudio }}<span class="badge bg-success flex-shrink-0">音声あり</span>
+          {{/* 状態を成果物より先に見ます。「台本のみ」は generate が成功した姿でもあり、
+               まだ実行中の姿でも、失敗した姿でもあります。区別が付かないと、
+               待てば出るのか、消してやり直すのかを一覧から判断できません。 */}}
+          {{ if eq .State "failed" }}<span class="badge bg-danger flex-shrink-0">失敗</span>
+          {{ else if eq .State "running" }}<span class="badge bg-primary flex-shrink-0">実行中</span>
+          {{ else if eq .State "queued" }}<span class="badge bg-secondary flex-shrink-0">待機中</span>
+          {{ else if .HasAudio }}<span class="badge bg-success flex-shrink-0">音声あり</span>
           {{ else }}<span class="badge bg-secondary flex-shrink-0">台本のみ</span>{{ end }}
         </a>
       {{ end }}

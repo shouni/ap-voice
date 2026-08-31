@@ -105,14 +105,14 @@ go run .        # SERVER_ROLE が必須
 | `GET` | `/api/speakers` | 話者ごとに使えるスタイル。**実在しない組み合わせは保存時に弾かれる**ので、選ぶ前にここを見ます。 |
 | `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
 | `POST` | `/api/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
-| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。 |
+| `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=` を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。 |
 | `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode`。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
 | `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
 | `GET` | `/history/{jobID}/script` | 台本を取得。ブラウザから開くとファイルとして落ちます。 |
 | `PUT` | `/api/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます）。 |
 | `POST` | `/api/jobs/{jobID}/synthesize` | 保存済みの台本から音声を作る。 |
-| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。 |
+| `DELETE` | `/api/jobs/{jobID}` | 成果物をまとめて削除。成果物を 1 つも持たないジョブ（台本を書く前に失敗したもの）は記録だけを消します。記録も無ければ 404。 |
 
 台本の検証（話者・スタイルが実在するか、行数の上限）は**画面と同じ関数**を通ります。
 
