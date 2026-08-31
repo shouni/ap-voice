@@ -170,15 +170,10 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 	}
 
 	// worker 側でも Execute の冒頭で検証しますが、投入前に弾けば
-	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます。
-	if err := req.Validate(); err != nil {
-		h.renderError(w, r, http.StatusBadRequest, req, tab, err.Error())
-		return
-	}
-
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderError(w, r, http.StatusBadGateway, req, tab, err.Error())
+	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます（submit の中です）。
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderError(w, r, status, req, tab, err.Error())
 		return
 	}
 
@@ -234,14 +229,9 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
-	if err := req.Validate(); err != nil {
-		h.renderScriptError(w, r, http.StatusBadRequest, raw, err.Error())
-		return
-	}
-
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderScriptError(w, r, http.StatusBadGateway, raw, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderScriptError(w, r, status, raw, err.Error())
 		return
 	}
 

@@ -22,10 +22,24 @@ import (
 // 逆に、片方の読者にしか無い操作（入力フォーム、合成の指示など）は
 // 別のリソースなので、このファイルには置きません。
 
-// jobID は URL のジョブ ID を取り出し、要求された表現でエラーを返します。
-func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
+// jobIDParam は URL のジョブ ID を取り出して検証します。
+//
+// 応答は返しません。同じ検証でも返し方が 3 通りあるためです（Accept で選ぶ画面、
+// JSON 固定の API、素のテキスト）。値の取り出しと検証だけをここに集め、
+// どう返すかは呼び出し側が決めます。ID はそのままオブジェクトのパスに入るので、
+// 検証を通っていない値を先へ渡せません。
+func jobIDParam(r *http.Request) (string, bool) {
 	id := chi.URLParam(r, "jobID")
 	if err := jobid.Validate(id); err != nil {
+		return "", false
+	}
+	return id, true
+}
+
+// jobID は URL のジョブ ID を取り出し、要求された表現でエラーを返します。
+func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, ok := jobIDParam(r)
+	if !ok {
 		respond.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}
@@ -36,7 +50,9 @@ func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
 func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 	perPage := historyPerPage
 	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
-		perPage = n
+		// 上限で頭打ちにします。何でも通していた頃は ?per_page=100000 が
+		// そのまま 1 クエリになり、呼び出し側の打ち間違いを倉庫が引き受けていました。
+		perPage = min(n, maxPerPage)
 	}
 
 	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage)

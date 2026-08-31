@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-firestore/jobfirestore"
-	"github.com/shouni/go-utils/jobid"
 
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
@@ -17,6 +15,12 @@ import (
 
 // historyPerPage は 1 ページに出す件数です。
 const historyPerPage = 50
+
+// maxPerPage は ?per_page= で要求できる上限です。
+//
+// 上限が無いと、1 リクエストが倉庫への際限のない 1 クエリになります。画面は
+// historyPerPage しか使わないので、これが効くのは機械から叩く経路だけです。
+const maxPerPage = 100
 
 // pageParam は ?page= を読みます。不正な値は 1 ページ目として扱います。
 // 一覧の閲覧でエラー画面を出しても、利用者にできることがありません。
@@ -71,7 +75,11 @@ const maxScriptLines = 200
 
 // Detail は、1 件のジョブの台本を表示します。ここから音声の確認と作成を行います。
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
-	h.renderDetail(w, r, http.StatusOK, "", "")
+	jobID, ok := h.jobID(w, r)
+	if !ok {
+		return
+	}
+	h.renderDetail(w, r, jobID, http.StatusOK, "", "")
 }
 
 // UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
@@ -80,25 +88,24 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 // Cloud Tasks の 1MB 上限に台本の長さが当たらず、Worker 側も
 // 「保存済み台本を読む」既存の経路をそのまま使えます。
 func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
+	jobID, ok := h.jobID(w, r)
+	if !ok {
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.renderDetail(w, r, http.StatusBadRequest, "", "フォームの解析に失敗しました")
+		h.renderDetail(w, r, jobID, http.StatusBadRequest, "", "フォームの解析に失敗しました")
 		return
 	}
 
 	script, err := h.scriptFromForm(r)
 	if err != nil {
-		h.renderDetail(w, r, http.StatusBadRequest, "", err.Error())
+		h.renderDetail(w, r, jobID, http.StatusBadRequest, "", err.Error())
 		return
 	}
 
 	if err := h.repo.SaveScript(r.Context(), jobID, script); err != nil {
-		h.renderDetail(w, r, http.StatusBadGateway, "", "台本の保存に失敗しました")
+		h.renderDetail(w, r, jobID, http.StatusBadGateway, "", "台本の保存に失敗しました")
 		return
 	}
 
@@ -107,13 +114,13 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		h.renderDetail(w, r, http.StatusBadGateway, "", err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderDetail(w, r, jobID, status, "", err.Error())
 		return
 	}
 
-	h.renderDetail(w, r, http.StatusAccepted, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
+	h.renderDetail(w, r, jobID, status, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
 }
 
 // scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
@@ -141,13 +148,7 @@ func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 //
 // 台本がまだ無くても描きます。この画面はジョブの入口でもあり、削除もここからしか
 // できないため、生成に失敗したジョブで開けなくなると、履歴に残ったまま消せません。
-func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, status int, message, errMsg string) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
-		http.Error(w, "不正なジョブIDです", http.StatusBadRequest)
-		return
-	}
-
+func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID string, status int, message, errMsg string) {
 	view := detailView{
 		baseView: h.base(r),
 		JobID:    jobID,

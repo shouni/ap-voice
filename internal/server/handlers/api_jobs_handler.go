@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-utils/jobid"
 
@@ -145,17 +144,13 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := req.Validate(); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		respond.ErrorJSON(w, r, status, err.Error())
 		return
 	}
 
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
 }
 
 // APIUpdateScript は、台本を差し替えます。合成はしません。
@@ -202,16 +197,12 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		JobID:     jobID,
 		OutputURI: h.layout.AudioURI(h.bucket, jobID),
 	}
-	if err := req.Validate(); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
+	status, err := h.submit(r.Context(), req)
+	if err != nil {
+		respond.ErrorJSON(w, r, status, err.Error())
 		return
 	}
-	h.recordQueued(r.Context(), req)
-	if err := h.queue.Enqueue(r.Context(), req); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadGateway, err.Error())
-		return
-	}
-	respond.JSON(w, r, http.StatusAccepted, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
 }
 
 // APIJobStatus は、ジョブの進行状況を返します。
@@ -315,9 +306,13 @@ type apiAudio struct {
 }
 
 // apiJobID は、URL のジョブ ID を取り出して検証します。
+//
+// 検証そのものは jobIDParam です。ここが持つのは返し方だけで、JSON に固定するのは
+// この経路が成功時も無条件に JSON を返すためです（Accept を送らない呼び出し側が、
+// 成功と失敗で本文の読み方を変えずに済みます）。
 func (h *Handler) apiJobID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	jobID := chi.URLParam(r, "jobID")
-	if err := jobid.Validate(jobID); err != nil {
+	jobID, ok := jobIDParam(r)
+	if !ok {
 		respond.ErrorJSON(w, r, http.StatusBadRequest, "不正なジョブIDです")
 		return "", false
 	}

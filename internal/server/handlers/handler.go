@@ -180,6 +180,26 @@ func (h *Handler) base(r *http.Request) baseView {
 	}
 }
 
+// submit は、実行を Worker 面へ渡すまでの作法をまとめます。
+//
+// 検証 → queued の記録 → 投入。この順序には理由があり（記録が先である理由は
+// recordQueued、投入前に検証する理由は Request.Validate を参照）、5 箇所へ写して
+// いた頃は 1 箇所だけ検証が抜けていました（詳細画面の保存経路）。抜けても画面は
+// 普通に動き、必ず失敗するタスクが積まれるだけなので、気付く機会がありません。
+//
+// 返すのはそのまま使える HTTP ステータスです。失敗の返し方（画面を描き直すか
+// JSON を返すか）は呼び出し側ごとに違いますが、どの段で失敗したかの判断は同じです。
+func (h *Handler) submit(ctx context.Context, req domain.Request) (int, error) {
+	if err := req.Validate(); err != nil {
+		return http.StatusBadRequest, err
+	}
+	h.recordQueued(ctx, req)
+	if err := h.queue.Enqueue(ctx, req); err != nil {
+		return http.StatusBadGateway, err
+	}
+	return http.StatusAccepted, nil
+}
+
 // recordQueued は、投入を記録します。enqueue より先に呼びます。
 //
 // Cloud Tasks は数十ミリ秒で届くため、順序が逆だと Worker が書いた running を
