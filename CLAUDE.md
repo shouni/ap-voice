@@ -184,7 +184,14 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   produced what. `synthesize` carries no mode (the script already exists), so
   `JobStatus.CarryFrom` brings it forward along with the artifact URIs — **one method for every
   value a later write cannot re-derive**, since the web face and the pipeline both rebuild the
-  record from scratch and used to carry it in two separate places. The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
+  record from scratch and used to carry it in two separate places. `domain.NewJobStatus` is the
+  other half — the rebuild itself — so a value worth keeping is added once rather than in both
+  faces. The record also holds `input_uri` and `ai_model`, and that is what makes **"regenerate
+  from the same input"** possible: a job that failed before writing a script has no artifact
+  naming what it read, so without them the URL survives only in the operator's memory. The redo
+  keeps the job ID (a redo does not deserve a second row in the history), and rewriting the record
+  to `queued` is what carries it past the re-run guard.
+  The web face records `queued`, the pipeline `running` / `succeeded` / `failed`.
   **The queued write happens before the enqueue** — Cloud Tasks arrives in tens of milliseconds
   and the worker reads state before it works, so the reverse order lets a stale record overwrite
   a live one; ap-story hit exactly this. That ordering is also what makes the re-run guard safe:

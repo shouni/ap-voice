@@ -43,17 +43,7 @@ func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobfire
 	if p.status == nil || req.JobID == "" {
 		return
 	}
-	p.status.Record(ctx, req.JobID, p.newStatus(req, state), apply...)
-}
-
-// newStatus は今回の記録ぶんの状態を組み立てます。
-func (p *Pipeline) newStatus(req domain.Request, state jobfirestore.State) domain.JobStatus {
-	return domain.JobStatus{
-		JobID:   req.JobID,
-		Command: string(req.Command),
-		State:   state,
-		Mode:    req.Mode,
-	}
+	p.status.Record(ctx, req.JobID, domain.NewJobStatus(req, state), apply...)
 }
 
 // begin は、そのジョブが既に完了していれば true を返し、未完了なら処理開始を記録して
@@ -69,7 +59,7 @@ func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) 
 		return false, nil
 	}
 
-	done, err := p.status.Begin(ctx, req.JobID, p.newStatus(req, jobfirestore.StateRunning),
+	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobfirestore.StateRunning),
 		func(next, prev *domain.JobStatus) {
 			next.Attempts++
 			next.CarryFrom(prev)

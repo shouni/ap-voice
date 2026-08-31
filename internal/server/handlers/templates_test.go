@@ -186,6 +186,9 @@ func TestTemplatesRender(t *testing.T) {
 				Speakers:  []string{"ずんだもん"},
 			},
 			want: []string{"保存して音声を作成"},
+			// 入力ソースの記録が無いジョブ（持ち込みの台本）では、作り直しは
+			// 押しても必ず失敗するのでボタンごと出しません。
+			notWant: []string{"同じ入力で台本を作り直す"},
 		},
 		{
 			// 台本を書く前に失敗したジョブです。この画面が開かないと、履歴に
@@ -197,6 +200,7 @@ func TestTemplatesRender(t *testing.T) {
 				JobID:    "voice-3",
 				State:    jobfirestore.StateFailed,
 				JobError: "AIモデルが空のスクリプトを返しました",
+				InputURI: "https://example.com/article",
 				Speakers: []string{"ずんだもん"},
 			},
 			want: []string{
@@ -205,6 +209,10 @@ func TestTemplatesRender(t *testing.T) {
 				"AIモデルが空のスクリプトを返しました",
 				"台本はまだありません",
 				"このジョブを削除",
+				// 何を読ませたかは記録にあります。貼り直させる理由がありません。
+				"同じ入力で台本を作り直す",
+				`action="/history/voice-3/regenerate"`,
+				"https://example.com/article",
 			},
 			// 直す台本が無いので、保存も合成も読みの確認もできません。ボタンだけ残すと、
 			// 押しても何も起きない（指す先のフォームや行が無い）ものが並びます。

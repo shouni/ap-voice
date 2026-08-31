@@ -107,7 +107,7 @@ go run .        # SERVER_ROLE が必須
 | `GET` | `/modes` | 選べるモード（キー・表示名・説明）。 |
 | `POST` | `/api/preview-reading` | **合成したらどう読まれるか**を行ごとに返します（合成はしません）。「水面」は ミナモ ではなく スイメン です。合成してから気付くと台本ぶんの時間が無駄になるため、その前に確かめられます。 |
 | `GET` | `/history` | ジョブを新しい順に。`?page=` / `?per_page=`（既定 50、**上限 100**）を受け、`page` にページ情報を返します。1 件ごとに `state` が付くので、実行中と失敗を 1 件ずつ `status` を引かずに見分けられます。 |
-| `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode`。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
+| `GET` | `/api/jobs/{jobID}/status` | 進行状況（`queued` / `running` / `succeeded` / `failed`）と、成果物の在り処（`audio_uri` / `script_uri`）、台本を作ったときの `mode` / `input_uri` / `ai_model`（作り直しに使います）。**記録が無ければ 404** で、呼び出し側は `unknown` として扱います。 |
 | `GET` | `/history/{jobID}/audio` | 音声の**再生できるリンク**（署名付き URL、1時間）。状態や一覧には載せません — 期限があり、ポーリングのたびに発行するのは無駄なためです。音声が無ければ 404。 |
 | `POST` | `/api/jobs` | ジョブを投入。`generate` / `generate_and_synthesize` は入力ソースから AI に書かせ、**`synthesize` は `script` を渡して自分の台本を喋らせます**（Gemini を呼びません）。 |
 | `GET` | `/history/{jobID}/script` | 台本を取得。ブラウザから開くとファイルとして落ちます。 |
@@ -119,7 +119,9 @@ go run .        # SERVER_ROLE が必須
 
 `GET /health` と `/static/*` はロールに関係なく、認証の外側で登録されます。
 履歴のルートは `GET /history`（一覧）、`GET /history/{jobID}`（詳細）、
-`POST /history/{jobID}/script`（台本を保存して音声を作る。行の追加・並べ替え・削除も画面から）、`POST /history/{jobID}/delete`（削除）、
+`POST /history/{jobID}/script`（台本を保存して音声を作る。行の追加・並べ替え・削除も画面から）、
+`POST /history/{jobID}/regenerate`（**同じ入力ソースから台本を作り直す**。ジョブ ID は変わりません）、
+`POST /history/{jobID}/delete`（削除）、
 `GET /history/{jobID}/audio`（署名付き URL へ 302）、
 `GET /history/{jobID}/script`（**保存済み**の台本を `<jobID>.json` として添付ダウンロード）です。
 台本は読み込み済みの小さな JSON なので、音声と違って署名付き URL を挟まずそのまま返します。

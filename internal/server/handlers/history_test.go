@@ -150,3 +150,82 @@ func TestScriptRejectsBadJobID(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
+
+// TestRegenerateReusesTheRecordedInput は、作り直しが記録に残った入力ソースを
+// そのまま使うことを検証します。
+//
+// 何を読ませたかは台本にも成果物にも残らず、失敗したジョブには台本すらありません。
+// 記録から復元できなければ、利用者が URL を控えているかどうかに懸かります。
+func TestRegenerateReusesTheRecordedInput(t *testing.T) {
+	t.Parallel()
+
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
+	repo := &stateOnlyRepo{status: domain.JobStatus{
+		JobID:    jobID,
+		State:    jobfirestore.StateFailed,
+		Error:    "AIモデルが空のスクリプトを返しました",
+		InputURI: "https://example.com/article",
+		Mode:     "tech_solo",
+		AIModel:  "gemini-test",
+	}}
+	queue := &capturingQueue{}
+	h := detailHandler(t, repo)
+	h.queue = queue
+
+	rec := httptest.NewRecorder()
+	h.Regenerate(rec, postWithJobID(jobID))
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	if queue.calls != 1 {
+		t.Fatalf("投入回数 = %d, want 1", queue.calls)
+	}
+	got := queue.got
+	if got.Command != domain.CommandGenerate {
+		t.Errorf("Command = %q, want %q", got.Command, domain.CommandGenerate)
+	}
+	// ジョブ ID は変えません。作り直しなので履歴に 2 件並べる意味がありません。
+	if got.JobID != jobID {
+		t.Errorf("JobID = %q, want %q", got.JobID, jobID)
+	}
+	if got.InputURI != "https://example.com/article" {
+		t.Errorf("InputURI = %q, 記録から復元できていません", got.InputURI)
+	}
+	if got.Mode != "tech_solo" || got.AIModel != "gemini-test" {
+		t.Errorf("mode/model = %q/%q, 記録から復元できていません", got.Mode, got.AIModel)
+	}
+}
+
+// TestRegenerateRefusesWithoutAnInput は、入力ソースの記録が無いジョブを
+// 作り直さないことを検証します。
+//
+// 持ち込みの台本（台本 JSON タブ・API の script）がこれです。作り直す先が
+// 無いので、押せてしまうと必ず失敗するタスクが積まれます。
+func TestRegenerateRefusesWithoutAnInput(t *testing.T) {
+	t.Parallel()
+
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
+	repo := &stateOnlyRepo{status: domain.JobStatus{JobID: jobID, State: jobfirestore.StateSucceeded}}
+	queue := &capturingQueue{}
+	h := detailHandler(t, repo)
+	h.queue = queue
+
+	rec := httptest.NewRecorder()
+	h.Regenerate(rec, postWithJobID(jobID))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if queue.calls != 0 {
+		t.Errorf("入力ソースが無いのに %d 回投入しています", queue.calls)
+	}
+}
+
+// postWithJobID は、jobID を埋めた POST を組み立てます。
+func postWithJobID(jobID string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/history/"+jobID+"/regenerate", nil)
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("jobID", jobID)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+}

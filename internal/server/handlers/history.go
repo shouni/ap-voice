@@ -59,6 +59,10 @@ type detailView struct {
 	// Speakers は話者名の一覧、StylesJSON は話者ごとの実在スタイルです。
 	// 後者は選択肢を話者に応じて絞るために JS へ渡します。
 	Speakers []string
+	// InputURI は台本の元になった入力ソースです。記録にあるときだけ入り、
+	// 「同じ入力で作り直す」を出すかどうかもこれで決まります。持ち込みの台本には
+	// 入力ソースが無いので、押しても作り直せないボタンを出さずに済みます。
+	InputURI string
 	// MaxLines は 1 つの台本で受け付ける行数の上限です。画面へ渡すのは、
 	// 行を足せる以上、画面側にも同じ上限が要るためです。JS 側に数を写すと、
 	// どちらかを直したときにもう一方が古いままになります（超えた台本は保存時に
@@ -127,6 +131,55 @@ func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
 	h.renderDetail(w, r, jobID, status, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
 }
 
+// Regenerate は、同じ入力ソースから台本を作り直します。
+//
+// 失敗したジョブの行き先がこれです。台本を書く前に失敗したジョブには直すものが
+// 無く、これまでは削除して投入フォームから URL を貼り直すしかありませんでした。
+// 何を読ませたかは記録に残っているので、貼り直させる理由がありません。
+//
+// ジョブ ID は変えません。作り直しなので履歴に 2 件並べる意味がなく、同じ ID なら
+// 成果物の置き場も記録もそのまま上書きされます。投入の記録が queued に戻るため、
+// 再実行ガード（完了済みなら実行しない）にも掛かりません。
+func (h *Handler) Regenerate(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.jobID(w, r)
+	if !ok {
+		return
+	}
+
+	status, err := h.repo.Get(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, jobfirestore.ErrNotFound) {
+			h.renderDetail(w, r, jobID, http.StatusNotFound, "", "このジョブの記録が無いため、作り直せません。")
+			return
+		}
+		h.renderDetail(w, r, jobID, http.StatusBadGateway, "", "ジョブ状態を読めませんでした")
+		return
+	}
+	if status.InputURI == "" {
+		// 台本を持ち込んだジョブ（台本 JSON タブ・API の script）には入力ソースが
+		// ありません。作り直す先が無いので、ボタン自体も出していません。
+		h.renderDetail(w, r, jobID, http.StatusBadRequest, "",
+			"このジョブには入力ソースの記録が無いため、作り直せません。")
+		return
+	}
+
+	req := domain.Request{
+		Command:   domain.CommandGenerate,
+		JobID:     jobID,
+		InputURI:  status.InputURI,
+		OutputURI: h.layout.AudioURI(h.bucket, jobID),
+		Mode:      status.Mode,
+		AIModel:   status.AIModel,
+	}
+	code, err := h.submit(r.Context(), req)
+	if err != nil {
+		h.renderDetail(w, r, jobID, code, "", err.Error())
+		return
+	}
+
+	h.renderDetail(w, r, jobID, code, "同じ入力から台本を作り直しています。完了すると通知が届きます。", "")
+}
+
 // scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
 //
 // 組み立てるだけで、実在するかの確認は validateScript が行います。
@@ -161,7 +214,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 		Message:  message,
 		Error:    errMsg,
 	}
-	view.State, view.JobError = h.jobState(r, jobID)
+	view.State, view.JobError, view.InputURI = h.jobState(r, jobID)
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	switch {
@@ -186,18 +239,18 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 	h.renderTemplate(w, status, "detail.html", view)
 }
 
-// jobState は、記録された進行状態と失敗理由を返します。
+// jobState は、記録された進行状態・失敗理由・入力ソースを返します。
 //
 // 読めなくても画面は描きます。状態は成果物ではないので、記録が無い（状態機能より
 // 前のジョブ）ことも、一時的に読めないこともあります。そこで画面ごと止めると、
 // 台本を直すという本来の用が状態の都合で果たせなくなります。
-func (h *Handler) jobState(r *http.Request, jobID string) (jobfirestore.State, string) {
+func (h *Handler) jobState(r *http.Request, jobID string) (jobfirestore.State, string, string) {
 	status, err := h.repo.Get(r.Context(), jobID)
 	if err != nil {
 		if !errors.Is(err, jobfirestore.ErrNotFound) {
 			slog.WarnContext(r.Context(), "ジョブ状態を読めませんでした", "job_id", jobID, "error", err)
 		}
-		return "", ""
+		return "", "", ""
 	}
-	return status.State, status.Error
+	return status.State, status.Error, status.InputURI
 }

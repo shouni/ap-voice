@@ -225,16 +225,14 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	if h.status == nil {
 		return
 	}
-	h.status.Record(ctx, req.JobID, domain.JobStatus{
-		JobID:   req.JobID,
-		Command: string(req.Command),
-		State:   jobfirestore.StateQueued,
-		Mode:    req.Mode,
-		// 一覧はこれで並べ替えます。入れないと全件がゼロ値になり、
-		// 新しい順が成立しません。作り直しでは CarryOver が最初の投入時刻を
-		// 引き継ぐので、履歴の位置は動きません。
-		QueuedAt: time.Now().UTC(),
-	}, func(next, prev *domain.JobStatus) {
+	status := domain.NewJobStatus(req, jobfirestore.StateQueued)
+	// 一覧はこれで並べ替えます。入れないと全件がゼロ値になり、新しい順が
+	// 成立しません。作り直しでは CarryOver が最初の投入時刻を引き継ぐので、
+	// 履歴の位置は動きません（投入の時刻はここでしか分からないため、
+	// NewJobStatus ではなくこちらで足します）。
+	status.QueuedAt = time.Now().UTC()
+
+	h.status.Record(ctx, req.JobID, status, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、前回の成果物の在り処とモードを残します。
 		next.CarryFrom(prev)
 	})

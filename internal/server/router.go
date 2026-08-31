@@ -103,6 +103,8 @@ func setupRoutes(r chi.Router, h *builder.AppHandlers) {
 			r.Get("/", h.Web.Jobs)
 			r.Get("/{jobID}", h.Web.Detail)
 			r.Post("/{jobID}/script", h.Web.UpdateScript)
+			// 作り直しは台本の保存とは別の操作です（入力ソースから書き直します）。
+			r.Post("/{jobID}/regenerate", h.Web.Regenerate)
 			r.Post("/{jobID}/delete", h.Web.Delete)
 			r.Get("/{jobID}/audio", h.Web.Audio)
 			r.Get("/{jobID}/script", h.Web.Script)

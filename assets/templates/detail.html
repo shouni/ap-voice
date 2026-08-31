@@ -118,9 +118,16 @@
   </form>
   {{ else }}
     <p class="text-secondary">
-      台本はまだありません。{{ if eq .State "failed" }}やり直すには、入力ソースを確かめて作成し直してください。
+      台本はまだありません。{{ if eq .State "failed" }}{{ if .InputURI }}同じ入力からやり直せます。
+      {{ else }}投入フォームから作り直してください。{{ end }}
       {{ else }}生成が終わると、ここで読みや話者を直してから音声にできます。{{ end }}
     </p>
+  {{ end }}
+
+  {{/* 何を読ませたかは記録にあります。貼り直させる理由がないので、そのまま
+       作り直せるようにします。持ち込みの台本には入力ソースが無いため出ません。 */}}
+  {{ with .InputURI }}
+    <p class="text-secondary small mb-0">入力ソース: <code class="text-break">{{ . }}</code></p>
   {{ end }}
 
   {{/* 操作はまとめて末尾に置きます。姉妹サービスの詳細画面と同じで、戻るを左、
@@ -142,6 +149,17 @@
       <button class="btn btn-primary" type="submit" form="script-form">
         {{ if .HasAudio }}保存して音声を作り直す{{ else }}保存して音声を作成{{ end }}
       </button>
+      {{ end }}
+
+      {{/* 作り直しは入力ソースが記録にあるときだけ出します。台本を上書きするので
+           確認を挟み、音声があるときは古いまま残ることも伝えます（generate は
+           台本までで、音声は作りません）。 */}}
+      {{ if .InputURI }}
+      <form method="post" action="/history/{{ .JobID }}/regenerate"
+            data-confirm="同じ入力から台本を作り直します。{{ if .HasScript }}いまの台本は上書きされます。{{ end }}{{ if .HasAudio }}音声は作り直されないため、古いまま残ります。{{ end }}よろしいですか？">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <button class="btn btn-outline-secondary" type="submit">同じ入力で台本を作り直す</button>
+      </form>
       {{ end }}
 
       {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。 */}}
