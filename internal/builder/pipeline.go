@@ -30,7 +30,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 
 // buildScriptStep は、台本を生成する段を返します。
 func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
-	aiClient, err := adapters.NewAIAdapter(ctx, appCtx.Config)
+	aiClient, err := adapters.NewAIAdapter(ctx, appCtx.Config.GCP)
 	if err != nil {
 		return nil, err
 	}

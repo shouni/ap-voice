@@ -1,7 +1,7 @@
 package pipeline
 
 import (
-	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/genai-kit/gemini"
 
 	"github.com/shouni/go-voicevox/speaker"
 )

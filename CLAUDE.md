@@ -383,7 +383,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   The mode string travels from `Request.Mode` straight to
   `PromptAdapter.Generate` and is never validated against a list. The one mode whose *input type*
   differs — `music_promo`, which reads a `recipe.json` and decodes it into
-  go-gemini-client's `music.Recipe` before rendering — **is not named in code either**:
+  genai-kit's `music.Recipe` before rendering — **is not named in code either**:
   `NewPromptAdapter` collects
   the recipe modes from the same `input: "recipe"` front matter the form's tabs read, so the
   answer to "which modes take a recipe" does not live in two places.

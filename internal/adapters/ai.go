@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/genai-kit/gemini"
 
 	"github.com/shouni/ap-voice/internal/config"
 )
@@ -18,20 +18,19 @@ const (
 	defaultInitialDelay = 30 * time.Second
 )
 
-// NewAIAdapter は Gemini APIと通信するためのクライアントを初期化します。
-func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, error) {
-	// Vertex AI 経由でのみ認証します。API キー経路を持たない理由は config.GCPConfig を参照。
-	if cfg.GCP.ProjectID == "" {
+// NewAIAdapter は Vertex AI と通信するためのクライアントを初期化します。
+func NewAIAdapter(ctx context.Context, gcp config.GCPConfig) (*gemini.Client, error) {
+	if gcp.ProjectID == "" {
 		return nil, fmt.Errorf("GCP_PROJECT_ID is not set")
 	}
 
 	clientConfig := gemini.Config{
 		InitialDelay: defaultInitialDelay,
-		ProjectID:    cfg.GCP.ProjectID,
+		ProjectID:    gcp.ProjectID,
 		LocationID:   defaultVertexLocationID,
 	}
 
-	aiClient, err := gemini.NewClient(ctx, clientConfig)
+	aiClient, err := gemini.New(ctx, clientConfig)
 
 	if err != nil {
 		return nil, fmt.Errorf("AIクライアントの初期化に失敗しました: %w", err)
