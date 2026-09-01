@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/genai-kit/gemini"
 
 	"github.com/shouni/ap-voice/internal/config"
 )
@@ -31,7 +31,7 @@ func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, erro
 		LocationID:   defaultVertexLocationID,
 	}
 
-	aiClient, err := gemini.NewClient(ctx, clientConfig)
+	aiClient, err := gemini.New(ctx, clientConfig)
 
 	if err != nil {
 		return nil, fmt.Errorf("AIクライアントの初期化に失敗しました: %w", err)

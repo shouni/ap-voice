@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shouni/go-gemini-client/music"
+	"github.com/shouni/genai-kit/music"
 	"github.com/shouni/go-prompt-kit/prompts"
 
 	"github.com/shouni/ap-voice/assets"

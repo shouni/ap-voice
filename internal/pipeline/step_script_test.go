@@ -9,7 +9,7 @@ import (
 
 	"github.com/shouni/ap-voice/internal/domain"
 
-	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/genai-kit/gemini"
 	"github.com/shouni/go-voicevox/speaker"
 )
 
@@ -56,7 +56,7 @@ type mockAIClient struct {
 	generateFunc func(ctx context.Context, modelName string, prompt string, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
-func (m *mockAIClient) GenerateWithAttachments(ctx context.Context, modelName string, prompt string, _ []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error) {
+func (m *mockAIClient) Generate(ctx context.Context, modelName string, prompt string, _ []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error) {
 	return m.generateFunc(ctx, modelName, prompt, opts)
 }
 

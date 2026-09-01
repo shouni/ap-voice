@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/shouni/go-gemini-client/gemini"
+	"github.com/shouni/genai-kit/gemini"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -34,10 +34,10 @@ type ContentReader interface {
 
 // StructuredGenerator は、ResponseSchema による構造化出力に対応した生成インターフェースです。
 //
-// go-gemini-client の Generator と同じ形にしています。genai の型を含まないため、
+// genai-kit の gemini.Generator と同じ形にしています。genai の型を含まないため、
 // このパッケージは genai SDK を import せずに済み、モックも1メソッドで書けます。
 type StructuredGenerator interface {
-	GenerateWithAttachments(ctx context.Context, modelName string, prompt string, attachments []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error)
+	Generate(ctx context.Context, modelName string, prompt string, attachments []gemini.Attachment, opts gemini.GenerateOptions) (*gemini.Response, error)
 }
 
 // ScriptStep はスクリプト生成の実行に必要な依存とオプションを保持します。
@@ -98,7 +98,7 @@ func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) (domain.Scrip
 		return domain.Script{}, err
 	}
 
-	generatedResponse, err := gr.aiClient.GenerateWithAttachments(ctx, model, prompt, nil, gemini.GenerateOptions{
+	generatedResponse, err := gr.aiClient.Generate(ctx, model, prompt, nil, gemini.GenerateOptions{
 		ResponseMIMEType: "application/json",
 		ResponseSchema:   gr.schema,
 	})
