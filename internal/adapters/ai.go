@@ -18,16 +18,15 @@ const (
 	defaultInitialDelay = 30 * time.Second
 )
 
-// NewAIAdapter は Gemini APIと通信するためのクライアントを初期化します。
-func NewAIAdapter(ctx context.Context, cfg *config.Config) (*gemini.Client, error) {
-	// Vertex AI 経由でのみ認証します。API キー経路を持たない理由は config.GCPConfig を参照。
-	if cfg.GCP.ProjectID == "" {
+// NewAIAdapter は Vertex AI と通信するためのクライアントを初期化します。
+func NewAIAdapter(ctx context.Context, gcp config.GCPConfig) (*gemini.Client, error) {
+	if gcp.ProjectID == "" {
 		return nil, fmt.Errorf("GCP_PROJECT_ID is not set")
 	}
 
 	clientConfig := gemini.Config{
 		InitialDelay: defaultInitialDelay,
-		ProjectID:    cfg.GCP.ProjectID,
+		ProjectID:    gcp.ProjectID,
 		LocationID:   defaultVertexLocationID,
 	}
 
