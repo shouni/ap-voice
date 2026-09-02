@@ -8,8 +8,8 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/gcp-kit/worker"
-	"github.com/shouni/go-job-firestore/jobfirestore"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -22,13 +22,13 @@ type Pipeline struct {
 	// scripts は保存済み台本の読み出しです。synthesize が JobID だけを渡されたときに使います。
 	scripts domain.ScriptStore
 	// status はジョブの進行状況です。nil でも動きます（記録しないだけ）。
-	status *jobfirestore.Recorder[domain.JobStatus]
+	status *jobstatus.Recorder[domain.JobStatus]
 	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
 	timeout time.Duration
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobfirestore.Recorder[domain.JobStatus], timeout time.Duration) *Pipeline {
+func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobstatus.Recorder[domain.JobStatus], timeout time.Duration) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
@@ -41,7 +41,7 @@ func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain
 
 // record は、ジョブの状態を書きます。記録の失敗で処理は止めません—
 // 状態は進行を知るためのもので、成果物より重くはありません。
-func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobfirestore.State, apply ...func(next, prev *domain.JobStatus)) {
+func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstatus.State, apply ...func(next, prev *domain.JobStatus)) {
 	if p.status == nil || req.JobID == "" {
 		return
 	}
@@ -61,7 +61,7 @@ func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) 
 		return false, nil
 	}
 
-	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobfirestore.StateRunning),
+	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobstatus.StateRunning),
 		func(next, prev *domain.JobStatus) {
 			next.Attempts++
 			next.CarryFrom(prev)
@@ -124,7 +124,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		if err != nil {
 			// 通知と同じ ctx を使います。打ち切り済みの ctx で書くと、
 			// 失敗したことすら記録に残りません。
-			p.record(notifyCtx, req, jobfirestore.StateFailed, func(next, prev *domain.JobStatus) {
+			p.record(notifyCtx, req, jobstatus.StateFailed, func(next, prev *domain.JobStatus) {
 				next.Error = err.Error()
 				// 前回までの成果物は残ります。合成に失敗しても台本は既に
 				// 保存されているので、在り処を消すと詳細画面からやり直せません。
@@ -153,7 +153,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return err
 	}
 
-	p.record(notifyCtx, req, jobfirestore.StateSucceeded, func(next, prev *domain.JobStatus) {
+	p.record(notifyCtx, req, jobstatus.StateSucceeded, func(next, prev *domain.JobStatus) {
 		next.Title = script.Title
 		next.CarryFrom(prev)
 

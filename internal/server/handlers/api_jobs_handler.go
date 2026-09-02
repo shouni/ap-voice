@@ -8,13 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
+	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/internal/domain"
-
-	"github.com/shouni/go-serve-kit/respond"
 )
 
 // このファイルは、画面に対応するページが無く、機械だけが使う操作です
@@ -76,11 +75,11 @@ type apiEnqueue struct {
 
 // apiJobPage は、ページ付きの一覧応答です。
 //
-// メタデータの形は go-job-firestore の PageMeta です。JSON タグは姉妹サービスと同じ
+// メタデータの形は gcp-kit の PageMeta です。JSON タグは姉妹サービスと同じ
 // JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
 type apiJobPage struct {
-	Jobs []apiJob              `json:"jobs"`
-	Page jobfirestore.PageMeta `json:"page"`
+	Jobs []apiJob           `json:"jobs"`
+	Page jobstatus.PageMeta `json:"page"`
 }
 
 // APIEnqueue は、入力ソースから新しいジョブを投入します。
@@ -151,7 +150,7 @@ func (h *Handler) APIEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(command)})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(command)})
 }
 
 // APIUpdateScript は、台本を差し替えます。合成はしません。
@@ -202,7 +201,7 @@ func (h *Handler) APISynthesize(w http.ResponseWriter, r *http.Request) {
 		respond.ErrorJSON(w, r, status, err.Error())
 		return
 	}
-	respond.JSON(w, r, status, apiAccepted{Status: string(jobfirestore.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
+	respond.JSON(w, r, status, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
 }
 
 // apiAudio は GET /api/jobs/{jobID}/audio の応答です。

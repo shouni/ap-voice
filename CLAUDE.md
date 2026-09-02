@@ -58,12 +58,16 @@ is easy to break by editing.
   envs at startup, so an unused one cannot be dropped without a redeploy. Local runs need ADC
   (`gcloud auth application-default login`).
 - `CLOUD_TASKS_QUEUE_ID` / `WORKER_URL` / `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` and the OAuth set
-  (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `SESSION_ENCRYPT_KEY`,
-  `ALLOWED_EMAILS`/`ALLOWED_DOMAINS`) — **required for `web`/`both`**, and not read by `worker`.
-  The caller SA is the one Cloud Tasks is told to mint an OIDC token *as*; the worker's
-  `ALLOWED_TASK_SERVICE_ACCOUNTS` is the receiving end of the same pair. `SESSION_ENCRYPT_KEY`
-  must be 16/24/32 bytes (AES) and `SESSION_SECRET` at least 16 — the first is checked in
-  `validateWebConfig`, the second by `gcp-kit/auth` when the handler is built.
+  (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAILS`/`ALLOWED_DOMAINS`) —
+  **required for `web`/`both`**, and not read by `worker`. The caller SA is the one Cloud Tasks
+  is told to mint an OIDC token *as*; the worker's `ALLOWED_TASK_SERVICE_ACCOUNTS` is the
+  receiving end of the same pair.
+- **There are no session keys.** The session lives in Firestore and the cookie carries an opaque
+  ID, so nothing is signed or encrypted client-side. `SESSION_FIRESTORE_DATABASE` (default
+  `sessions`) must name a **different database from the job-status one** — a database name is an
+  identifier and cannot be changed later, so sharing leaves one of the two named after the wrong
+  thing. The infrastructure owes this database a TTL policy on `expiresAt`; unlike a cookie, a
+  stored session does not expire itself.
 - `GCP_LOCATION_ID` — the **Cloud Tasks queue region** (`asia-northeast1`), *not* the Vertex AI
   endpoint. Vertex is pinned to `global` in `adapters.defaultVertexLocationID`, the same split the
   siblings make; feeding the queue region to Vertex points it at an endpoint that does not exist.

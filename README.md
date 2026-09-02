@@ -44,8 +44,7 @@ Web 記事や GCS 上の文書を読み込み、Gemini に**話者とスタイ�
 | `WORKER_URL` | worker **サービス**の URL。パスは含めません |
 | `TASK_CALLER_SERVICE_ACCOUNT_EMAIL` | タスクに載せる caller SA。**トークンを発行するのは Cloud Tasks** であって、このプロセスが署名するわけではありません。 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth のクライアント。 |
-| `SESSION_SECRET` | セッションの署名鍵。**16バイト以上**。 |
-| `SESSION_ENCRYPT_KEY` | セッションの暗号化鍵。AES の要件で **16 / 24 / 32 バイト**のいずれか。 |
+| `SESSION_FIRESTORE_DATABASE` / `SESSION_FIRESTORE_COLLECTION` | セッションを置く Firestore（既定はどちらも `sessions`）。**ジョブ状態用とは別のデータベースを指します** |
 | `ALLOWED_EMAILS` / `ALLOWED_DOMAINS` | ログインを許可する相手（カンマ区切り）。**どちらも空だと起動しません。** |
 | `ALLOWED_M2M_SERVICE_ACCOUNTS` | `/api/*` を機械（MCP サーバーなど）から叩くときに許可する SA（カンマ区切り）。**任意** — 空なら M2M 検証は常に失敗し、すべてセッション認証に落ちます。 |
 

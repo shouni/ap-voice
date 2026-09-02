@@ -14,8 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-utils/jobid"
 
@@ -46,20 +45,20 @@ type Repository struct {
 }
 
 // statusStore は Repository がジョブ状態に対して行う操作です。
-// *jobfirestore.Store[domain.JobStatus] がそのまま満たします。
+// *jobstatus.Store[domain.JobStatus] がそのまま満たします。
 type statusStore interface {
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
 	Save(ctx context.Context, jobID string, status domain.JobStatus) error
 	Delete(ctx context.Context, jobID string) error
-	List(ctx context.Context, page, perPage int, opts ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error)
+	List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]domain.JobStatus, jobstatus.PageMeta, error)
 }
 
-// Get は、ジョブの状態を読みます。jobfirestore.StatusStore を満たします。
+// Get は、ジョブの状態を読みます。jobstatus.StatusStore を満たします。
 func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, error) {
 	return r.status.Get(ctx, jobID)
 }
 
-// Save は、ジョブの状態を書きます。jobfirestore.StatusStore を満たします。
+// Save は、ジョブの状態を書きます。jobstatus.StatusStore を満たします。
 //
 // Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。
 // 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
@@ -90,7 +89,7 @@ func NewRepository(store remoteio.Store, bucket string, firestore *firestore.Cli
 	scoped := store.Sub(remoteio.BuildURI(remoteio.SchemeGCS, bucket, ""))
 	return &Repository{
 		store: scoped, layout: layout,
-		status: jobfirestore.NewStore[domain.JobStatus](firestore, statusCollection),
+		status: jobstatus.NewStore[domain.JobStatus](firestore, statusCollection),
 	}, nil
 }
 
@@ -132,7 +131,7 @@ func (r *Repository) refreshTitle(ctx context.Context, jobID, title string) {
 	status, err := r.status.Get(ctx, jobID)
 	if err != nil {
 		// 未記録なら追随させるものがありません。記録前の台本編集で起こります。
-		if !errors.Is(err, jobfirestore.ErrNotFound) {
+		if !errors.Is(err, jobstatus.ErrNotFound) {
 			slog.WarnContext(ctx, "題名の追随のためのジョブ状態を読めませんでした",
 				"job_id", jobID, "error", err)
 		}
@@ -222,23 +221,23 @@ type Job struct {
 	HasAudio bool
 	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
 	// 見分けられません。記録には最初から入っていた値で、一覧が読まずに捨てていました。
-	State jobfirestore.State
+	State jobstatus.State
 	// Error は失敗理由です。State が failed のときだけ入ります。
 	Error string
 }
 
 // List は、指定ページのジョブを新しい順に返します。絞り込みは呼び出し側が決めます
-// （jobfirestore.WithState など）。ここで絞り込みの語彙を作り直すと、ライブラリが
+// （jobstatus.WithState など）。ここで絞り込みの語彙を作り直すと、ライブラリが
 // 既に持っているものが 2 つになります。
 //
 // 成果物を一切読みません。以前はバケット配下を全走査してジョブ ID と音声の
 // 有無を集め、ページ分の台本を並行に読んで題名を得ていました。ジョブが増えるほど
 // 走査が伸び、件数に上限がありません。いまは 1 ページ分をクエリで取り、必要な
 // 3 つの値（題名・音声の有無・作成時刻）をすべて状態から導きます。
-func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobfirestore.ListOption) ([]Job, jobfirestore.PageMeta, error) {
+func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]Job, jobstatus.PageMeta, error) {
 	statuses, meta, err := r.status.List(ctx, page, perPage, opts...)
 	if err != nil {
-		return nil, jobfirestore.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
+		return nil, jobstatus.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
 	}
 
 	jobs := make([]Job, 0, len(statuses))
@@ -323,7 +322,7 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 // 消せなければ何も起きていないためです。
 func (r *Repository) deleteRecord(ctx context.Context, jobID string) error {
 	if _, err := r.status.Get(ctx, jobID); err != nil {
-		if errors.Is(err, jobfirestore.ErrNotFound) {
+		if errors.Is(err, jobstatus.ErrNotFound) {
 			return fmt.Errorf("ジョブが見つかりません (%s): %w", jobID, ErrJobNotFound)
 		}
 		return fmt.Errorf("ジョブ状態の確認に失敗しました (%s): %w", jobID, err)

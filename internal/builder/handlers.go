@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-
 	"net/url"
 
 	"github.com/shouni/gcp-kit/auth/oidc"
@@ -95,7 +94,7 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 
 // buildWebHandlers は Web 面（OAuth と投入フォーム）のハンドラーを組み立てます。
 func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
-	authHandler, err := createAuthHandler(appCtx.Config)
+	authHandler, err := createAuthHandler(appCtx.Config, appCtx.SessionStore)
 	if err != nil {
 		return fmt.Errorf("認証ハンドラーの初期化に失敗しました: %w", err)
 	}
@@ -147,22 +146,21 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 }
 
 // createAuthHandler は、Google OAuth の認証ハンドラーを初期化します。
-func createAuthHandler(cfg *config.Config) (*session.Handler, error) {
+func createAuthHandler(cfg *config.Config, store session.Store) (*session.Handler, error) {
 	redirectURL, err := url.JoinPath(cfg.Server.ServiceURL, "/auth/callback")
 	if err != nil {
 		return nil, fmt.Errorf("リダイレクトURLの構築に失敗しました: %w", err)
 	}
 
 	return session.New(session.Config{
-		ClientID:          cfg.Auth.GoogleClientID,
-		ClientSecret:      cfg.Auth.GoogleClientSecret,
-		RedirectURL:       redirectURL,
-		SessionAuthKey:    cfg.Auth.SessionSecret,
-		SessionEncryptKey: cfg.Auth.SessionEncryptKey,
-		SessionName:       defaultSessionName,
-		IsSecureCookie:    securenet.IsSecureServiceURL(cfg.Server.ServiceURL),
-		AllowedEmails:     cfg.Auth.AllowedEmails,
-		AllowedDomains:    cfg.Auth.AllowedDomains,
+		ClientID:       cfg.Auth.GoogleClientID,
+		ClientSecret:   cfg.Auth.GoogleClientSecret,
+		RedirectURL:    redirectURL,
+		Store:          store,
+		SessionName:    defaultSessionName,
+		IsSecureCookie: securenet.IsSecureServiceURL(cfg.Server.ServiceURL),
+		AllowedEmails:  cfg.Auth.AllowedEmails,
+		AllowedDomains: cfg.Auth.AllowedDomains,
 	},
 		// このアプリだけ /auth/logout を公開しています。prompt を渡さないと、
 		// ログアウト直後にログイン画面へ送られた時点で Google が何も聞かずに承認を返し、

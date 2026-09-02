@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
@@ -43,7 +43,7 @@ func pageParam(r *http.Request) int {
 type historyView struct {
 	baseView
 	Jobs []repository.Job
-	Page jobfirestore.PageMeta
+	Page jobstatus.PageMeta
 	// Filter は絞り込み中の状態です（空なら全件）。ページ送りのリンクに
 	// 引き継がないと、2 ページ目で絞り込みが外れます。
 	Filter string
@@ -51,14 +51,14 @@ type historyView struct {
 
 // listableStates は ?state= に指定できる値です。
 //
-// jobfirestore の語彙をそのまま使います。ここで独自の綴りを作ると、記録に
+// jobstatus の語彙をそのまま使います。ここで独自の綴りを作ると、記録に
 // 書かれている値と画面が受け付ける値が別物になります。
 func listableStates() []string {
 	return []string{
-		string(jobfirestore.StateQueued),
-		string(jobfirestore.StateRunning),
-		string(jobfirestore.StateSucceeded),
-		string(jobfirestore.StateFailed),
+		string(jobstatus.StateQueued),
+		string(jobstatus.StateRunning),
+		string(jobstatus.StateSucceeded),
+		string(jobstatus.StateFailed),
 	}
 }
 
@@ -66,7 +66,7 @@ func listableStates() []string {
 //
 // page と違って黙って無視しません。打ち間違えた絞り込みが全件を返すと、
 // 「失敗したジョブは無い」と読めてしまいます。
-func stateParam(r *http.Request) (jobfirestore.State, bool) {
+func stateParam(r *http.Request) (jobstatus.State, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get("state"))
 	if value == "" {
 		return "", true
@@ -74,7 +74,7 @@ func stateParam(r *http.Request) (jobfirestore.State, bool) {
 	if !slices.Contains(listableStates(), value) {
 		return "", false
 	}
-	return jobfirestore.State(value), true
+	return jobstatus.State(value), true
 }
 
 // detailView は詳細画面に渡す値です。
@@ -89,7 +89,7 @@ type detailView struct {
 	HasScript bool
 	// State は記録された進行状態（queued / running / succeeded / failed）です。
 	// 記録が読めなければ空になり、画面は状態の欄を出しません。
-	State jobfirestore.State
+	State jobstatus.State
 	// JobError は記録された失敗理由です。State が failed のときだけ入ります。
 	// 画面の Error（この操作の失敗）とは別物なので名前を分けています。
 	JobError string
@@ -186,7 +186,7 @@ func (h *Handler) Regenerate(w http.ResponseWriter, r *http.Request) {
 
 	status, err := h.repo.Get(r.Context(), jobID)
 	if err != nil {
-		if errors.Is(err, jobfirestore.ErrNotFound) {
+		if errors.Is(err, jobstatus.ErrNotFound) {
 			h.renderDetail(w, r, jobID, http.StatusNotFound, "", "このジョブの記録が無いため、作り直せません。")
 			return
 		}
@@ -282,10 +282,10 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 // 読めなくても画面は描きます。状態は成果物ではないので、記録が無い（状態機能より
 // 前のジョブ）ことも、一時的に読めないこともあります。そこで画面ごと止めると、
 // 台本を直すという本来の用が状態の都合で果たせなくなります。
-func (h *Handler) jobState(r *http.Request, jobID string) (jobfirestore.State, string, string) {
+func (h *Handler) jobState(r *http.Request, jobID string) (jobstatus.State, string, string) {
 	status, err := h.repo.Get(r.Context(), jobID)
 	if err != nil {
-		if !errors.Is(err, jobfirestore.ErrNotFound) {
+		if !errors.Is(err, jobstatus.ErrNotFound) {
 			slog.WarnContext(r.Context(), "ジョブ状態を読めませんでした", "job_id", jobID, "error", err)
 		}
 		return "", "", ""

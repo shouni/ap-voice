@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -184,7 +184,7 @@ func TestAPIUpdateScriptRejectsBadJobID(t *testing.T) {
 	}
 }
 
-// recordingStore は、保存の順序を記録する jobfirestore.StatusStore です。
+// recordingStore は、保存の順序を記録する jobstatus.StatusStore です。
 type recordingStore struct {
 	order *[]string
 	// saved は最後に書かれた状態です。中身まで見たいテストだけが渡します。
@@ -225,7 +225,7 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	var order []string
 	var saved domain.JobStatus
 	h := apiHandler(t, &savingRepo{})
-	h.status = jobfirestore.NewRecorder[domain.JobStatus](recordingStore{order: &order, saved: &saved})
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order, saved: &saved})
 	h.queue = recordingQueue{order: &order}
 
 	req := httptest.NewRequest("POST", "/api/jobs",
@@ -245,8 +245,8 @@ func TestAPIEnqueueRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body["status"] != string(jobfirestore.StateQueued) {
-		t.Errorf("status = %q, want %q", body["status"], jobfirestore.StateQueued)
+	if body["status"] != string(jobstatus.StateQueued) {
+		t.Errorf("status = %q, want %q", body["status"], jobstatus.StateQueued)
 	}
 	if body["job_id"] == "" {
 		t.Error("job_id が空です")
@@ -380,7 +380,7 @@ func TestAPIEnqueueCreatesJobFromSuppliedScript(t *testing.T) {
 	var order []string
 	repo := &savingRepo{}
 	h := apiHandler(t, repo)
-	h.status = jobfirestore.NewRecorder[domain.JobStatus](recordingStore{order: &order})
+	h.status = jobstatus.NewRecorder[domain.JobStatus](recordingStore{order: &order})
 	h.queue = recordingQueue{order: &order}
 
 	rec := postJSON(t, h.APIEnqueue, "/api/jobs", `{

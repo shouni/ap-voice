@@ -1,10 +1,10 @@
 package domain
 
-import "github.com/shouni/go-job-firestore/jobfirestore"
+import "github.com/shouni/gcp-kit/jobstatus"
 
 // JobStatus は、ジョブの進行状況に ap-voice の成果物の在り処を足した型です。
 //
-// go-job-firestore の Status は成果物の場所を持ちません。単一 URI・出力ディレクトリ・
+// gcp-kit の Status は成果物の場所を持ちません。単一 URI・出力ディレクトリ・
 // 複数 URI とサービスごとに形が違うため、埋め込んだ型を利用側が定義する決まりです。
 // 埋め込みは Firestore でも JSON でもフラットに展開されるので、ドキュメントと
 // レスポンス JSON は同じ形になります。
@@ -15,7 +15,7 @@ import "github.com/shouni/go-job-firestore/jobfirestore"
 // これが無いと「できた」としか言えません。状態だけ見ても音声の在り処が
 // 分からず、投入した側は成果物へ辿り着けません。
 type JobStatus struct {
-	jobfirestore.Status
+	jobstatus.Status
 	// AudioURI は音声の保存先（gs://）です。合成が完了したジョブにだけ入ります。
 	//
 	// 署名付き URL はここに置きません。1 時間で切れるうえ発行に計算が要るので、
@@ -84,7 +84,7 @@ func (s *JobStatus) CarryFrom(prev *JobStatus) {
 // 書き、どちらも毎回リクエストから組み立て直します。組み立てが 2 箇所にあると、
 // 残すべき値を足したときに片方だけが残す状態になり、そのときだけ値が消えます。
 // 引き継ぎ（CarryFrom）と対で、ここが「リクエストから分かること」の唯一の定義です。
-func NewJobStatus(req Request, state jobfirestore.State) JobStatus {
+func NewJobStatus(req Request, state jobstatus.State) JobStatus {
 	return JobStatus{
 		JobID:    req.JobID,
 		Command:  string(req.Command),

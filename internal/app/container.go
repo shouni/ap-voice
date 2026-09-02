@@ -5,15 +5,15 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/shouni/ap-voice/internal/adapters"
-	"github.com/shouni/ap-voice/internal/config"
-	"github.com/shouni/ap-voice/internal/domain"
-
+	"github.com/shouni/gcp-kit/auth/session"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-http-kit/httpkit"
-	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
 
+	"github.com/shouni/ap-voice/internal/adapters"
+	"github.com/shouni/ap-voice/internal/config"
+	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
@@ -36,6 +36,8 @@ type Container struct {
 	Prompt *adapters.PromptAdapter
 	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。
 	TaskQueue domain.TaskQueue
+	// SessionStore はログインセッションの保存先です。
+	SessionStore session.Store
 	// Repository は成果物の読み出しです。履歴の表示と、保存済み台本からの合成に使います。
 	Repository *repository.Repository
 	// External Adapters
@@ -43,7 +45,7 @@ type Container struct {
 	Notifier   domain.Notifier
 	// JobStatus はジョブの進行状況を記録します。Web 面が queued を、
 	// Worker 面が running / succeeded / failed を書きます。
-	JobStatus *jobfirestore.Recorder[domain.JobStatus]
+	JobStatus *jobstatus.Recorder[domain.JobStatus]
 	// Business Logic
 	Pipeline domain.Pipeline
 	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。

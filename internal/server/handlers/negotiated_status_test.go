@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -33,7 +33,7 @@ func getJobStatus(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 func TestJobStatusNotRecordedIs404(t *testing.T) {
 	t.Parallel()
 
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobfirestore.ErrNotFound)})
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobstatus.ErrNotFound)})
 	if rec := getJobStatus(t, h); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
 	}
@@ -45,7 +45,7 @@ func TestJobStatusNotRecordedIs404(t *testing.T) {
 func TestJobStatusUnreadableIsNot404(t *testing.T) {
 	t.Parallel()
 
-	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobfirestore.ErrUnavailable)})
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobstatus.ErrUnavailable)})
 	rec := getJobStatus(t, h)
 	if rec.Code == http.StatusNotFound {
 		t.Fatalf("status = 404: 読めないだけのジョブを未記録と答えている: %s", rec.Body.String())
@@ -55,12 +55,12 @@ func TestJobStatusUnreadableIsNot404(t *testing.T) {
 	}
 }
 
-// 読めたら 200 で jobfirestore.Status のフラットな形のまま返すこと。
+// 読めたら 200 で jobstatus.Status のフラットな形のまま返すこと。
 func TestJobStatusReturnsRecord(t *testing.T) {
 	t.Parallel()
 
 	h := apiHandler(t, &statusRepo{status: domain.JobStatus{
-		State:    jobfirestore.StateRunning,
+		State:    jobstatus.StateRunning,
 		AudioURI: "gs://test/voice/x/audio.wav",
 	}})
 	rec := getJobStatus(t, h)
@@ -72,7 +72,7 @@ func TestJobStatusReturnsRecord(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("応答が JSON ではない: %v", err)
 	}
-	if got["state"] != string(jobfirestore.StateRunning) {
+	if got["state"] != string(jobstatus.StateRunning) {
 		t.Errorf("state = %v, want running", got["state"])
 	}
 	if got["audio_uri"] != "gs://test/voice/x/audio.wav" {

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/internal/repository"
 )
@@ -102,10 +102,10 @@ type listingRepo struct {
 	opts    int
 }
 
-func (r *listingRepo) List(_ context.Context, _, perPage int, opts ...jobfirestore.ListOption) ([]repository.Job, jobfirestore.PageMeta, error) {
+func (r *listingRepo) List(_ context.Context, _, perPage int, opts ...jobstatus.ListOption) ([]repository.Job, jobstatus.PageMeta, error) {
 	r.perPage = perPage
 	r.opts = len(opts)
-	return nil, jobfirestore.PageMeta{}, nil
+	return nil, jobstatus.PageMeta{}, nil
 }
 
 // TestJobsCapsPerPage は、?per_page= が上限で頭打ちになることを検証します。

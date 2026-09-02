@@ -77,18 +77,11 @@ func (c *Config) validateWebConfig() error {
 		return fmt.Errorf("TASK_CALLER_SERVICE_ACCOUNT_EMAIL が設定されていません")
 	}
 
-	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" || c.Auth.SessionSecret == "" {
-		return fmt.Errorf("OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SECRET）が不足しています")
+	if c.Auth.GoogleClientID == "" || c.Auth.GoogleClientSecret == "" {
+		return fmt.Errorf("OAuth 関連の設定（GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET）が不足しています")
 	}
 	if len(c.Auth.AllowedEmails) == 0 && len(c.Auth.AllowedDomains) == 0 {
 		return fmt.Errorf("許可されたメールアドレスまたはドメインが一つも設定されていません（認可リストが空です）")
-	}
-	if c.Auth.SessionEncryptKey == "" {
-		return fmt.Errorf("SESSION_ENCRYPT_KEY が設定されていません")
-	}
-	// AES の要件。長さが違うとセッションの暗号化に失敗します。
-	if n := len(c.Auth.SessionEncryptKey); n != 16 && n != 24 && n != 32 {
-		return fmt.Errorf("SESSION_ENCRYPT_KEY の長さが不正です (%d バイト)。16, 24, 32 のいずれかにしてください", n)
 	}
 
 	return nil

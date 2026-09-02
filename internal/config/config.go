@@ -223,12 +223,17 @@ type StorageConfig struct {
 
 // AuthConfig は認証と認可の設定です。Web 面だけが読みます。
 type AuthConfig struct {
-	GoogleClientID     string   `env:"GOOGLE_CLIENT_ID"`
-	GoogleClientSecret string   `env:"GOOGLE_CLIENT_SECRET"`
-	SessionSecret      string   `env:"SESSION_SECRET"`
-	SessionEncryptKey  string   `env:"SESSION_ENCRYPT_KEY"`
-	AllowedEmails      []string `env:"ALLOWED_EMAILS"`
-	AllowedDomains     []string `env:"ALLOWED_DOMAINS"`
+	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
+	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
+	// SessionDatabase は、セッションを置く Firestore データベースです。
+	//
+	// ジョブ状態用とは別に取ります。データベース名は識別子で後から変えられないため、
+	// 兼ねると片方で名前が実態と合わなくなります。
+	SessionDatabase string `env:"SESSION_FIRESTORE_DATABASE" envDefault:"sessions"`
+	// SessionCollection は、セッションを置くコレクションです。
+	SessionCollection string   `env:"SESSION_FIRESTORE_COLLECTION" envDefault:"sessions"`
+	AllowedEmails     []string `env:"ALLOWED_EMAILS"`
+	AllowedDomains    []string `env:"ALLOWED_DOMAINS"`
 
 	// AllowedM2MServiceAccounts は、ブラウザではなく機械が /api を叩くときに
 	// 許可するサービスアカウントです（MCP サーバーなど）。

@@ -293,7 +293,6 @@ func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 		{name: "投入先", missing: "WORKER_URL", wantIn: "WORKER_URL"},
 		{name: "caller SA", missing: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL", wantIn: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL"},
 		{name: "OAuth クライアント", missing: "GOOGLE_CLIENT_ID", wantIn: "GOOGLE_CLIENT_ID"},
-		{name: "セッション鍵", missing: "SESSION_ENCRYPT_KEY", wantIn: "SESSION_ENCRYPT_KEY"},
 		{name: "許可リスト", missing: "ALLOWED_EMAILS", wantIn: "許可された"},
 	} {
 		t.Run(tt.name+"が無いと落ちる", func(t *testing.T) {
@@ -308,14 +307,6 @@ func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 			}
 		})
 	}
-
-	// セッション鍵は AES の要件で長さが決まっています。
-	t.Run("セッション鍵の長さが不正なら落ちる", func(t *testing.T) {
-		cfg := loadFor(t, webEnv(map[string]string{"SESSION_ENCRYPT_KEY": "みじかい"}))
-		if err := cfg.ValidateEssentialConfig(); err == nil {
-			t.Fatal("不正な長さの鍵が素通りした")
-		}
-	})
 
 	// worker 面は上記をどれも要求しません。
 	t.Run("worker は Web 面の設定を要求しない", func(t *testing.T) {
