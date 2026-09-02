@@ -7,11 +7,14 @@ import (
 	"io"
 	"log/slog"
 
+	"cloud.google.com/go/firestore"
+	"github.com/shouni/gcp-kit/auth/session"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/gcp-kit/tasks"
 	"github.com/shouni/go-http-kit/httpkit"
-	"github.com/shouni/go-job-firestore/jobfirestore"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 	"github.com/shouni/go-voicevox/speaker"
+	"github.com/shouni/netarmor/securenet"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/adapters"
@@ -50,9 +53,9 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	// ジョブ状態の置き場。成果物は GCS のまま、状態だけを Firestore に持ちます。
 	// 両ロールで要ります— web は queued を書いて履歴を読み、worker は
 	// running / succeeded / failed を書いて再実行ガードのために読みます。
-	jobStatus, err := jobfirestore.New(ctx,
-		jobfirestore.WithProjectID(cfg.GCP.ProjectID),
-		jobfirestore.WithDatabase(cfg.Storage.FirestoreDatabase),
+	jobStatus, err := jobstatus.New(ctx,
+		jobstatus.WithProjectID(cfg.GCP.ProjectID),
+		jobstatus.WithDatabase(cfg.Storage.FirestoreDatabase),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("firestore の初期化に失敗しました: %w", err)
@@ -100,7 +103,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	appCtx := &app.Container{
 		Config: cfg,
 		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
-		JobStatus:  jobfirestore.NewRecorder[domain.JobStatus](repo),
+		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](repo),
 		Speakers:   speakers,
 		Prompt:     prompt,
 		Repository: repo,
@@ -116,6 +119,27 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで
 	// 未使用の Cloud Tasks クライアントと CLOUD_TASKS_QUEUE_ID への依存を持たずに済みます。
+	// セッションはジョブ状態とは別のデータベースに置きます（SessionDatabase）。
+	var sessionStore session.Store
+	if cfg.Server.Role.ServesWeb() {
+		fsClient, fsErr := firestore.NewClientWithDatabase(ctx, cfg.GCP.ProjectID, cfg.Auth.SessionDatabase)
+		if fsErr != nil {
+			return nil, fmt.Errorf("セッション用 Firestore の初期化に失敗しました: %w", fsErr)
+		}
+		resources = append(resources, fsClient)
+		appCtx.Closers = append(appCtx.Closers, fsClient)
+
+		sessionStore, fsErr = session.NewFirestoreStore(session.FirestoreConfig{
+			Client:      fsClient,
+			Collection:  cfg.Auth.SessionCollection,
+			StoreConfig: session.StoreConfig{Secure: securenet.IsSecureServiceURL(cfg.Server.ServiceURL)},
+		})
+		if fsErr != nil {
+			return nil, fmt.Errorf("セッションストアの構築に失敗しました: %w", fsErr)
+		}
+		appCtx.SessionStore = sessionStore
+	}
+
 	if cfg.Server.Role.ServesWeb() {
 		taskURL, wErr := domain.WorkerTaskURL(cfg.Tasks.WorkerURL)
 		if wErr != nil {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/domain"
@@ -113,17 +113,17 @@ func TestTemplatesRender(t *testing.T) {
 			template: "history.html",
 			view: historyView{
 				baseView: testBaseView("/history"),
-				Page:     jobfirestore.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
+				Page:     jobstatus.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
 				Filter:   "failed",
 				Jobs: []repository.Job{
 					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true,
-						State: jobfirestore.StateSucceeded},
+						State: jobstatus.StateSucceeded},
 					// 台本が読めなかった場合はジョブ ID が題名に入ります。
 					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false,
-						State: jobfirestore.StateFailed},
+						State: jobstatus.StateFailed},
 					// 実行中は「台本のみ」と見分けが付かなければなりません。
 					{ID: "voice-3", Title: "実行中のジョブ", CreatedAt: time.Now(),
-						State: jobfirestore.StateRunning},
+						State: jobstatus.StateRunning},
 				},
 			},
 			want: []string{
@@ -148,7 +148,7 @@ func TestTemplatesRender(t *testing.T) {
 				Script:     script,
 				HasScript:  true,
 				HasAudio:   true,
-				State:      jobfirestore.StateSucceeded,
+				State:      jobstatus.StateSucceeded,
 				MaxLines:   maxScriptLines,
 				Speakers:   []string{"ずんだもん", "四国めたん"},
 				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
@@ -203,7 +203,7 @@ func TestTemplatesRender(t *testing.T) {
 			view: detailView{
 				baseView: testBaseView("/history/voice-3"),
 				JobID:    "voice-3",
-				State:    jobfirestore.StateFailed,
+				State:    jobstatus.StateFailed,
 				JobError: "AIモデルが空のスクリプトを返しました",
 				InputURI: "https://example.com/article",
 				Speakers: []string{"ずんだもん"},

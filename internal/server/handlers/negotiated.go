@@ -8,10 +8,11 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
 
+	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
@@ -63,9 +64,9 @@ func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var opts []jobfirestore.ListOption
+	var opts []jobstatus.ListOption
 	if state != "" {
-		opts = append(opts, jobfirestore.WithState(state))
+		opts = append(opts, jobstatus.WithState(state))
 	}
 
 	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage, opts...)
@@ -167,7 +168,7 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	switch {
-	case errors.Is(err, repository.ErrScriptNotFound):
+	case errors.Is(err, domain.ErrScriptNotFound):
 		respond.Error(w, r, http.StatusNotFound, "台本が見つかりません")
 		return
 	case err != nil:
@@ -216,8 +217,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 // JobStatus は、ジョブの進行状況を返します。
 //
 // 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
-// まだ動いているのか失敗したのかを区別できません。書式は go-job-firestore の
-// jobfirestore.Status で、姉妹サービスと同じ形です。
+// まだ動いているのか失敗したのかを区別できません。書式は gcp-kit の
+// jobstatus.Status で、姉妹サービスと同じ形です。
 //
 // 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
 // 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
@@ -236,7 +237,7 @@ func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
 
 	status, err := h.repo.Get(r.Context(), jobID)
 	switch {
-	case errors.Is(err, jobfirestore.ErrNotFound):
+	case errors.Is(err, jobstatus.ErrNotFound):
 		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
 		return
 	case err != nil:

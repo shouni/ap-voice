@@ -111,8 +111,6 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/google/gofuzz v1.2.0 h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=
-github.com/google/gofuzz v1.2.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/martian/v3 v3.3.3 h1:DIhPTQrbPkgs2yJYdXU/eNACCG5DVQjySNRNlflZ9Fc=
 github.com/google/martian/v3 v3.3.3/go.mod h1:iEPrYcgCF7jA9OtScMFQyAlZZ4YXTKEtJ1E6RWzmBA0=
 github.com/google/renameio/v2 v2.0.2 h1:qKZs+tfn+arruZZhQ7TKC/ergJunuJicWS6gLDt/dGw=
@@ -129,10 +127,6 @@ github.com/gorilla/handlers v1.5.2 h1:cLTUSsNkgcwhgRqvCNmdbRWG0A3N4F+M2nWKdScwyE
 github.com/gorilla/handlers v1.5.2/go.mod h1:dX+xVpaxdSw+q0Qek8SSsl3dfMk3jNddUkMzo0GtH0w=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
-github.com/gorilla/securecookie v1.1.2 h1:YCIWL56dvtr73r6715mJs5ZvhtnY73hBvEF8kXD8ePA=
-github.com/gorilla/securecookie v1.1.2/go.mod h1:NfCASbcHqRSY+3a8tlWJwsQap2VX5pwzwo4h3eOamfo=
-github.com/gorilla/sessions v1.4.0 h1:kpIYOp/oi6MG/p5PgxApU8srsSw9tuFbt46Lt7auzqQ=
-github.com/gorilla/sessions v1.4.0/go.mod h1:FLWm50oby91+hl7p/wRxDth9bWSuk0qVL2emc7lT5ik=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/ikawaha/kagome-dict v1.1.7 h1:O/uAL+WCGhp6kT0+szxBSPaSM4i+vdArSefFvJE4Nug=
@@ -153,14 +147,12 @@ github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46/go.mod h1:uAQ5PCi+MFsC7HjREoAz1BU+Mq60+05gifQSsHSDG/8=
 github.com/shouni/audio v1.4.0 h1:FEU/cwvzr/rTlSuXLvTif3KryqPMGZHrJJ7CpqoUoLc=
 github.com/shouni/audio v1.4.0/go.mod h1:VOSXgko/HpXPB6Yf7+IQQ87c+S55gjIsOuOJAj6m3iE=
-github.com/shouni/gcp-kit v1.14.1 h1:LEYPqgA6O05KsMCoSg/IfnQ7hrUKyWgsfxRvPcuoiI8=
-github.com/shouni/gcp-kit v1.14.1/go.mod h1:0C6yAgPULN2Ev0RCOOTs+HLU7+9Yl6l/+MzKjpu6l54=
+github.com/shouni/gcp-kit v1.15.0 h1:j4zxqTVOeqdaH/3Z2Av4+ZSBsiy7csVe/foiuIEBOhk=
+github.com/shouni/gcp-kit v1.15.0/go.mod h1:zF23oHnhYo3dBX9s9g5UEMPSiA0pIttcGF6Mi0+LrDY=
 github.com/shouni/genai-kit v1.0.1 h1:uwZiMKp+bIYIOStpmUNd4JIVylgUDu81WTWkkIjK6sE=
 github.com/shouni/genai-kit v1.0.1/go.mod h1:93RD8PTxteOyOTfXrEdAaXx7Vg2YwOcLhnvcovV3KKE=
 github.com/shouni/go-http-kit v1.11.0 h1:IrCkC+yxpX7AMPIHNPsVySeu5Lgzngnxuge9TB/qtCQ=
 github.com/shouni/go-http-kit v1.11.0/go.mod h1:rk5iB0MB/Z3cnMGrQlTubCoDA+QUFHGMF7g7PA7ArQo=
-github.com/shouni/go-job-firestore v1.2.1 h1:k3YwF+0RQVRFunztEf/VZ8rtnNdLAoFyIc7J6NUuUWw=
-github.com/shouni/go-job-firestore v1.2.1/go.mod h1:12oCOhGT4gW+JScIysDjQuNHtk6v97zTGgv0BaGZ4f8=
 github.com/shouni/go-notify v1.4.0 h1:bQFOhgX1NWmkywdylwLchNJL+sYe1RO7lNjFrATdNEQ=
 github.com/shouni/go-notify v1.4.0/go.mod h1:7gHETk05PvFztvkjBYZNUWfDJb5UUVRmv1XPgh4Js9U=
 github.com/shouni/go-prompt-kit v1.7.0 h1:uOma6R5jJh1ywy0TepXnRSRYtGX41B3/tN7su7E4vcs=

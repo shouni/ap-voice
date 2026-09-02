@@ -10,10 +10,9 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 
 	"github.com/shouni/ap-voice/internal/domain"
-	"github.com/shouni/ap-voice/internal/repository"
 )
 
 // storedScriptRepo は、保存済みの台本を返すフェイクです。
@@ -34,7 +33,7 @@ type stateOnlyRepo struct {
 }
 
 func (r *stateOnlyRepo) Load(context.Context, string) (domain.Script, error) {
-	return domain.Script{}, fmt.Errorf("台本がまだありません: %w", repository.ErrScriptNotFound)
+	return domain.Script{}, fmt.Errorf("台本がまだありません: %w", domain.ErrScriptNotFound)
 }
 
 func (r *stateOnlyRepo) HasAudio(context.Context, string) (bool, error) { return false, nil }
@@ -64,7 +63,7 @@ func TestDetailOpensWithoutAScript(t *testing.T) {
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	h := detailHandler(t, &stateOnlyRepo{status: domain.JobStatus{
 		JobID: jobID,
-		State: jobfirestore.StateFailed,
+		State: jobstatus.StateFailed,
 		Error: "AIモデルが空のスクリプトを返しました",
 	}})
 
@@ -162,7 +161,7 @@ func TestRegenerateReusesTheRecordedInput(t *testing.T) {
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	repo := &stateOnlyRepo{status: domain.JobStatus{
 		JobID:    jobID,
-		State:    jobfirestore.StateFailed,
+		State:    jobstatus.StateFailed,
 		Error:    "AIモデルが空のスクリプトを返しました",
 		InputURI: "https://example.com/article",
 		Mode:     "tech_solo",
@@ -206,7 +205,7 @@ func TestRegenerateRefusesWithoutAnInput(t *testing.T) {
 	t.Parallel()
 
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
-	repo := &stateOnlyRepo{status: domain.JobStatus{JobID: jobID, State: jobfirestore.StateSucceeded}}
+	repo := &stateOnlyRepo{status: domain.JobStatus{JobID: jobID, State: jobstatus.StateSucceeded}}
 	queue := &capturingQueue{}
 	h := detailHandler(t, repo)
 	h.queue = queue

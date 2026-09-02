@@ -3,7 +3,7 @@ package domain
 import (
 	"testing"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 )
 
 // TestCarryFromKeepsWhatARebuildCannotKnow は、後から組み立て直しても分からない
@@ -29,7 +29,7 @@ func TestCarryFromKeepsWhatARebuildCannotKnow(t *testing.T) {
 		Command:   CommandSynthesize,
 		JobID:     "job-1",
 		OutputURI: "gs://bucket/voice/job-1/audio.wav",
-	}, jobfirestore.StateRunning)
+	}, jobstatus.StateRunning)
 	next.CarryFrom(prev)
 
 	if next.Mode != prev.Mode {
@@ -59,7 +59,7 @@ func TestCarryFromDoesNotOverwriteWhatIsKnownNow(t *testing.T) {
 		InputURI: "https://example.com/new",
 		Mode:     "news_anchor",
 		AIModel:  "gemini-new",
-	}, jobfirestore.StateRunning)
+	}, jobstatus.StateRunning)
 	next.CarryFrom(&JobStatus{
 		Mode:     "tech_solo",
 		InputURI: "https://example.com/old",
@@ -76,10 +76,10 @@ func TestCarryFromDoesNotOverwriteWhatIsKnownNow(t *testing.T) {
 func TestCarryFromToleratesNoPreviousRecord(t *testing.T) {
 	t.Parallel()
 
-	next := NewJobStatus(Request{Command: CommandGenerate, JobID: "job-1"}, jobfirestore.StateQueued)
+	next := NewJobStatus(Request{Command: CommandGenerate, JobID: "job-1"}, jobstatus.StateQueued)
 	next.CarryFrom(nil)
 
-	if next.JobID != "job-1" || next.State != jobfirestore.StateQueued {
+	if next.JobID != "job-1" || next.State != jobstatus.StateQueued {
 		t.Errorf("記録が壊れました: %+v", next)
 	}
 }

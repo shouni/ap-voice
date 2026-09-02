@@ -2,12 +2,14 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/pprof"
 	"time"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
+	"github.com/shouni/gcp-kit/worker"
 
 	"github.com/shouni/ap-voice/internal/domain"
 )
@@ -20,13 +22,13 @@ type Pipeline struct {
 	// scripts は保存済み台本の読み出しです。synthesize が JobID だけを渡されたときに使います。
 	scripts domain.ScriptStore
 	// status はジョブの進行状況です。nil でも動きます（記録しないだけ）。
-	status *jobfirestore.Recorder[domain.JobStatus]
+	status *jobstatus.Recorder[domain.JobStatus]
 	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
 	timeout time.Duration
 }
 
 // NewPipeline は、Pipeline を生成します。
-func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobfirestore.Recorder[domain.JobStatus], timeout time.Duration) *Pipeline {
+func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain.Notifier, scripts domain.ScriptStore, status *jobstatus.Recorder[domain.JobStatus], timeout time.Duration) *Pipeline {
 	return &Pipeline{
 		generator: generator,
 		publisher: publisher,
@@ -39,7 +41,7 @@ func NewPipeline(generator scriptGenerator, publisher publisher, notifier domain
 
 // record は、ジョブの状態を書きます。記録の失敗で処理は止めません—
 // 状態は進行を知るためのもので、成果物より重くはありません。
-func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobfirestore.State, apply ...func(next, prev *domain.JobStatus)) {
+func (p *Pipeline) record(ctx context.Context, req domain.Request, state jobstatus.State, apply ...func(next, prev *domain.JobStatus)) {
 	if p.status == nil || req.JobID == "" {
 		return
 	}
@@ -59,7 +61,7 @@ func (p *Pipeline) begin(ctx context.Context, req domain.Request) (bool, error) 
 		return false, nil
 	}
 
-	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobfirestore.StateRunning),
+	done, err := p.status.Begin(ctx, req.JobID, domain.NewJobStatus(req, jobstatus.StateRunning),
 		func(next, prev *domain.JobStatus) {
 			next.Attempts++
 			next.CarryFrom(prev)
@@ -122,7 +124,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		if err != nil {
 			// 通知と同じ ctx を使います。打ち切り済みの ctx で書くと、
 			// 失敗したことすら記録に残りません。
-			p.record(notifyCtx, req, jobfirestore.StateFailed, func(next, prev *domain.JobStatus) {
+			p.record(notifyCtx, req, jobstatus.StateFailed, func(next, prev *domain.JobStatus) {
 				next.Error = err.Error()
 				// 前回までの成果物は残ります。合成に失敗しても台本は既に
 				// 保存されているので、在り処を消すと詳細画面からやり直せません。
@@ -133,6 +135,8 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 	}()
 
 	if err = req.Validate(); err != nil {
+		// 依頼そのものが不正なので、配り直しても同じ行で落ちます。
+		err = permanent(err)
 		return err
 	}
 
@@ -149,7 +153,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 		return err
 	}
 
-	p.record(notifyCtx, req, jobfirestore.StateSucceeded, func(next, prev *domain.JobStatus) {
+	p.record(notifyCtx, req, jobstatus.StateSucceeded, func(next, prev *domain.JobStatus) {
 		next.Title = script.Title
 		next.CarryFrom(prev)
 
@@ -189,10 +193,18 @@ func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domai
 	if req.Command == domain.CommandSynthesize {
 		script, err := p.scripts.Load(ctx, req.JobID)
 		if err != nil {
-			return domain.Script{}, fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)
+			err = fmt.Errorf("保存済み台本の読み込みに失敗しました (%s): %w", req.JobID, err)
+			// 台本が無いのと読めないのは別物です。synthesize の投入は台本を保存した
+			// あとに行うので、無いまま届いたものは待っても現れません。読めないほう
+			// （GCS の一時障害）は再配信で直り得るので、そのまま返します。
+			if errors.Is(err, domain.ErrScriptNotFound) {
+				return domain.Script{}, permanent(err)
+			}
+			return domain.Script{}, err
 		}
 		if len(script.Lines) == 0 {
-			return domain.Script{}, fmt.Errorf("保存済み台本が空です (%s)", req.JobID)
+			// 空の台本が後から埋まることはありません。
+			return domain.Script{}, permanent(fmt.Errorf("保存済み台本が空です (%s)", req.JobID))
 		}
 		return script, nil
 	}
@@ -207,3 +219,28 @@ func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domai
 
 	return script, nil
 }
+
+// permanent は、再配信しても直らない失敗に印を付けます。
+//
+// voice-queue だけ max_attempts = 2 なので、付けないと直しようのない依頼が 2 回走り、
+// 失敗通知も 2 通届きます（min_backoff = 60s なので 2 通目は 1 分後）。付けても記録と
+// 通知は失敗のまま残るので、利用者から見た結果は変わりません。
+//
+// ★ 一時的な失敗（VOICEVOX や Vertex AI の 429 / 503）には使わないでください。
+// 再配信で直るはずのジョブが成功扱いで打ち切られ、二度と実行されません。
+// 再試行はもともとその失敗のために有効にしてあります。
+func permanent(err error) error {
+	return permanentError{cause: err}
+}
+
+// permanentError は、再配信を止める印だけを足し、文面は原因のままにします。
+//
+// fmt.Errorf で worker.ErrPermanent を被せると、その文言が Error() の先頭に付き、
+// 記録（JobStatus.Error）と Slack 通知にそのまま出ます。利用者にとっては実装都合の
+// 文字列でしかありません。恒久かどうかは worker.Handler が構造化ログの permanent
+// フィールドへ別に出すので、文面に混ぜる必要がありません。
+type permanentError struct{ cause error }
+
+func (e permanentError) Error() string        { return e.cause.Error() }
+func (e permanentError) Unwrap() error        { return e.cause }
+func (e permanentError) Is(target error) bool { return target == worker.ErrPermanent }

@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/shouni/gcp-kit/auth/session"
-
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-voicevox/speaker"
 
 	"github.com/shouni/ap-voice/assets"
@@ -52,7 +51,7 @@ type Handler struct {
 	// signer は音声の署名付き URL を作ります。バイト列はアプリが配信しません。
 	signer Signer
 	// status は投入時に queued を記録します（順序の理由は recordQueued）。
-	status *jobfirestore.Recorder[domain.JobStatus]
+	status *jobstatus.Recorder[domain.JobStatus]
 	// reading は、合成前に読みを確かめるために使います。
 	reading ReadingConverter
 	// renderer はカタログでプロンプト本文を見せるために使います。
@@ -82,7 +81,7 @@ type PromptRenderer interface {
 
 // ScriptRepository は、履歴の一覧と台本の読み出しです。
 type ScriptRepository interface {
-	List(ctx context.Context, page, perPage int, opts ...jobfirestore.ListOption) ([]repository.Job, jobfirestore.PageMeta, error)
+	List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]repository.Job, jobstatus.PageMeta, error)
 	Load(ctx context.Context, jobID string) (domain.Script, error)
 	SaveScript(ctx context.Context, jobID string, script domain.Script) error
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
@@ -112,7 +111,7 @@ type HandlerOptions struct {
 	Speakers    *speaker.Registry
 	Renderer    PromptRenderer
 	Reading     ReadingConverter
-	JobStatus   *jobfirestore.Recorder[domain.JobStatus]
+	JobStatus   *jobstatus.Recorder[domain.JobStatus]
 }
 
 // NewHandler は Handler を生成します。
@@ -249,7 +248,7 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	if h.status == nil {
 		return
 	}
-	status := domain.NewJobStatus(req, jobfirestore.StateQueued)
+	status := domain.NewJobStatus(req, jobstatus.StateQueued)
 	// 一覧はこれで並べ替えます。入れないと全件がゼロ値になり、新しい順が
 	// 成立しません。作り直しでは CarryOver が最初の投入時刻を引き継ぐので、
 	// 履歴の位置は動きません（投入の時刻はここでしか分からないため、

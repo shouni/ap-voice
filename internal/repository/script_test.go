@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/shouni/go-job-firestore/jobfirestore"
+	"github.com/shouni/gcp-kit/jobstatus"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-remote-io/remoteio/memio"
 
@@ -132,7 +132,7 @@ func (f *fakeStatus) Get(_ context.Context, jobID string) (domain.JobStatus, err
 			return status, nil
 		}
 	}
-	return domain.JobStatus{}, jobfirestore.ErrNotFound
+	return domain.JobStatus{}, jobstatus.ErrNotFound
 }
 
 func (f *fakeStatus) Save(context.Context, string, domain.JobStatus) error { return nil }
@@ -145,12 +145,12 @@ func (f *fakeStatus) Delete(_ context.Context, jobID string) error {
 	return nil
 }
 
-func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobfirestore.ListOption) ([]domain.JobStatus, jobfirestore.PageMeta, error) {
+func (f *fakeStatus) List(_ context.Context, page, perPage int, _ ...jobstatus.ListOption) ([]domain.JobStatus, jobstatus.PageMeta, error) {
 	// 実物と同じく、返すのはページ分だけです。
 	total := len(f.statuses)
 	from := min((page-1)*perPage, total)
 	to := min(from+perPage, total)
-	return f.statuses[from:to], jobfirestore.PageMeta{Page: page, PerPage: perPage, Total: total}, nil
+	return f.statuses[from:to], jobstatus.PageMeta{Page: page, PerPage: perPage, Total: total}, nil
 }
 
 // withStatuses は、Firestore が返す状態を差し替えた Repository を返します。
@@ -209,7 +209,7 @@ func TestListFallsBackToJobID(t *testing.T) {
 
 	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
 	repo := withStatuses(t, newFakeStore(),
-		domain.JobStatus{JobID: jobID, State: jobfirestore.StateFailed})
+		domain.JobStatus{JobID: jobID, State: jobstatus.StateFailed})
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
@@ -322,7 +322,7 @@ func TestDeleteRemovesTheRecordOfAJobWithNoArtifacts(t *testing.T) {
 
 	const jobID = "voice-20260830-090000-aaaaaaaaaaaa"
 	status := &fakeStatus{statuses: []domain.JobStatus{
-		{JobID: jobID, State: jobfirestore.StateFailed, Error: "生成に失敗しました"},
+		{JobID: jobID, State: jobstatus.StateFailed, Error: "生成に失敗しました"},
 	}}
 	repo := newRepo(t, newFakeStore())
 	repo.status = status
@@ -363,8 +363,8 @@ func TestLoadReportsMissingScript(t *testing.T) {
 	repo := newRepo(t, newFakeStore())
 
 	_, err := repo.Load(context.Background(), "voice-20260830-090000-aaaaaaaaaaaa")
-	if !errors.Is(err, ErrScriptNotFound) {
-		t.Errorf("Load() error = %v, want ErrScriptNotFound", err)
+	if !errors.Is(err, domain.ErrScriptNotFound) {
+		t.Errorf("Load() error = %v, want domain.ErrScriptNotFound", err)
 	}
 }
 
@@ -378,23 +378,23 @@ func TestListCarriesState(t *testing.T) {
 	repo := withStatuses(t, newFakeStore(),
 		domain.JobStatus{
 			JobID: "voice-20260830-090000-aaaaaaaaaaaa",
-			State: jobfirestore.StateFailed,
+			State: jobstatus.StateFailed,
 			Error: "AIモデルが空のスクリプトを返しました",
 		},
-		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb", State: jobfirestore.StateRunning},
+		domain.JobStatus{JobID: "voice-20260829-090000-bbbbbbbbbbbb", State: jobstatus.StateRunning},
 	)
 
 	jobs, _, err := repo.List(context.Background(), 1, 10)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if jobs[0].State != jobfirestore.StateFailed {
+	if jobs[0].State != jobstatus.StateFailed {
 		t.Errorf("State = %q, want failed", jobs[0].State)
 	}
 	if jobs[0].Error == "" {
 		t.Error("失敗理由が運ばれていません")
 	}
-	if jobs[1].State != jobfirestore.StateRunning {
+	if jobs[1].State != jobstatus.StateRunning {
 		t.Errorf("State = %q, want running", jobs[1].State)
 	}
 }
