@@ -39,7 +39,7 @@ type Container struct {
 	// Repository は成果物の読み出しです。履歴の表示と、保存済み台本からの合成に使います。
 	Repository *repository.Repository
 	// External Adapters
-	HTTPClient httpkit.Requester
+	HTTPClient httpkit.HTTPClient
 	Notifier   domain.Notifier
 	// JobStatus はジョブの進行状況を記録します。Web 面が queued を、
 	// Worker 面が running / succeeded / failed を書きます。

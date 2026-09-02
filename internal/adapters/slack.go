@@ -54,7 +54,7 @@ var _ domain.Notifier = (*SlackAdapter)(nil)
 // serviceURL には公開側（Web 面）の URLを渡します。通知から辿る詳細画面は
 // Worker 面ではなく Web 面にあり、Worker の URL を入れるとリンクが非公開サービスを
 // 指して 403 になります。
-func NewSlackAdapter(httpClient httpkit.Requester, webhookURL, serviceURL string) (*SlackAdapter, error) {
+func NewSlackAdapter(httpClient httpkit.Poster, webhookURL, serviceURL string) (*SlackAdapter, error) {
 	notifier, err := slack.NewNotifier(httpClient, webhookURL)
 	if err != nil {
 		return nil, fmt.Errorf("slackクライアントの初期化に失敗しました: %w", err)
