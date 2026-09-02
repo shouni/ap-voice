@@ -34,8 +34,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// 起動・シグナル待ち・正常停止（猶予を超えたら強制クローズ）は cloudrun が持ちます。
 	return cloudrun.Serve(ctx, cloudrun.Config{
-		Port:            cfg.Server.Port,
-		Handler:         NewRouter(h, cfg.GCP.ProjectID),
-		ShutdownTimeout: cfg.Server.ShutdownTimeout,
+		Port:    cfg.Server.Port,
+		Handler: NewRouter(h, cfg.GCP.ProjectID),
 	})
 }
