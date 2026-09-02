@@ -12,6 +12,7 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 	"github.com/shouni/go-utils/jobid"
 
+	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
@@ -167,7 +168,7 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	switch {
-	case errors.Is(err, repository.ErrScriptNotFound):
+	case errors.Is(err, domain.ErrScriptNotFound):
 		respond.Error(w, r, http.StatusNotFound, "台本が見つかりません")
 		return
 	case err != nil:

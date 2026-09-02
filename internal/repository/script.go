@@ -28,9 +28,6 @@ import (
 // 持ちませんが、記録は残っており、消せなければ履歴に残り続けます。
 var ErrJobNotFound = errors.New("repository: job not found")
 
-// ErrScriptNotFound は、そのジョブの台本がまだ保存されていないことを表します。
-var ErrScriptNotFound = errors.New("repository: script not found")
-
 // Repository は、ジョブの成果物を読み出します。
 //
 // 書き込みは PublishStep が担い、ここは読むだけです。成果物がジョブ ID ごとの
@@ -194,7 +191,7 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 // 余分な 1 往復は失敗した経路にしか乗らず、成功する読み出しは今までどおりです。
 func (r *Repository) openFailure(ctx context.Context, jobID, path string, err error) error {
 	if exists, existsErr := r.store.Exists(ctx, path); existsErr == nil && !exists {
-		return fmt.Errorf("台本がまだありません (%s): %w", jobID, ErrScriptNotFound)
+		return fmt.Errorf("台本がまだありません (%s): %w", jobID, domain.ErrScriptNotFound)
 	}
 	return fmt.Errorf("台本の読み込みに失敗しました: %w", err)
 }

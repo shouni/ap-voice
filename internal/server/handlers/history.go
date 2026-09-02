@@ -256,7 +256,7 @@ func (h *Handler) renderDetail(w http.ResponseWriter, r *http.Request, jobID str
 
 	script, err := h.repo.Load(r.Context(), jobID)
 	switch {
-	case errors.Is(err, repository.ErrScriptNotFound):
+	case errors.Is(err, domain.ErrScriptNotFound):
 		// 生成の途中か、生成に失敗したジョブです。状態だけの画面になります。
 	case err != nil:
 		http.Error(w, "台本の取得に失敗しました", http.StatusBadGateway)

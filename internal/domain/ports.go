@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 )
 
 // Pipeline は、処理を行うインターフェースです。
@@ -16,10 +17,20 @@ type Voice interface {
 	UploadScript(ctx context.Context, outputURI string, script Script) error
 }
 
+// ErrScriptNotFound は、そのジョブの台本がまだ保存されていないことを表します。
+//
+// ポートの契約なのでここに置きます。実装側に置くと、「見つからない」を判定したい
+// 呼び出し元まで実装パッケージを import することになり、ポートを挟んだ意味が
+// 無くなります。
+var ErrScriptNotFound = errors.New("domain: script not found")
+
 // ScriptStore は、保存済みの台本を読み書きします。
 //
 // generate が書き、synthesize と詳細画面が読みます。この口があるのは、台本を
 // タスクのペイロードで運ばないためです（理由は Request.JobID）。
+//
+// 台本がまだ無い場合は ErrScriptNotFound を返します。読めなかった（一時障害）
+// のとは別物です。前者は待っても直りませんが、後者は直り得ます。
 type ScriptStore interface {
 	Load(ctx context.Context, jobID string) (Script, error)
 }

@@ -363,8 +363,8 @@ func TestLoadReportsMissingScript(t *testing.T) {
 	repo := newRepo(t, newFakeStore())
 
 	_, err := repo.Load(context.Background(), "voice-20260830-090000-aaaaaaaaaaaa")
-	if !errors.Is(err, ErrScriptNotFound) {
-		t.Errorf("Load() error = %v, want ErrScriptNotFound", err)
+	if !errors.Is(err, domain.ErrScriptNotFound) {
+		t.Errorf("Load() error = %v, want domain.ErrScriptNotFound", err)
 	}
 }
 

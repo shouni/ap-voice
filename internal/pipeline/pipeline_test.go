@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/shouni/gcp-kit/worker"
 	"github.com/shouni/go-job-firestore/jobfirestore"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -837,5 +838,89 @@ func TestPipelineRecordsMode(t *testing.T) {
 	}
 	if store.saved.Mode != "tech_dialogue" {
 		t.Errorf("Mode = %q, want tech_dialogue", store.saved.Mode)
+	}
+}
+
+// TestPermanentKeepsMessage は、恒久の印が利用者向けの文面を汚さないことを
+// 確認します。
+//
+// JobStatus.Error と Slack 通知はこの Error() をそのまま載せます。番兵を
+// fmt.Errorf で被せると「worker: permanent failure...」が先頭に付き、
+// 利用者には意味のない実装都合の文字列が並びます。
+func TestPermanentKeepsMessage(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("出力先(output_uri)が指定されていません")
+	got := permanent(cause)
+
+	if got.Error() != cause.Error() {
+		t.Errorf("Error() = %q, want %q", got.Error(), cause.Error())
+	}
+	if !errors.Is(got, worker.ErrPermanent) {
+		t.Error("worker.ErrPermanent として扱われません")
+	}
+	if !errors.Is(got, cause) {
+		t.Error("原因が辿れません")
+	}
+}
+
+// TestExecuteClassifiesRetry は、Execute が返す失敗の仕分けを固定します。
+//
+// 取り違えるとどちらの向きでも静かに壊れます。恒久を再試行に回すと同じ通知が
+// 2 通届き、一時的なものを恒久扱いにすると、再配信で直ったはずのジョブが
+// 成功扱いで打ち切られて二度と実行されません。
+func TestExecuteClassifiesRetry(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		req           domain.Request
+		loadErr       error
+		loadScript    domain.Script
+		wantPermanent bool
+	}{
+		"出力先が無い": {
+			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Command: domain.CommandSynthesize},
+			wantPermanent: true,
+		},
+		"command が不正": {
+			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: "nope"},
+			wantPermanent: true,
+		},
+		"台本が無い": {
+			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
+			loadErr:       fmt.Errorf("台本がまだありません: %w", domain.ErrScriptNotFound),
+			wantPermanent: true,
+		},
+		"台本が空": {
+			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
+			loadScript:    domain.Script{},
+			wantPermanent: true,
+		},
+		"台本を読めない（一時障害）": {
+			req:     domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
+			loadErr: errors.New("googleapi: Error 503: backend error"),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := &Pipeline{
+				scripts: &MockScriptStore{
+					LoadFunc: func(context.Context, string) (domain.Script, error) {
+						return tt.loadScript, tt.loadErr
+					},
+				},
+				notifier: &MockNotifier{},
+			}
+			err := p.Execute(context.Background(), tt.req)
+			if err == nil {
+				t.Fatal("Execute() error = nil, want error")
+			}
+			if permanent := errors.Is(err, worker.ErrPermanent); permanent != tt.wantPermanent {
+				t.Errorf("permanent = %v, want %v (err=%v)", permanent, tt.wantPermanent, err)
+			}
+		})
 	}
 }
