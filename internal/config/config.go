@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	// DefaultShutdownGrace はサーバー停止時の猶予時間のデフォルト値です。
-	DefaultShutdownGrace = 15 * time.Second
 	// DefaultHTTPTimeout は外部 HTTP 通信のタイムアウトのデフォルト値です。
 	// 縛るのは HTTP 1 往復で、セグメント 1 件ではありません（HTTPConfig 参照）。
 	DefaultHTTPTimeout = 60 * time.Second
@@ -314,7 +312,6 @@ func (c *Config) normalize() error {
 	c.Server.Role = role
 
 	c.Server.ServiceURL = strings.TrimSpace(c.Server.ServiceURL)
-	c.Server.ShutdownTimeout = DefaultShutdownGrace
 
 	c.Tasks.QueueID = strings.TrimSpace(c.Tasks.QueueID)
 	workerURL, err := normalizeWorkerURL(c.Server.Role, c.Tasks.WorkerURL, c.Server.ServiceURL)

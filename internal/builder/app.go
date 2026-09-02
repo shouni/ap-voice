@@ -65,7 +65,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}
 
 	httpClient := httpkit.New(
-		cfg.HTTP.Timeout,
+		httpkit.WithTimeout(cfg.HTTP.Timeout),
 		httpkit.WithMaxRetries(1),
 		httpkit.WithSkipNetworkValidation(true),
 	)
@@ -156,7 +156,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 // buildNotifier は、通知機能を初期化します。
 // webhookURL が未設定の場合、アダプター側が通知を行わない実装を返します。
-func buildNotifier(httpClient httpkit.Requester, webhookURL, serviceURL string) (domain.Notifier, error) {
+func buildNotifier(httpClient httpkit.Poster, webhookURL, serviceURL string) (domain.Notifier, error) {
 	if webhookURL == "" {
 		slog.Info("Slack Webhook URL が未設定のため、通知は無効化されます。")
 	}

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio"
 	"github.com/shouni/go-voicevox/speaker"
 	"github.com/shouni/go-voicevox/voicevox"
@@ -34,7 +33,7 @@ type VoiceAdapter struct {
 //
 // 流量の設定は cfg が持ちます。エンジンの大きさで変わる値なので、ここに定数を
 // 置かず env から受けます（config.VoicevoxConfig 参照）。
-func NewVoiceAdapter(ctx context.Context, httpClient httpkit.Requester, cfg config.VoicevoxConfig, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
+func NewVoiceAdapter(ctx context.Context, httpClient voicevox.Requester, cfg config.VoicevoxConfig, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
 	engine, err := voicevox.New(
 		ctx,
 		httpClient,
