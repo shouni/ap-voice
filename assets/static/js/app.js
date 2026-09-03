@@ -27,4 +27,45 @@ window.App = window.App || {};
             event.preventDefault();
         }
     });
+
+    // deleteResource は、確認を挟んで DELETE を送り、成功したら遷移します。
+    //
+    // HTML のフォームは DELETE を出せないため、削除だけは fetch です。画面用に
+    // POST …/delete を別に持つと同じ削除が 2 本になり、認可やログの入口が分かれます。
+    App.deleteResource = async ({url, confirmMessage, redirect, failureMessage = '削除に失敗しました。'}) => {
+        if (!window.confirm(confirmMessage)) {
+            return false;
+        }
+        try {
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: {'Accept': 'application/json', 'X-CSRF-Token': App.csrfToken()}
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                window.alert(text ? `${failureMessage}: ${text}` : failureMessage);
+                return false;
+            }
+            if (redirect) {
+                window.location.href = redirect;
+            }
+            return true;
+        } catch (error) {
+            console.error('Delete Error:', error);
+            window.alert('通信エラーが発生しました。');
+            return false;
+        }
+    };
+
+    // data-url を持つ削除ボタンは、宣言だけで動きます（テンプレート側は属性 3 つ）。
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-url][data-confirm]');
+        if (!button) return;
+        event.preventDefault();
+        App.deleteResource({
+            url: button.dataset.url,
+            confirmMessage: button.dataset.confirm,
+            redirect: button.dataset.redirect
+        });
+    });
 })();

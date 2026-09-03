@@ -64,11 +64,12 @@ func (h *Handler) formView(r *http.Request, form domain.Request, activeTab strin
 	}
 }
 
-// Enqueue はフォームの内容を検証し、Worker 面へ実行を引き渡します。
+// createJobForm は、フォームの内容を検証し、Worker 面へ実行を引き渡します
+// （POST /jobs をフォームから呼んだとき）。
 //
 // ここでは合成を待ちません。分単位かかるため、リクエストの中で完了させられないためです。
 // 結果は Slack 通知と出力先で受け取ります。
-func (h *Handler) Enqueue(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) createJobForm(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, tabInput, "フォームの解析に失敗しました")
 		return
@@ -176,6 +177,7 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 		h.renderError(w, r, status, req, tab, err.Error())
 		return
 	}
+	acceptedAt(w, jobID)
 
 	// 投入した内容をそのまま残します。同じソースからモードを変えて
 	// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
@@ -232,6 +234,7 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		h.renderScriptError(w, r, status, raw, err.Error())
 		return
 	}
+	acceptedAt(w, jobID)
 
 	// 貼った JSON は残しません。投入した台本は履歴の詳細で編集できるため、
 	// 同じものを貼ったまま二重に投入できる状態のほうが危険です。

@@ -6,54 +6,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
-
-	"github.com/shouni/go-voicevox/speaker"
-
-	"github.com/shouni/ap-voice/assets"
 )
-
-// passthroughRenderer と passthroughReading は、選択肢の検証に関係しない依存を
-// 埋めるだけのものです（プロンプトと読みはここでは見ません）。
-type passthroughRenderer struct{}
-
-func (passthroughRenderer) Generate(_, content string) (string, error) { return content, nil }
-
-type passthroughReading struct{}
-
-func (passthroughReading) ConvertToReading(text string) (string, error) { return text, nil }
-
-// builtHandler は、実物の NewHandler を通した Handler を返します。
-//
-// 他のテストのように構造体を直に組むと、構築時にしか行わない組み立て
-// （話者ごとのスタイル表）が空のまま通ってしまいます。
-func builtHandler(t *testing.T) *Handler {
-	t.Helper()
-
-	registry, err := speaker.NewRegistry(assets.SpeakersJSON)
-	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
-	}
-	modes, err := assets.LoadModes()
-	if err != nil {
-		t.Fatalf("LoadModes() error = %v", err)
-	}
-
-	h, err := NewHandler(HandlerOptions{
-		Queue:     &capturingQueue{},
-		Templates: parseTemplates(t),
-		Modes:     modes,
-		Models:    []string{"gemini-test"},
-		Bucket:    "test",
-		Repo:      &savingRepo{},
-		Speakers:  registry,
-		Renderer:  passthroughRenderer{},
-		Reading:   passthroughReading{},
-	})
-	if err != nil {
-		t.Fatalf("NewHandler() error = %v", err)
-	}
-	return h
-}
 
 // TestAPISpeakersListsStylesPerSpeaker は、話者ごとに実在するスタイルだけが
 // 返ることを検証します。
@@ -61,13 +14,13 @@ func builtHandler(t *testing.T) *Handler {
 // これが無いと、クライアントは当てずっぽうで台本を書くことになります。持つ
 // スタイルは話者ごとに違い（春日部つむぎは 1 つ、ずんだもんは複数）、実在しない
 // 組み合わせは保存時に弾かれるので、組を選ぶ材料がここにしかありません。
-func TestAPISpeakersListsStylesPerSpeaker(t *testing.T) {
+func TestSpeakersListsStylesPerSpeaker(t *testing.T) {
 	t.Parallel()
 
 	h := builtHandler(t)
 
 	rec := httptest.NewRecorder()
-	h.APISpeakers(rec, httptest.NewRequest(http.MethodGet, "/api/speakers", nil))
+	h.Speakers(rec, httptest.NewRequest(http.MethodGet, "/speakers", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -100,7 +53,7 @@ func TestAPISpeakersListsStylesPerSpeaker(t *testing.T) {
 // API の応答が同じものであることを検証します。
 //
 // 別々に組むと、片方だけが実在しない組み合わせを出すようになります。
-func TestAPISpeakersServesTheSameTableAsTheEditor(t *testing.T) {
+func TestSpeakersServesTheSameTableAsTheEditor(t *testing.T) {
 	t.Parallel()
 
 	h := builtHandler(t)
@@ -111,7 +64,7 @@ func TestAPISpeakersServesTheSameTableAsTheEditor(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	h.APISpeakers(rec, httptest.NewRequest(http.MethodGet, "/api/speakers", nil))
+	h.Speakers(rec, httptest.NewRequest(http.MethodGet, "/speakers", nil))
 
 	var fromAPI map[string][]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &fromAPI); err != nil {

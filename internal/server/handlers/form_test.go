@@ -58,10 +58,10 @@ func formHandler(t *testing.T, queue domain.TaskQueue, repo ScriptRepository) *H
 func postForm(t *testing.T, h *Handler, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest("POST", "/", strings.NewReader(values.Encode()))
+	req := httptest.NewRequest("POST", "/jobs", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
-	h.Enqueue(rec, req)
+	h.JobCreate(rec, req)
 	return rec
 }
 

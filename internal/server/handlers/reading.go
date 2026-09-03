@@ -14,7 +14,7 @@ import (
 // 機械は持っている台本を送ります。対応するページを持たないので URL は 1 本ですが、
 // 機械専用ではないため /api の下には置きません。
 
-// readingRequest は POST /preview-reading の要求です。
+// readingRequest は POST /reading/preview の要求です。
 type readingRequest struct {
 	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
 	Lines []domain.ScriptLine `json:"lines"`
@@ -30,7 +30,7 @@ type readingLine struct {
 	Changed bool `json:"changed"`
 }
 
-// readingResponse は POST /preview-reading の応答です。
+// readingResponse は POST /reading/preview の応答です。
 type readingResponse struct {
 	Lines []readingLine `json:"lines"`
 }
