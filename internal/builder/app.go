@@ -14,7 +14,6 @@ import (
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-remote-io/remoteio/gcs"
 	"github.com/shouni/go-voicevox/speaker"
-	"github.com/shouni/netarmor/securenet"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/adapters"
@@ -130,9 +129,8 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		appCtx.Closers = append(appCtx.Closers, fsClient)
 
 		sessionStore, fsErr = session.NewFirestoreStore(session.FirestoreConfig{
-			Client:      fsClient,
-			Collection:  cfg.Auth.SessionCollection,
-			StoreConfig: session.StoreConfig{Secure: securenet.IsSecureServiceURL(cfg.Server.ServiceURL)},
+			Client:     fsClient,
+			Collection: cfg.Auth.SessionCollection,
 		})
 		if fsErr != nil {
 			return nil, fmt.Errorf("セッションストアの構築に失敗しました: %w", fsErr)
@@ -141,16 +139,12 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	}
 
 	if cfg.Server.Role.ServesWeb() {
-		taskURL, wErr := domain.WorkerTaskURL(cfg.Tasks.WorkerURL)
-		if wErr != nil {
-			return nil, wErr
-		}
-
 		queue, qErr := adapters.NewTaskQueueAdapter(ctx, tasks.Config{
 			ProjectID:           cfg.GCP.ProjectID,
 			LocationID:          cfg.GCP.LocationID,
 			QueueID:             cfg.Tasks.QueueID,
-			WorkerURL:           taskURL,
+			WorkerURL:           cfg.Tasks.WorkerURL,
+			WorkerPath:          domain.WorkerTaskPath,
 			ServiceAccountEmail: cfg.Tasks.CallerServiceAccountEmail,
 			Audience:            cfg.Tasks.TaskAudienceURL,
 			DispatchDeadline:    cfg.Tasks.DispatchDeadline,

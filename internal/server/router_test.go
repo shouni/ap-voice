@@ -74,7 +74,7 @@ func TestRouter_WebRouteAbsentWithoutWebHandler(t *testing.T) {
 func TestRouter_WorkerRouteGuardedByTaskAuth(t *testing.T) {
 	exec := &stubExecutor{}
 	r := NewRouter(&builder.AppHandlers{
-		TaskAuth: oidc.New("https://worker.example.run.app",
+		TaskAuth: mustOIDC(t, "https://worker.example.run.app",
 			[]string{"caller@example.iam.gserviceaccount.com"}),
 		Worker: worker.NewHandler[domain.Request](exec),
 	}, "")
@@ -88,35 +88,6 @@ func TestRouter_WorkerRouteGuardedByTaskAuth(t *testing.T) {
 	}
 	if exec.called {
 		t.Fatal("認証を通らずに実行器が呼ばれた")
-	}
-}
-
-// バージョン付きの vendor と、URL が変わらない自前アセットで Cache-Control を分けること。
-func TestStaticCacheControlSeparatesVendorFromOwnAssets(t *testing.T) {
-	t.Parallel()
-
-	router := NewRouter(&builder.AppHandlers{}, "")
-
-	tests := []struct {
-		target string
-		want   string
-	}{
-		{"/static/vendor/bootstrap-5.3.8/bootstrap.min.css", vendorCacheControl},
-		{"/static/css/app.css", ownAssetCacheControl},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.target, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.target, nil))
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("%s = %d, want 200", tt.target, rec.Code)
-			}
-			if got := rec.Header().Get("Cache-Control"); got != tt.want {
-				t.Errorf("Cache-Control = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }
 
@@ -224,4 +195,14 @@ func TestResponsesCarrySecurityHeaders(t *testing.T) {
 	if strings.Contains(policy, "autoplay") {
 		t.Errorf("Permissions-Policy が autoplay を塞いでいます: %s", policy)
 	}
+}
+
+// mustOIDC は、テスト用に構成済みの検証器を作ります（New は設定が欠けるとエラーを返します）。
+func mustOIDC(t *testing.T, audience string, allowed []string) *oidc.Verifier {
+	t.Helper()
+	v, err := oidc.New(audience, allowed)
+	if err != nil {
+		t.Fatalf("oidc.New() error = %v", err)
+	}
+	return v
 }

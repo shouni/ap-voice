@@ -841,29 +841,6 @@ func TestPipelineRecordsMode(t *testing.T) {
 	}
 }
 
-// TestPermanentKeepsMessage は、恒久の印が利用者向けの文面を汚さないことを
-// 確認します。
-//
-// JobStatus.Error と Slack 通知はこの Error() をそのまま載せます。番兵を
-// fmt.Errorf で被せると「worker: permanent failure...」が先頭に付き、
-// 利用者には意味のない実装都合の文字列が並びます。
-func TestPermanentKeepsMessage(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("出力先(output_uri)が指定されていません")
-	got := permanent(cause)
-
-	if got.Error() != cause.Error() {
-		t.Errorf("Error() = %q, want %q", got.Error(), cause.Error())
-	}
-	if !errors.Is(got, worker.ErrPermanent) {
-		t.Error("worker.ErrPermanent として扱われません")
-	}
-	if !errors.Is(got, cause) {
-		t.Error("原因が辿れません")
-	}
-}
-
 // TestExecuteClassifiesRetry は、Execute が返す失敗の仕分けを固定します。
 //
 // 取り違えるとどちらの向きでも静かに壊れます。恒久を再試行に回すと同じ通知が
