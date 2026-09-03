@@ -47,7 +47,7 @@ type Request struct {
 	//
 	// 空を generate とみなさないのは、台本を持ち込んだ呼び出し側が command を
 	// 書き忘れた場合に、その台本が黙って捨てられて Gemini の生成が走ってしまう
-	// ためです（/api/jobs は body の script を保存してからここへ渡します）。
+	// ためです（POST /jobs は JSON の script を保存してからここへ渡します）。
 	// 課金と出力の両方が変わる取り違えを、既定値で吸収する価値はありません。
 	Command Command `json:"command"`
 
@@ -56,7 +56,7 @@ type Request struct {
 	//
 	// synthesize では台本の在り処でもあります。台本そのものはここに載りません—
 	// 長い台本は Cloud Tasks の 1MB 上限に当たりうるので、投入側が先に保存して
-	// ID だけを渡します。持ち込みの台本（/api/jobs の body の script、画面の
+	// ID だけを渡します。持ち込みの台本（POST /jobs の JSON の script、画面の
 	// 「台本 JSON」タブ）も同じ経路で、保存してからこの ID で指します。
 	JobID string `json:"job_id,omitempty"`
 

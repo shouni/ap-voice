@@ -110,7 +110,7 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 	// 出力はファイル名まで出しません。generate の時点では音声がまだ無く、
 	// audio.wav を示すと存在しないものを案内することになります。
 	// 並びは「どのジョブか → 何ができたか → どう作ったか」です。
-	want := "**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
+	want := "**詳細:** [job-1](https://ap-voice.example.run.app/jobs/job-1)\n" +
 		"**処理:** `generate`\n" +
 		"**ジョブID:** `job-1`\n" +
 		"**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
@@ -326,7 +326,7 @@ func TestNotifyGroupsFieldsByPurpose(t *testing.T) {
 		t.Fatalf("Notify failed: %v", err)
 	}
 
-	want := "**詳細:** [job-1](https://ap-voice.example.run.app/history/job-1)\n" +
+	want := "**詳細:** [job-1](https://ap-voice.example.run.app/jobs/job-1)\n" +
 		"**処理:** `synthesize`\n" +
 		"**ジョブID:** `job-1`\n" +
 		"**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +

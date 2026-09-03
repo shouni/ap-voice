@@ -4,77 +4,139 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"slices"
-	"strconv"
-	"strings"
 
-	"github.com/shouni/gcp-kit/jobstatus"
-
+	"github.com/go-chi/chi/v5"
 	"github.com/shouni/ap-voice/internal/domain"
 	"github.com/shouni/ap-voice/internal/repository"
+	"github.com/shouni/gcp-kit/jobstatus"
+	"github.com/shouni/go-serve-kit/respond"
+	"github.com/shouni/go-utils/jobid"
 )
 
-// historyPerPage は 1 ページに出す件数です。
+// このファイルは、人と機械が同じリソースを見る経路をまとめています。
 //
-// 一覧は成果物を読まないので、増やしても効くのは記録の読み取り件数だけです
-// （1 件は 1 行で、題名・状態・音声の有無しか使いません）。ページ送りを
-// 押す回数が半分になるほうが、ページあたり 50 件の読み取りより価値があります。
-const historyPerPage = 100
-
-// maxPerPage は ?per_page= で要求できる上限です。
+// 表現だけが違うものに 2 つのハンドラーを持たせると、片方だけ直したときに
+// 画面の表示と機械可読な結果が食い違います。取得と検証は 1 度だけ行い、
+// 最後に Accept を見て HTML か JSON かを決めます。
 //
-// 上限が無いと、1 リクエストが倉庫への際限のない 1 クエリになります。既定と
-// 同じ値ですが、別の定数のままにします — 片方は「何も指定しなかったとき」、
-// もう片方は「いくらまで指定できるか」で、変える理由が別だからです。
-// 画面は既定しか使わないので、これが効くのは機械から叩く経路だけです。
-const maxPerPage = 100
+// 逆に、片方の読者にしか無い操作（入力フォーム、合成の指示など）は
+// 別のリソースなので、このファイルには置きません。
 
-// pageParam は ?page= を読みます。不正な値は 1 ページ目として扱います。
-// 一覧の閲覧でエラー画面を出しても、利用者にできることがありません。
-func pageParam(r *http.Request) int {
-	page, err := strconv.Atoi(r.URL.Query().Get("page"))
-	if err != nil || page < 1 {
-		return 1
-	}
-	return page
-}
-
-// historyView は履歴一覧に渡す値です。
-type historyView struct {
-	baseView
-	Jobs []repository.Job
-	Page jobstatus.PageMeta
-	// Filter は絞り込み中の状態です（空なら全件）。ページ送りのリンクに
-	// 引き継がないと、2 ページ目で絞り込みが外れます。
-	Filter string
-}
-
-// listableStates は ?state= に指定できる値です。
+// jobIDParam は URL のジョブ ID を取り出して検証します。
 //
-// jobstatus の語彙をそのまま使います。ここで独自の綴りを作ると、記録に
-// 書かれている値と画面が受け付ける値が別物になります。
-func listableStates() []string {
-	return []string{
-		string(jobstatus.StateQueued),
-		string(jobstatus.StateRunning),
-		string(jobstatus.StateSucceeded),
-		string(jobstatus.StateFailed),
-	}
-}
-
-// stateParam は ?state= を読みます。空なら絞り込みなし、未知の値は false です。
-//
-// page と違って黙って無視しません。打ち間違えた絞り込みが全件を返すと、
-// 「失敗したジョブは無い」と読めてしまいます。
-func stateParam(r *http.Request) (jobstatus.State, bool) {
-	value := strings.TrimSpace(r.URL.Query().Get("state"))
-	if value == "" {
-		return "", true
-	}
-	if !slices.Contains(listableStates(), value) {
+// 応答は返しません。同じ検証でも返し方が 3 通りあるためです（Accept で選ぶ画面、
+// JSON 固定の API、素のテキスト）。値の取り出しと検証だけをここに集め、
+// どう返すかは呼び出し側が決めます。ID はそのままオブジェクトのパスに入るので、
+// 検証を通っていない値を先へ渡せません。
+func jobIDParam(r *http.Request) (string, bool) {
+	id := chi.URLParam(r, "jobID")
+	if err := jobid.Validate(id); err != nil {
 		return "", false
 	}
-	return jobstatus.State(value), true
+	return id, true
+}
+
+// jobID は URL のジョブ ID を取り出し、要求された表現でエラーを返します。
+func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, ok := jobIDParam(r)
+	if !ok {
+		respond.Error(w, r, http.StatusBadRequest, "不正なジョブIDです")
+		return "", false
+	}
+	return id, true
+}
+
+// JobDelete は、ジョブと成果物をまとめて消します（DELETE /jobs/{jobID}）。
+//
+// 画面の削除ボタンも fetch で DELETE を送ります（app.js の App.deleteResource）。
+// 旧パス POST /history/{jobID}/delete は、フォームから来る間だけ同じ処理へ流します。
+func (h *Handler) JobDelete(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.jobID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.repo.Delete(r.Context(), jobID); err != nil {
+		if errors.Is(err, repository.ErrJobNotFound) {
+			respond.Error(w, r, http.StatusNotFound, "ジョブが見つかりません")
+			return
+		}
+		slog.ErrorContext(r.Context(), "ジョブの削除に失敗しました", "job_id", jobID, "error", err)
+		respond.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
+		return
+	}
+
+	if respond.WantsJSON(w, r) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// 消した先の詳細は開けないため、一覧へ戻します。
+	http.Redirect(w, r, jobsBasePath, http.StatusSeeOther)
+}
+
+// JobStatus は、ジョブの進行状況を返します。
+//
+// 投入した側が完了と失敗を知る唯一の手段です。成果物の有無だけでは、
+// まだ動いているのか失敗したのかを区別できません。書式は gcp-kit の
+// jobstatus.Status で、姉妹サービスと同じ形です。
+//
+// 記録が無い場合（ErrNotFound）は 404 です。MCP サーバー側はこれを unknown として扱い、
+// 「状態機能より前のジョブ」や「投入直後」をツールの失敗にしません。
+//
+// 読めなかっただけの場合は 404 と混ぜません。権限や GCS 障害（ErrUnavailable）
+// まで 404 にすると、障害の間すべてのジョブが「記録が無い」ように見え、
+// ポーリング側が unknown として静かに受け入れてしまいます。
+//
+// 表現は 1 つ（JSON）です。GET /jobs/{jobID} が JSON を求められたときの中身で、
+// 旧パス GET /history/{jobID}/status は Accept に関わらずこれを返します。
+func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := h.apiJobID(w, r)
+	if !ok {
+		return
+	}
+
+	status, err := h.repo.Get(r.Context(), jobID)
+	switch {
+	case errors.Is(err, jobstatus.ErrNotFound):
+		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
+		respond.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
+		return
+	}
+	respond.JSON(w, r, http.StatusOK, status)
+}
+
+// Job は、ジョブ 1 件を返します（GET /jobs/{jobID}）。
+//
+// 投入した瞬間から削除するまで同じ URL で指します。JSON は進行状況（JobStatus）、
+// HTML は台本を直す詳細画面です。呼び出し側は「今どちらを叩くべきか」を
+// 状態で切り替えずに済みます。
+func (h *Handler) Job(w http.ResponseWriter, r *http.Request) {
+	if respond.WantsJSON(w, r) {
+		h.JobStatus(w, r)
+		return
+	}
+	jobID, ok := h.jobID(w, r)
+	if !ok {
+		return
+	}
+	h.renderDetail(w, r, jobID, http.StatusOK, "", "")
+}
+
+// apiJobID は、URL のジョブ ID を取り出して検証します。
+//
+// 検証そのものは jobIDParam です。ここが持つのは返し方だけで、JSON に固定するのは
+// この経路が成功時も無条件に JSON を返すためです（Accept を送らない呼び出し側が、
+// 成功と失敗で本文の読み方を変えずに済みます）。
+func (h *Handler) apiJobID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	jobID, ok := jobIDParam(r)
+	if !ok {
+		respond.ErrorJSON(w, r, http.StatusBadRequest, "不正なジョブIDです")
+		return "", false
+	}
+	return jobID, true
 }
 
 // detailView は詳細画面に渡す値です。
@@ -120,56 +182,7 @@ type detailView struct {
 // 際限なく合成を積めます。プロンプトの目安（最大 80 発言）より広く取ります。
 const maxScriptLines = 200
 
-// Detail は、1 件のジョブの台本を表示します。ここから音声の確認と作成を行います。
-func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.jobID(w, r)
-	if !ok {
-		return
-	}
-	h.renderDetail(w, r, jobID, http.StatusOK, "", "")
-}
-
-// UpdateScript は、編集された台本を保存し、続けて音声の作成を指示します。
-//
-// 保存が先で、タスクへ渡すのはジョブ ID だけです（理由は domain.Request.JobID）。
-// Worker 側は「保存済み台本を読む」既存の経路をそのまま使います。
-func (h *Handler) UpdateScript(w http.ResponseWriter, r *http.Request) {
-	jobID, ok := h.jobID(w, r)
-	if !ok {
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		h.renderDetail(w, r, jobID, http.StatusBadRequest, "", "フォームの解析に失敗しました")
-		return
-	}
-
-	script, err := h.scriptFromForm(r)
-	if err != nil {
-		h.renderDetail(w, r, jobID, http.StatusBadRequest, "", err.Error())
-		return
-	}
-
-	if err := h.repo.SaveScript(r.Context(), jobID, script); err != nil {
-		h.renderDetail(w, r, jobID, http.StatusBadGateway, "", "台本の保存に失敗しました")
-		return
-	}
-
-	req := domain.Request{
-		Command:   domain.CommandSynthesize,
-		JobID:     jobID,
-		OutputURI: h.layout.AudioURI(h.bucket, jobID),
-	}
-	status, err := h.submit(r.Context(), req)
-	if err != nil {
-		h.renderDetail(w, r, jobID, status, "", err.Error())
-		return
-	}
-
-	h.renderDetail(w, r, jobID, status, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
-}
-
-// Regenerate は、同じ入力ソースから台本を作り直します。
+// Regenerate は、同じ入力ソースから台本を作り直します（POST /jobs/{jobID}/regenerate）。
 //
 // 失敗したジョブの行き先がこれです。台本を書く前に失敗したジョブには直すものが
 // 無く、これまでは削除して投入フォームから URL を貼り直すしかありませんでした。
@@ -215,28 +228,8 @@ func (h *Handler) Regenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	acceptedAt(w, jobID)
 	h.renderDetail(w, r, jobID, code, "同じ入力から台本を作り直しています。完了すると通知が届きます。", "")
-}
-
-// scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
-//
-// 組み立てるだけで、実在するかの確認は validateScript が行います。
-// API と同じ関数を通すため、どちらか一方だけが緩くなることがありません。
-func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
-	speakers := r.Form["speaker"]
-	styles := r.Form["style"]
-	texts := r.Form["text"]
-
-	if len(speakers) != len(styles) || len(speakers) != len(texts) {
-		return domain.Script{}, errors.New("台本の項目数が揃っていません")
-	}
-
-	lines := make([]domain.ScriptLine, 0, len(speakers))
-	for i := range speakers {
-		lines = append(lines, domain.ScriptLine{Speaker: speakers[i], Style: styles[i], Text: texts[i]})
-	}
-
-	return h.validateScript(domain.Script{Title: r.FormValue("title"), Lines: lines})
 }
 
 // renderDetail は詳細画面を描画します。台本は毎回読み直します。

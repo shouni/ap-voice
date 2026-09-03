@@ -23,7 +23,7 @@
 
   {{ if .HasAudio }}
     {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。 */}}
-    <audio controls src="/history/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
+    <audio controls src="/jobs/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
   {{ end }}
 
   {{/* 台本は読むだけでなく直せます。直せることが、分けた工程の理由です —
@@ -33,7 +33,7 @@
        ジョブの通常の姿だからです。開けないと、削除もここからしかできない以上、
        履歴に残ったまま消せなくなります。 */}}
   {{ if .HasScript }}
-  <form method="post" action="/history/{{ .JobID }}/script" id="script-form"
+  <form method="post" action="/jobs/{{ .JobID }}/synthesize" id="script-form"
         data-max-lines="{{ .MaxLines }}">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 
@@ -53,7 +53,7 @@
            サーバーは合成の直前と同じ変換を通すので、ここに出るものが実際に読まれるものです。
            意図と違う語は、その部分をカタカナで書き直せば直せます。 */}}
       <button class="btn btn-outline-secondary btn-sm js-preview-reading" type="button"
-              data-endpoint="/preview-reading">読みを確認</button>
+              data-endpoint="/reading/preview">読みを確認</button>
       <span class="form-text m-0 js-reading-status" role="status" aria-live="polite"></span>
     </div>
     <div class="form-text mb-2">
@@ -132,7 +132,7 @@
        実行と削除を右に寄せます。台本を読んでから押すものなので、表の手前に
        置くと確認前に押せてしまいます。 */}}
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 bg-light p-3 border-top mt-4">
-    <a class="btn btn-link text-secondary text-decoration-none" href="/history">← 履歴一覧へ戻る</a>
+    <a class="btn btn-link text-secondary text-decoration-none" href="/jobs">← 履歴一覧へ戻る</a>
 
     <div class="d-flex gap-2 flex-wrap justify-content-end">
       {{/* 台本に関わる操作は、台本があるときだけ出します。削除だけは常に出します —
@@ -140,7 +140,7 @@
       {{ if .HasScript }}
       {{/* 落ちてくるのは保存済みの台本です。表を編集しただけの内容はまだ GCS に無いので、
            手元に残したい変更があるなら先に保存してください。 */}}
-      <a class="btn btn-outline-secondary" href="/history/{{ .JobID }}/script">台本JSONをダウンロード</a>
+      <a class="btn btn-outline-secondary" href="/jobs/{{ .JobID }}/script">台本JSONをダウンロード</a>
 
       {{/* 保存と合成は 1 つの操作です。編集していなければ同じ内容を書き戻すだけなので、
            「保存せず合成だけ」というボタンを別に置いても同じ音声しか作れません。 */}}
@@ -153,26 +153,27 @@
            確認を挟み、音声があるときは古いまま残ることも伝えます（generate は
            台本までで、音声は作りません）。 */}}
       {{ if .InputURI }}
-      <form method="post" action="/history/{{ .JobID }}/regenerate"
+      <form method="post" action="/jobs/{{ .JobID }}/regenerate"
             data-confirm="同じ入力から台本を作り直します。{{ if .HasScript }}いまの台本は上書きされます。{{ end }}{{ if .HasAudio }}音声は作り直されないため、古いまま残ります。{{ end }}よろしいですか？">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <button class="btn btn-outline-secondary" type="submit">同じ入力で台本を作り直す</button>
       </form>
       {{ end }}
 
-      {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。 */}}
-      <form method="post" action="/history/{{ .JobID }}/delete"
-            data-confirm="このジョブの成果物（台本と音声）を削除します。よろしいですか？">
-        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-        <button class="btn btn-outline-danger" type="submit">このジョブを削除</button>
-      </form>
+      {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。
+           フォームは DELETE を出せないので、app.js の App.deleteResource が fetch で送ります
+           （CSRF はヘッダ、成功したら一覧へ）。 */}}
+      <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+      <button class="btn btn-outline-danger" type="button" id="delete-job-btn"
+              data-url="/jobs/{{ .JobID }}" data-redirect="/jobs"
+              data-confirm="このジョブの成果物（台本と音声）を削除します。よろしいですか？">このジョブを削除</button>
     </div>
   </div>
 </main>
 {{/* 実行中のジョブだけ、状態が変わったかを見張ります。終わっているジョブでは
      data-state が終了状態なので、画面側は何もしません（開くたびの 1 往復を
      増やさないため、判断は画面側ではなくこの値で決まります）。 */}}
-<div id="job-state" data-endpoint="/history/{{ .JobID }}/status" data-state="{{ .State }}" hidden></div>
+<div id="job-state" data-endpoint="/jobs/{{ .JobID }}" data-state="{{ .State }}" hidden></div>
 {{/* 話者ごとのスタイル対応表は data 属性で渡します。インラインスクリプトにすると
      CSP の script-src を 'self' だけにできません。空のときは {} を入れて、
      画面側が JSON.parse に失敗しないようにします。 */}}

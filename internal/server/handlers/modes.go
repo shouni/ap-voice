@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/shouni/ap-voice/assets"
+	"github.com/shouni/go-serve-kit/respond"
 )
 
 // samplePlaceholder は、詳細でプロンプトを組み立てるときの仮の入力です。
@@ -82,4 +83,28 @@ func (h *Handler) findMode(key string) (assets.Mode, bool) {
 		}
 	}
 	return assets.Mode{}, false
+}
+
+// Modes は、選べる指示モードを返します。
+func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
+	if respond.WantsJSON(w, r) {
+		modes := make([]apiMode, 0, len(h.modes))
+		for _, mode := range h.modes {
+			modes = append(modes, apiMode{
+				Key: mode.Key, Label: mode.DisplayName(),
+				Direction: mode.Direction, UseWhen: mode.UseWhen,
+			})
+		}
+		respond.JSON(w, r, http.StatusOK, modes)
+		return
+	}
+	h.renderTemplate(w, http.StatusOK, "modes.html", &modesView{baseView: h.base(r), Modes: h.modes})
+}
+
+// apiMode は、モード一覧の 1 件です。
+type apiMode struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	Direction string `json:"direction"`
+	UseWhen   string `json:"use_when"`
 }

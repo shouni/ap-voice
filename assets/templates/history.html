@@ -11,18 +11,18 @@
        呼び名を作ると、記録に書かれている値と選べる値が別物になります。
        ページ送りにも state を持ち回さないと、2 ページ目で外れます。 */}}
   <div class="btn-group btn-group-sm mb-3" role="group" aria-label="状態で絞り込む">
-    <a class="btn btn-outline-secondary{{ if eq .Filter "" }} active{{ end }}" href="/history">すべて</a>
-    <a class="btn btn-outline-secondary{{ if eq .Filter "queued" }} active{{ end }}" href="/history?state=queued">待機中</a>
-    <a class="btn btn-outline-secondary{{ if eq .Filter "running" }} active{{ end }}" href="/history?state=running">実行中</a>
-    <a class="btn btn-outline-secondary{{ if eq .Filter "succeeded" }} active{{ end }}" href="/history?state=succeeded">完了</a>
-    <a class="btn btn-outline-secondary{{ if eq .Filter "failed" }} active{{ end }}" href="/history?state=failed">失敗</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "" }} active{{ end }}" href="/jobs">すべて</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "queued" }} active{{ end }}" href="/jobs?state=queued">待機中</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "running" }} active{{ end }}" href="/jobs?state=running">実行中</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "succeeded" }} active{{ end }}" href="/jobs?state=succeeded">完了</a>
+    <a class="btn btn-outline-secondary{{ if eq .Filter "failed" }} active{{ end }}" href="/jobs?state=failed">失敗</a>
   </div>
 
   {{ if .Jobs }}
     <div class="list-group">
       {{ range .Jobs }}
         <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3"
-           href="/history/{{ .ID }}">
+           href="/jobs/{{ .ID }}">
           <span class="text-truncate">
             <span class="fw-semibold">{{ .Title }}</span><br>
             <small class="text-secondary">
@@ -41,7 +41,7 @@
       {{ end }}
     </div>
   {{ else if .Filter }}
-    <p class="text-secondary">この状態のジョブはありません。<a href="/history">すべて</a>を見てください。</p>
+    <p class="text-secondary">この状態のジョブはありません。<a href="/jobs">すべて</a>を見てください。</p>
   {{ else }}
     <p class="text-secondary">まだ何もありません。<a href="/">台本を作成</a>してください。</p>
   {{ end }}
@@ -50,13 +50,13 @@
   {{ if gt .Page.TotalPages 1 }}
     <nav class="d-flex justify-content-between align-items-center border-top pt-3 mt-3">
       {{ if .Page.HasPrev }}
-        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.PrevPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">← 新しい方へ</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/jobs?page={{ .Page.PrevPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">← 新しい方へ</a>
       {{ else }}<span></span>{{ end }}
       <span class="text-secondary small">
         {{ .Page.From }}〜{{ .Page.To }} 件目 / 全 {{ .Page.Total }} 件（{{ .Page.Page }}/{{ .Page.TotalPages }} ページ）
       </span>
       {{ if .Page.HasNext }}
-        <a class="btn btn-outline-secondary btn-sm" href="/history?page={{ .Page.NextPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">古い方へ →</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/jobs?page={{ .Page.NextPage }}{{ with .Filter }}&amp;state={{ . }}{{ end }}">古い方へ →</a>
       {{ else }}<span></span>{{ end }}
     </nav>
   {{ end }}

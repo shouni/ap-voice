@@ -39,7 +39,7 @@
     {{/* --- 入力ソース：文書から台本を書かせる --- */}}
     <div class="tab-pane fade {{ if ne .ActiveTab "recipe" }}{{ if ne .ActiveTab "script" }}show active{{ end }}{{ end }}"
          id="tab-input" role="tabpanel">
-      <form method="post" action="/" class="card p-4 shadow-sm">
+      <form method="post" action="/jobs" class="card p-4 shadow-sm">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <input type="hidden" name="source" value="input">
 
@@ -76,7 +76,7 @@
 
     {{/* --- 楽曲レシピ：music.Recipe から宣伝ナレーションを書かせる --- */}}
     <div class="tab-pane fade {{ if eq .ActiveTab "recipe" }}show active{{ end }}" id="tab-recipe" role="tabpanel">
-      <form method="post" action="/" class="card p-4 shadow-sm">
+      <form method="post" action="/jobs" class="card p-4 shadow-sm">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <input type="hidden" name="source" value="recipe">
 
@@ -114,7 +114,7 @@
 
     {{/* --- 台本JSON：書き上がった台本をそのまま合成する --- */}}
     <div class="tab-pane fade {{ if eq .ActiveTab "script" }}show active{{ end }}" id="tab-script" role="tabpanel">
-      <form method="post" action="/" class="card p-4 shadow-sm">
+      <form method="post" action="/jobs" class="card p-4 shadow-sm">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <input type="hidden" name="source" value="script">
 

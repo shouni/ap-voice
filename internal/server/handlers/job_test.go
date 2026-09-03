@@ -10,45 +10,93 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shouni/gcp-kit/jobstatus"
-
 	"github.com/shouni/ap-voice/internal/domain"
+	"github.com/shouni/gcp-kit/jobstatus"
 )
 
-// storedScriptRepo は、保存済みの台本を返すフェイクです。
-type storedScriptRepo struct {
-	ScriptRepository
-	script domain.Script
+// 不正なジョブ ID のエラーも、要求された表現で返ること。
+// 機械に HTML のエラーページを返しても解釈できません。
+func TestJobIDErrorFollowsTheRequestedFormat(t *testing.T) {
+	t.Parallel()
+
+	h := &Handler{repo: &storedScriptRepo{}}
+
+	rec := httptest.NewRecorder()
+	h.Script(rec, requestWithJobID(http.MethodGet, "/jobs/bad/script", "application/json", "../etc/passwd"))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want JSON", got)
+	}
 }
 
-func (r *storedScriptRepo) Load(_ context.Context, _ string) (domain.Script, error) {
-	return r.script, nil
-}
-
-// stateOnlyRepo は、台本がまだ無いジョブのフェイクです。
-// 生成が終わる前と、生成に失敗したジョブがこの姿になります。
-type stateOnlyRepo struct {
-	ScriptRepository
-	status domain.JobStatus
-}
-
-func (r *stateOnlyRepo) Load(context.Context, string) (domain.Script, error) {
-	return domain.Script{}, fmt.Errorf("台本がまだありません: %w", domain.ErrScriptNotFound)
-}
-
-func (r *stateOnlyRepo) HasAudio(context.Context, string) (bool, error) { return false, nil }
-
-func (r *stateOnlyRepo) Get(context.Context, string) (domain.JobStatus, error) {
-	return r.status, nil
-}
-
-// detailHandler は、画面を描けるだけの依存を積んだ Handler を返します。
-func detailHandler(t *testing.T, repo ScriptRepository) *Handler {
+// getJobStatus は GET /history/{jobID}/status を呼びます。
+func getJobStatus(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 	t.Helper()
 
-	h := apiHandler(t, repo)
-	h.templates = parseTemplates(t)
-	return h
+	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
+	req := httptest.NewRequest("GET", "/jobs/"+jobID, nil)
+	req.Header.Set("Accept", "application/json")
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("jobID", jobID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+
+	rec := httptest.NewRecorder()
+	h.Job(rec, req)
+	return rec
+}
+
+// 未記録（ErrNotFound）は 404。MCP サーバーが unknown として扱う正常系。
+func TestJobStatusNotRecordedIs404(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: 未記録", jobstatus.ErrNotFound)})
+	if rec := getJobStatus(t, h); rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// 読めなかっただけ（ErrUnavailable）のときに 404 と答えないこと。
+// 混ぜると、ストレージ障害の間すべてのジョブが「記録が無い」ように見え、
+// ポーリング側が unknown として静かに受け入れてしまう。
+func TestJobStatusUnreadableIsNot404(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, &statusRepo{err: fmt.Errorf("%w: storage down", jobstatus.ErrUnavailable)})
+	rec := getJobStatus(t, h)
+	if rec.Code == http.StatusNotFound {
+		t.Fatalf("status = 404: 読めないだけのジョブを未記録と答えている: %s", rec.Body.String())
+	}
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// 読めたら 200 で jobstatus.Status のフラットな形のまま返すこと。
+func TestJobStatusReturnsRecord(t *testing.T) {
+	t.Parallel()
+
+	h := apiHandler(t, &statusRepo{status: domain.JobStatus{
+		State:    jobstatus.StateRunning,
+		AudioURI: "gs://test/voice/x/audio.wav",
+	}})
+	rec := getJobStatus(t, h)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("応答が JSON ではない: %v", err)
+	}
+	if got["state"] != string(jobstatus.StateRunning) {
+		t.Errorf("state = %v, want running", got["state"])
+	}
+	if got["audio_uri"] != "gs://test/voice/x/audio.wav" {
+		t.Errorf("audio_uri = %v（埋め込みのフラット展開が崩れている）", got["audio_uri"])
+	}
 }
 
 // TestDetailOpensWithoutAScript は、台本がまだ無いジョブでも詳細画面が開くことを
@@ -67,13 +115,13 @@ func TestDetailOpensWithoutAScript(t *testing.T) {
 		Error: "AIモデルが空のスクリプトを返しました",
 	}})
 
-	req := httptest.NewRequest(http.MethodGet, "/history/"+jobID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/"+jobID, nil)
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("jobID", jobID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 
 	rec := httptest.NewRecorder()
-	h.Detail(rec, req)
+	h.Job(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -84,69 +132,6 @@ func TestDetailOpensWithoutAScript(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("画面に %q がありません", want)
 		}
-	}
-}
-
-// getScript は GET /history/{jobID}/script を呼びます。
-func getScript(t *testing.T, h *Handler, jobID string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	req := httptest.NewRequest(http.MethodGet, "/history/"+jobID+"/script", nil)
-	ctx := chi.NewRouteContext()
-	ctx.URLParams.Add("jobID", jobID)
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
-
-	rec := httptest.NewRecorder()
-	h.Script(rec, req)
-	return rec
-}
-
-// TestScriptDownloadsTheStoredScript は、保存済みの台本がそのまま JSON として
-// 落ちてくることを検証します。
-//
-// ファイル名を付ける Content-Disposition が要ります。無いとブラウザは
-// JSON を画面に表示するだけで、ダウンロードにならない経路があります。
-func TestScriptDownloadsTheStoredScript(t *testing.T) {
-	t.Parallel()
-
-	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
-	want := domain.Script{
-		Title: "テスト台本",
-		Lines: []domain.ScriptLine{
-			{Speaker: "ずんだもん", Style: "ノーマル", Text: "こんにちはなのだ"},
-		},
-	}
-	h := apiHandler(t, &storedScriptRepo{script: want})
-
-	rec := getScript(t, h, jobID)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if got, want := rec.Header().Get("Content-Disposition"), `attachment; filename="`+jobID+`.json"`; got != want {
-		t.Errorf("Content-Disposition = %q, want %q", got, want)
-	}
-
-	var got domain.Script
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("台本が JSON として読めません: %v (body=%q)", err, rec.Body.String())
-	}
-	if got.Title != want.Title || len(got.Lines) != len(want.Lines) || got.Lines[0] != want.Lines[0] {
-		t.Errorf("script = %+v, want %+v", got, want)
-	}
-}
-
-// TestScriptRejectsBadJobID は、ジョブ ID の検証を通ることを確認します。
-// ID はそのままファイル名になるため、素通りさせられません。
-func TestScriptRejectsBadJobID(t *testing.T) {
-	t.Parallel()
-
-	h := apiHandler(t, &storedScriptRepo{})
-
-	rec := getScript(t, h, "../../etc/passwd")
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
@@ -219,12 +204,4 @@ func TestRegenerateRefusesWithoutAnInput(t *testing.T) {
 	if queue.calls != 0 {
 		t.Errorf("入力ソースが無いのに %d 回投入しています", queue.calls)
 	}
-}
-
-// postWithJobID は、jobID を埋めた POST を組み立てます。
-func postWithJobID(jobID string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/history/"+jobID+"/regenerate", nil)
-	ctx := chi.NewRouteContext()
-	ctx.URLParams.Add("jobID", jobID)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 }

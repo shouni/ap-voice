@@ -112,7 +112,7 @@ func TestTemplatesRender(t *testing.T) {
 			name:     "履歴一覧",
 			template: "history.html",
 			view: historyView{
-				baseView: testBaseView("/history"),
+				baseView: testBaseView("/jobs"),
 				Page:     jobstatus.PageMeta{Page: 2, TotalPages: 3, Total: 120, From: 51, To: 100, HasPrev: true, HasNext: true, PrevPage: 1, NextPage: 3},
 				Filter:   "failed",
 				Jobs: []repository.Job{
@@ -130,20 +130,20 @@ func TestTemplatesRender(t *testing.T) {
 				"一覧のタイトル", "voice-2",
 				// 絞り込みはページ送りへ持ち回します。外れると 2 ページ目で全件に戻り、
 				// 絞ったはずの一覧が黙って広がります。
-				`href="/history?page=1&amp;state=failed"`,
-				`href="/history?state=failed"`,
+				`href="/jobs?page=1&amp;state=failed"`,
+				`href="/jobs?state=failed"`,
 				// 状態は成果物の有無より先に出ます。待てば出るのか、
 				// 消してやり直すのかが一覧で分かる必要があります。
 				">音声あり<", ">失敗<", ">実行中<",
 				// ページ送りは 2 ページ以上のときだけ出ます。
-				`href="/history?page=3&amp;state=failed"`, "全 120 件",
+				`href="/jobs?page=3&amp;state=failed"`, "全 120 件",
 			},
 		},
 		{
 			name:     "詳細（音声あり）",
 			template: "detail.html",
 			view: detailView{
-				baseView:   testBaseView("/history/voice-1"),
+				baseView:   testBaseView("/jobs/voice-1"),
 				JobID:      "voice-1",
 				Script:     script,
 				HasScript:  true,
@@ -157,9 +157,9 @@ func TestTemplatesRender(t *testing.T) {
 				"保存して音声を作り直す",
 				"このジョブを削除",
 				"履歴一覧へ戻る",
-				`src="/history/voice-1/audio"`,
+				`src="/jobs/voice-1/audio"`,
 				// 台本は読むだけでなく直せます。
-				`action="/history/voice-1/script"`,
+				`action="/jobs/voice-1/synthesize"`,
 				`name="title"`,
 				`<textarea class="form-control form-control-sm js-text" name="text"`,
 				`<option value="四国めたん"`,
@@ -168,10 +168,10 @@ func TestTemplatesRender(t *testing.T) {
 				"こんにちはなのだ",
 				// 読みの確認は、直している最中に使えなければ意味がありません。
 				// 送り先はルーターが登録しているパスと一致している必要があります。
-				`data-endpoint="/preview-reading"`,
+				`data-endpoint="/reading/preview"`,
 				"js-reading",
 				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
-				`data-endpoint="/history/voice-1/status"`,
+				`data-endpoint="/jobs/voice-1"`,
 				`data-state="succeeded"`,
 				// 行の操作。順序は台本そのものなので、本文の切り貼りでは直せません。
 				"js-move-up", "js-move-down", "js-add-row", "js-remove-row",
@@ -183,7 +183,7 @@ func TestTemplatesRender(t *testing.T) {
 			name:     "詳細（音声なし）",
 			template: "detail.html",
 			view: detailView{
-				baseView:  testBaseView("/history/voice-2"),
+				baseView:  testBaseView("/jobs/voice-2"),
 				JobID:     "voice-2",
 				Script:    script,
 				HasScript: true,
@@ -201,7 +201,7 @@ func TestTemplatesRender(t *testing.T) {
 			name:     "詳細（台本なし・失敗）",
 			template: "detail.html",
 			view: detailView{
-				baseView: testBaseView("/history/voice-3"),
+				baseView: testBaseView("/jobs/voice-3"),
 				JobID:    "voice-3",
 				State:    jobstatus.StateFailed,
 				JobError: "AIモデルが空のスクリプトを返しました",
@@ -216,7 +216,7 @@ func TestTemplatesRender(t *testing.T) {
 				"このジョブを削除",
 				// 何を読ませたかは記録にあります。貼り直させる理由がありません。
 				"同じ入力で台本を作り直す",
-				`action="/history/voice-3/regenerate"`,
+				`action="/jobs/voice-3/regenerate"`,
 				"https://example.com/article",
 			},
 			// 直す台本が無いので、保存も合成も読みの確認もできません。ボタンだけ残すと、
@@ -307,7 +307,7 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 			Form:        domain.Request{Command: domain.CommandGenerate},
 		},
 		"detail.html": detailView{
-			baseView:  testBaseView("/history/voice-1"),
+			baseView:  testBaseView("/jobs/voice-1"),
 			JobID:     "voice-1",
 			Script:    domain.Script{Title: "T"},
 			HasScript: true,
@@ -326,8 +326,9 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 			}
 
 			got := buf.String()
-			// method="post" の数だけ hidden が要ります。
-			if forms, tokens := strings.Count(got, `method="post"`), strings.Count(got, `name="csrf_token"`); forms != tokens {
+			// method="post" の数だけ hidden が要ります。fetch で DELETE を送る削除ボタンの
+			// ぶんが 1 つ余ることはあります（フォームの外に置いた hidden を読むため）。
+			if forms, tokens := strings.Count(got, `method="post"`), strings.Count(got, `name="csrf_token"`); tokens < forms {
 				t.Errorf("%s: POST フォーム %d 件に対し csrf_token は %d 件です", name, forms, tokens)
 			}
 		})
@@ -342,7 +343,7 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 
 	tmpl := parseTemplates(t)
 
-	for _, path := range []string{"/", "/history"} {
+	for _, path := range []string{"/", "/jobs"} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 
@@ -353,7 +354,7 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 
 			got := buf.String()
 			// どの画面からでも両方のリンクが出ていること。
-			if !strings.Contains(got, `href="/"`) || !strings.Contains(got, `href="/history"`) {
+			if !strings.Contains(got, `href="/"`) || !strings.Contains(got, `href="/jobs"`) {
 				t.Errorf("ナビにリンクが揃っていません: %s", got)
 			}
 			if want := `href="` + path + `"`; !strings.Contains(got, `aria-current="page" `+want) {
@@ -383,7 +384,7 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 		{
 			name: "対応表がある",
 			view: detailView{
-				baseView:   testBaseView("/history/voice-1"),
+				baseView:   testBaseView("/jobs/voice-1"),
 				JobID:      "voice-1",
 				Speakers:   []string{"ずんだもん"},
 				StylesJSON: `{"ずんだもん":["ノーマル"]}`,
@@ -393,7 +394,7 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 			// 何らかの理由で対応表を組めなかった場合です。画面は開けるべきです。
 			name: "対応表が空",
 			view: detailView{
-				baseView: testBaseView("/history/voice-1"),
+				baseView: testBaseView("/jobs/voice-1"),
 				JobID:    "voice-1",
 				Speakers: []string{"ずんだもん"},
 			},

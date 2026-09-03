@@ -69,7 +69,7 @@ func NewSlackAdapter(httpClient httpkit.Poster, webhookURL, serviceURL string) (
 // detailURL は、ジョブの詳細画面の URL を返します。
 // ジョブ ID が無い場合は空を返し、通知側が行ごと省きます。
 func (s *SlackAdapter) detailURL(jobID string) string {
-	return notify.JoinURL(s.serviceURL, "/history", jobID)
+	return notify.JoinURL(s.serviceURL, "/jobs", jobID)
 }
 
 // Notify は Slack への完了通知を実行します。

@@ -45,7 +45,7 @@ is easy to break by editing.
   development). Parsed by `go-serve-kit/serverrole` in `Config.normalize`; an empty or unknown value
   fails startup rather than defaulting, because treating unset as `both` would restore the
   worker routes on the public service the moment one env var went missing. It selects which
-  dependency graph `builder` assembles and which routes `server.setupRoutes` registers.
+  dependency graph `builder` assembles and which routes `server.registerRoutes` registers.
 - `GEMINI_MODELS` — required. Comma-separated; the first entry is the default model, used when a
   request's `ai_model` is empty (`ScriptStep.modelFor`). There is deliberately **no default
   model in the code**: model IDs age on Google's release schedule, not this repo's, so a default
@@ -221,26 +221,30 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `script_test.go` keeps the bucket empty and still expects a page — without that, "just in case"
   reads of the artifacts creep back.
 - **One resource, one route.** `auth.Protected(m2m, session)` tries an OIDC bearer first and falls
-  back to session + CSRF, and `handlers/negotiated.go` then picks the representation from `Accept`.
+  back to session + CSRF, and `handlers/job.go` then picks the representation from `Accept`.
   Handlers that used to exist twice — once rendering a template, once writing JSON — are merged there;
-  keeping two meant a fix landed on one side and the two answers drifted. The `/api` reads that duplicated them are gone; the MCP server calls the `/history/…` paths directly.
-- **`/api/*` is what only machines call**: enqueue by JSON body, `synthesize`, the script `PUT`,
-  `speakers`, `DELETE`. **Anything the screen also calls lives outside it**, even without a page
-  of its own — `POST /preview-reading` and `GET /history/{jobID}/status`. Both started under
-  `/api` and moved when the screen began calling them; leaving them there would have made the
-  prefix mean "JSON" rather than "machines", and the next reader would have had to open the
-  templates to find out which. The status sits beside `audio` and `script` because it is another
-  read of the same job; the reading check hangs off no job at all (it sends what is in the table,
-  not the stored script — needing to save first puts the check on the wrong side of the edit), so
-  it sits at the root. A browser calling either sends `X-CSRF-Token` on the POST, which
+  keeping two meant a fix landed on one side and the two answers drifted.
+- **The job is the only primary resource, and there is no `/api/` prefix** (the URL naming
+  convention in public-docs). `/jobs/{jobID}` names a job from enqueue to delete: the browser
+  gets the detail screen, `Accept: application/json` gets the status record, so the poller and
+  the page read the same thing and nobody switches URLs on state. Where a person and a machine
+  send different bodies to the same action — `POST /jobs` (form tabs vs JSON), `POST
+  /jobs/{jobID}/synthesize` (edited rows to save first vs nothing, meaning "the stored script") —
+  one handler dispatches on `Content-Type` (`JobCreate`, `Synthesize` in `handlers/job_create.go`
+  and `handlers/job_script.go`). Enqueues and actions answer `202` with `Location: /jobs/{jobID}`.
+  Delete is `DELETE` for both readers; the page sends it from `App.deleteResource` because a form
+  cannot, and a second `POST …/delete` for the screen would have split the authorization and log
+  entry points. The reading check is `POST /reading/preview` and hangs off no job (it sends what
+  is in the table, not the stored script). A browser sends `X-CSRF-Token` on those calls, which
   `gcp-kit/auth` accepts alongside the form field; a machine on a Bearer never reaches that check.
-  **The MCP server still calls the old `/api` paths** and has to move with them.
-  `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional; unset, verification
-  always fails and everything falls through to the session, so the failure mode of forgetting it is
-  "the agent gets redirected to login" (now logged by `auth.Protected` as a config error).
-  **`/api/speakers` exists because the styles are per speaker** — 春日部つむぎ has one and
-  ずんだもん has eight, an impossible pair is rejected on save, and a client with no way to read
-  the list can only guess. `PUT /api/jobs/{id}/script` saves without synthesizing, since an agent
+  **The old paths (`POST /`, `/history/*`, `/api/*`, `/preview-reading`) are still registered**
+  in `registerLegacyRoutes` and go to the same handlers; the MCP server has not moved yet, and the
+  function is deleted once it has and is deployed. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional;
+  unset, verification always fails and everything falls through to the session, so the failure
+  mode of forgetting it is "the agent gets redirected to login" (logged by `auth.Protected` as a
+  config error). **`/speakers` exists because the styles are per speaker** — 春日部つむぎ has one
+  and ずんだもん has eight, an impossible pair is rejected on save, and a client with no way to
+  read the list can only guess. `PUT /jobs/{id}/script` saves without synthesizing, since an agent
   may revise several times before spending the minutes once; the browser folds the two into one
   button because a person editing has already decided. Both go through `validateScript` — one
   loose path is enough to store a pair that silently becomes the speaker's default at synthesis.
@@ -257,15 +261,15 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   until the form existed there was no way to fix anything, so review could only choose between
   synthesizing and deleting. Saving and synthesizing are one button — with the script editable,
   a re-synthesis that skips the save would only ever reproduce the same audio.
-  **The edited script is not put in the task.** `UpdateScript` writes it to GCS and enqueues the
+  **The edited script is not put in the task.** `synthesizeFromForm` writes it to GCS and enqueues the
   job ID alone (the reason is under `synthesize` below), so the worker keeps using the
   stored-script path it already had. Speaker and style come from the registry and are re-checked
   on submit: the browser offers only valid pairs, but the form accepts anything, and an
   impossible pair survives every later check (see the response schema below).
   Rows can be added, moved and removed, since the speaking order *is* the script; the row cap
   travels to the page as `data-max-lines` rather than being written into the JS a second time.
-  The screen also calls `preview-reading` and, while a job is queued or running, polls
-  `status` and reloads when it changes — both are the server's answers, not a second rendering.
+  The screen also calls `/reading/preview` and, while a job is queued or running, polls
+  `GET /jobs/{jobID}` as JSON and reloads when the state changes — both are the server's answers, not a second rendering.
 - **`internal/repository` serves the history screens** — `List`, `Load`, `SaveScript`, `HasAudio`,
   `Get`/`Save` (the job record) and `Delete`, which removes the whole job prefix rather than a
   fixed list of names. A record with no title yet leaves the job listed under its ID, so a job
@@ -304,7 +308,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   `internal/server/handlers/templates_test.go` renders every screen with the real view structs
   (a `map` would turn a missing key into `<no value>` and pass).
 - **A new role never means touching the router.** `BuildHandlers` leaves the handlers a role does
-  not serve as nil and `setupRoutes` guards each route group on nil, so `SERVER_ROLE=web` simply
+  not serve as nil and `registerRoutes` guards each route group on nil, so `SERVER_ROLE=web` simply
   has no `/tasks/generate` — it 404s rather than existing unprotected. `AppHandlers.Validate`
   rejects the half-built case (`TaskAuth` without `Worker`, or vice versa) at startup, because the
   router would otherwise turn a DI mistake into a silent 404 indistinguishable from a config
@@ -335,7 +339,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
     payload**, because a long one can reach Cloud Tasks' 1MB limit. `Request` used to have a
     `Script` field that `resolveScript` preferred when set, and once every enqueue path saved the
     script and passed the ID alone — including the two that accept a caller's own script, the
-    `/api/jobs` body and the form's script tab — nothing could set it. It went the way the
+    `POST /jobs` JSON body and the form's script tab — nothing could set it. It went the way the
     "skipped" notification did, and for the same reason: tests were its only callers.
     `PublishStep.Run` rewrites the script *and* writes the WAV, so an
     edited script cannot drift from the audio that was actually spoken. **The script goes
@@ -343,7 +347,7 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
     would lose a generated script to a synthesis timeout, leaving nothing to retry from.
 
   `Request.Command` has **no default**: an empty command is an error, because silently treating it
-  as `generate` would discard the `script` a caller put in the `/api/jobs` body and bill them for
+  as `generate` would discard the `script` a caller put in the `POST /jobs` body and bill them for
   generation. `Request.Validate`
   lives in `domain` so the web form can reuse it, and runs before anything external is touched
   (`TestPipelineExecute_InvalidRequest`).
