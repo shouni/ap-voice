@@ -17,7 +17,6 @@ import (
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/builder"
 	"github.com/shouni/ap-voice/internal/domain"
-	"github.com/shouni/ap-voice/internal/server/handlers"
 )
 
 // compressionLevel は gzip の圧縮レベルです。
@@ -108,7 +107,6 @@ func registerRoutes(r chi.Router, h *builder.AppHandlers) {
 			r.Post("/{jobID}/regenerate", h.Web.Regenerate)
 		})
 
-		registerLegacyRoutes(r, h.Web)
 	})
 
 	// Cloud Tasks 専用ルート (Worker 用)。
@@ -139,34 +137,4 @@ func registerStaticRoutes(r chi.Router) {
 		panic(fmt.Sprintf("static assets: %v", err))
 	}
 	r.Handle("/static/*", files)
-}
-
-// registerLegacyRoutes は、/jobs へ寄せる前のパスを同じハンドラへ流します。
-//
-// MCP サーバーが /jobs 配下へ切り替わり、そのデプロイが済んだら関数ごと消します。
-// GET /history/{jobID}/status だけは Accept に関わらず JSON を返す旧い振る舞いのままです。
-func registerLegacyRoutes(r chi.Router, web *handlers.Handler) {
-	r.Post("/", web.JobCreate)
-	r.Post("/preview-reading", web.PreviewReading)
-
-	r.Route("/history", func(r chi.Router) {
-		r.Get("/", web.JobList)
-		r.Get("/{jobID}", web.Job)
-		r.Post("/{jobID}/script", web.Synthesize)
-		r.Post("/{jobID}/regenerate", web.Regenerate)
-		r.Post("/{jobID}/delete", web.JobDelete)
-		r.Get("/{jobID}/audio", web.Audio)
-		r.Get("/{jobID}/script", web.Script)
-		r.Get("/{jobID}/status", web.JobStatus)
-	})
-
-	r.Route("/api", func(r chi.Router) {
-		r.Get("/speakers", web.Speakers)
-		r.Route("/jobs", func(r chi.Router) {
-			r.Post("/", web.JobCreate)
-			r.Put("/{jobID}/script", web.ScriptUpdate)
-			r.Post("/{jobID}/synthesize", web.Synthesize)
-			r.Delete("/{jobID}", web.JobDelete)
-		})
-	})
 }

@@ -65,7 +65,7 @@ func (h *Handler) formView(r *http.Request, form domain.Request, activeTab strin
 }
 
 // createJobForm は、フォームの内容を検証し、Worker 面へ実行を引き渡します
-// （POST /jobs をフォームから呼んだとき。旧パス POST / も同じ）。
+// （POST /jobs をフォームから呼んだとき）。
 //
 // ここでは合成を待ちません。分単位かかるため、リクエストの中で完了させられないためです。
 // 結果は Slack 通知と出力先で受け取ります。

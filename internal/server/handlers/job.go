@@ -49,7 +49,6 @@ func (h *Handler) jobID(w http.ResponseWriter, r *http.Request) (string, bool) {
 // JobDelete は、ジョブと成果物をまとめて消します（DELETE /jobs/{jobID}）。
 //
 // 画面の削除ボタンも fetch で DELETE を送ります（app.js の App.deleteResource）。
-// 旧パス POST /history/{jobID}/delete は、フォームから来る間だけ同じ処理へ流します。
 func (h *Handler) JobDelete(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.jobID(w, r)
 	if !ok {
@@ -88,8 +87,8 @@ func (h *Handler) JobDelete(w http.ResponseWriter, r *http.Request) {
 // ポーリング側が unknown として静かに受け入れてしまいます。
 //
 // 表現は 1 つ（JSON）です。GET /jobs/{jobID} が JSON を求められたときの中身で、
-// 旧パス GET /history/{jobID}/status は Accept に関わらずこれを返します。
-func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
+// Job から呼ばれます。
+func (h *Handler) jobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.apiJobID(w, r)
 	if !ok {
 		return
@@ -115,7 +114,7 @@ func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
 // 状態で切り替えずに済みます。
 func (h *Handler) Job(w http.ResponseWriter, r *http.Request) {
 	if respond.WantsJSON(w, r) {
-		h.JobStatus(w, r)
+		h.jobStatus(w, r)
 		return
 	}
 	jobID, ok := h.jobID(w, r)

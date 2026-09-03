@@ -86,7 +86,7 @@ go run .        # SERVER_ROLE が必須
 
 | ロール | 組み立てるもの | 公開されるルート |
 | --- | --- | --- |
-| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `/`, `/modes/*`, `/speakers`, `/reading/preview`, `/jobs/*`, `/auth/*`（旧パス `/history/*` `/api/*` `/preview-reading` `POST /` も当面受ける） |
+| `web` | 投入フォーム・モード一覧・履歴画面・Cloud Tasks への投入 | `/`, `/modes/*`, `/speakers`, `/reading/preview`, `/jobs/*`, `/auth/*` |
 | `worker` | パイプライン（Gemini + VOICEVOX + GCS + 通知） | `POST /tasks/generate` |
 | `both` | 両方（ローカル開発用） | 上記すべて |
 
@@ -115,7 +115,6 @@ go run .        # SERVER_ROLE が必須
 | `PUT` | `/jobs/{jobID}/script` | 台本を差し替え。**合成はしません**（何度か直してから 1 度だけ合成できます） |
 | `POST` | `/jobs/{jobID}/synthesize` | 音声を作る。JSON（本文なし）は保存済みの台本から。フォーム（編集画面のボタン）は編集中の台本を保存してから。**台本はタスクに載せません**（先に保存してジョブ ID だけを渡します）。`202` と `Location` |
 | `POST` | `/jobs/{jobID}/regenerate` | **同じ入力ソースから台本を作り直す**。入力ソースは記録から復元するので貼り直し不要です。ジョブ ID は変わりません |
-| — | `POST /`, `/preview-reading`, `/history/*`, `/api/*` | 旧パス。同じ処理へ流します。MCP サーバーが `/jobs` へ切り替わったら消します（`registerLegacyRoutes`） |
 | `POST` | `/tasks/generate` | Cloud Tasks 専用のワーカー。OIDC 検証を通らないリクエストは 401、`SERVER_ROLE=web` では**ルートごと登録されない**ため 404 |
 
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を送れば

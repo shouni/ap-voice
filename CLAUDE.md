@@ -237,9 +237,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   entry points. The reading check is `POST /reading/preview` and hangs off no job (it sends what
   is in the table, not the stored script). A browser sends `X-CSRF-Token` on those calls, which
   `gcp-kit/auth` accepts alongside the form field; a machine on a Bearer never reaches that check.
-  **The old paths (`POST /`, `/history/*`, `/api/*`, `/preview-reading`) are still registered**
-  in `registerLegacyRoutes` and go to the same handlers; the MCP server has not moved yet, and the
-  function is deleted once it has and is deployed. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional;
+  The pre-convention paths (`POST /`, `/history/*`, `/api/*`, `/preview-reading`) are gone; the
+  MCP server calls `/jobs` directly. `ALLOWED_M2M_SERVICE_ACCOUNTS` is optional;
   unset, verification always fails and everything falls through to the session, so the failure
   mode of forgetting it is "the agent gets redirected to login" (logged by `auth.Protected` as a
   config error). **`/speakers` exists because the styles are per speaker** — 春日部つむぎ has one
