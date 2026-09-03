@@ -136,7 +136,7 @@ func (p *Pipeline) Execute(ctx context.Context, req domain.Request) (err error) 
 
 	if err = req.Validate(); err != nil {
 		// 依頼そのものが不正なので、配り直しても同じ行で落ちます。
-		err = permanent(err)
+		err = worker.Permanent(err)
 		return err
 	}
 
@@ -198,13 +198,13 @@ func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domai
 			// あとに行うので、無いまま届いたものは待っても現れません。読めないほう
 			// （GCS の一時障害）は再配信で直り得るので、そのまま返します。
 			if errors.Is(err, domain.ErrScriptNotFound) {
-				return domain.Script{}, permanent(err)
+				return domain.Script{}, worker.Permanent(err)
 			}
 			return domain.Script{}, err
 		}
 		if len(script.Lines) == 0 {
 			// 空の台本が後から埋まることはありません。
-			return domain.Script{}, permanent(fmt.Errorf("保存済み台本が空です (%s)", req.JobID))
+			return domain.Script{}, worker.Permanent(fmt.Errorf("保存済み台本が空です (%s)", req.JobID))
 		}
 		return script, nil
 	}
@@ -219,28 +219,3 @@ func (p *Pipeline) resolveScript(ctx context.Context, req domain.Request) (domai
 
 	return script, nil
 }
-
-// permanent は、再配信しても直らない失敗に印を付けます。
-//
-// voice-queue だけ max_attempts = 2 なので、付けないと直しようのない依頼が 2 回走り、
-// 失敗通知も 2 通届きます（min_backoff = 60s なので 2 通目は 1 分後）。付けても記録と
-// 通知は失敗のまま残るので、利用者から見た結果は変わりません。
-//
-// ★ 一時的な失敗（VOICEVOX や Vertex AI の 429 / 503）には使わないでください。
-// 再配信で直るはずのジョブが成功扱いで打ち切られ、二度と実行されません。
-// 再試行はもともとその失敗のために有効にしてあります。
-func permanent(err error) error {
-	return permanentError{cause: err}
-}
-
-// permanentError は、再配信を止める印だけを足し、文面は原因のままにします。
-//
-// fmt.Errorf で worker.ErrPermanent を被せると、その文言が Error() の先頭に付き、
-// 記録（JobStatus.Error）と Slack 通知にそのまま出ます。利用者にとっては実装都合の
-// 文字列でしかありません。恒久かどうかは worker.Handler が構造化ログの permanent
-// フィールドへ別に出すので、文面に混ぜる必要がありません。
-type permanentError struct{ cause error }
-
-func (e permanentError) Error() string        { return e.cause.Error() }
-func (e permanentError) Unwrap() error        { return e.cause }
-func (e permanentError) Is(target error) bool { return target == worker.ErrPermanent }

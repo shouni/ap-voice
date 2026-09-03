@@ -4,12 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
+	"github.com/shouni/gcp-kit/auth"
 	"github.com/shouni/gcp-kit/auth/oidc"
 	"github.com/shouni/gcp-kit/auth/session"
 	"github.com/shouni/gcp-kit/worker"
-	"github.com/shouni/netarmor/securenet"
 
 	"github.com/shouni/ap-voice/assets"
 	"github.com/shouni/ap-voice/internal/adapters"
@@ -38,7 +37,7 @@ type AppHandlers struct {
 	// M2M は、ブラウザではなく機械（MCP サーバーなど）からの OIDC を検証します。
 	// 未設定でも nil にはしません。検証が常に失敗する verifier を渡しておくと、
 	// auth.Protected はセッション認証へ落として動き続けます。
-	M2M *oidc.Verifier
+	M2M auth.Authenticator
 }
 
 // Validate は、組み立て結果が役割として筋の通った形になっていることを確かめます。
@@ -74,12 +73,9 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 	if role.ServesWorker() {
 		// audience と許可する caller SA の両方が揃わないと検証は常に失敗する
 		// （fail-closed）ため、起動時に構成を確かめておきます。
-		taskAuth := oidc.New(
-			appCtx.Config.Tasks.TaskAudienceURL,
-			appCtx.Config.Tasks.AllowedServiceAccounts,
-		)
-		if !taskAuth.Configured() {
-			return nil, fmt.Errorf("タスク受信の OIDC 検証を構成できません: TASK_AUDIENCE_URL と ALLOWED_TASK_SERVICE_ACCOUNTS が必要です")
+		taskAuth, err := oidc.New(appCtx.Config.Tasks.TaskAudienceURL, appCtx.Config.Tasks.AllowedServiceAccounts)
+		if err != nil {
+			return nil, fmt.Errorf("タスク受信の OIDC 検証を構成できません: TASK_AUDIENCE_URL と ALLOWED_TASK_SERVICE_ACCOUNTS が必要です: %w", err)
 		}
 		h.TaskAuth = taskAuth
 		h.Worker = worker.NewHandler[domain.Request](appCtx.Pipeline)
@@ -134,9 +130,13 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 
 	// audience は自分自身の公開 URL です。呼び出し側は「この URL 宛て」の
 	// トークンを取るため、ここがずれると全て 401 になります。
-	m2m := oidc.New(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts)
-	if !m2m.Configured() {
-		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS が未設定のため、API は機械からの呼び出しを受け付けません。")
+	// 機械からの呼び出しは任意です。未設定なら方式ごと外し、auth.Protected に
+	// 飛ばさせます（nil の Authenticator は走査されません）。
+	var m2m auth.Authenticator
+	if v, err := oidc.New(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts); err != nil {
+		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS が未設定のため、API は機械からの呼び出しを受け付けません。", "reason", err)
+	} else {
+		m2m = v
 	}
 
 	h.Auth = authHandler
@@ -147,18 +147,12 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 
 // createAuthHandler は、Google OAuth の認証ハンドラーを初期化します。
 func createAuthHandler(cfg *config.Config, store session.Store) (*session.Handler, error) {
-	redirectURL, err := url.JoinPath(cfg.Server.ServiceURL, "/auth/callback")
-	if err != nil {
-		return nil, fmt.Errorf("リダイレクトURLの構築に失敗しました: %w", err)
-	}
-
 	return session.New(session.Config{
 		ClientID:       cfg.Auth.GoogleClientID,
 		ClientSecret:   cfg.Auth.GoogleClientSecret,
-		RedirectURL:    redirectURL,
+		ServiceURL:     cfg.Server.ServiceURL,
 		Store:          store,
 		SessionName:    defaultSessionName,
-		IsSecureCookie: securenet.IsSecureServiceURL(cfg.Server.ServiceURL),
 		AllowedEmails:  cfg.Auth.AllowedEmails,
 		AllowedDomains: cfg.Auth.AllowedDomains,
 	},
