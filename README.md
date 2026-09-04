@@ -254,7 +254,7 @@ ap-voice/
     ├── app/                 # DI コンテナとリソース管理
     ├── builder/             # 外部依存とハンドラーの組み立て
     ├── repository/          # 成果物の読み出し（台本）とジョブ状態の読み書き（履歴）
-    ├── pipeline/            # command による分岐と各段（step_*.go）
+    ├── pipeline/            # ワーカー本体。planner.go が command から工程列を決め、各工程は step_*.go
     └── adapters/            # Gemini / VOICEVOX / Cloud Tasks / Slack / プロンプト
 ```
 

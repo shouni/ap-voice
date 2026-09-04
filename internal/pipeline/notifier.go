@@ -8,7 +8,7 @@ import (
 )
 
 // notifySuccess は、処理成功の通知を送信します。
-func (p *Pipeline) notifySuccess(ctx context.Context, req domain.Request, publicURL string) {
+func (p *Runner) notifySuccess(ctx context.Context, req domain.Request, publicURL string) {
 	if p.notifier == nil {
 		return
 	}
@@ -18,7 +18,7 @@ func (p *Pipeline) notifySuccess(ctx context.Context, req domain.Request, public
 }
 
 // notifyFailure は、処理失敗の通知を送信します。
-func (p *Pipeline) notifyFailure(ctx context.Context, req domain.Request, runErr error) {
+func (p *Runner) notifyFailure(ctx context.Context, req domain.Request, runErr error) {
 	if p.notifier == nil {
 		return
 	}

@@ -30,6 +30,29 @@ func NewPublishStep(voice domain.Voice, signer Signer) *PublishStep {
 	}
 }
 
+// Name は工程名です。
+func (*PublishStep) Name() string { return "publish" }
+
+// Execute は、Command に応じて保存する成果物を切り替え、公開 URL を sc.PublicURL に載せます。
+//
+// generate は台本まで、それ以外は音声まで。generate で音声を作らないのは、
+// 台本を確認・修正してから合成へ進めるようにするためです。
+func (r *PublishStep) Execute(ctx context.Context, sc *Context) error {
+	publicURL, err := r.publishFor(ctx, sc.Request, sc.Script)
+	if err != nil {
+		return fmt.Errorf("公開処理の実行に失敗しました: %w", err)
+	}
+	sc.PublicURL = publicURL
+	return nil
+}
+
+func (r *PublishStep) publishFor(ctx context.Context, req domain.Request, script domain.Script) (string, error) {
+	if req.Command == domain.CommandGenerate {
+		return r.PublishScript(ctx, req.OutputURI, script)
+	}
+	return r.Run(ctx, req.OutputURI, script)
+}
+
 // PublishScript は台本だけを保存します。generate はここで終わります。
 //
 // 音声まで作らないのは、台本を確認・修正してから合成へ進めるようにするためです。

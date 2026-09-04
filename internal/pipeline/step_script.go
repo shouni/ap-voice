@@ -70,6 +70,22 @@ func NewScriptStep(
 	}
 }
 
+// Name は工程名です。
+func (*ScriptStep) Name() string { return "generate_script" }
+
+// Execute は、台本を生成して sc.Script に載せます。
+func (gr *ScriptStep) Execute(ctx context.Context, sc *Context) error {
+	script, err := gr.Run(ctx, sc.Request)
+	if err != nil {
+		return fmt.Errorf("スクリプトテキスト作成に失敗しました: %w", err)
+	}
+	if len(script.Lines) == 0 {
+		return fmt.Errorf("AIモデルが空のスクリプトを返しました。プロンプトや入力コンテンツに問題がないか確認してください")
+	}
+	sc.Script = script
+	return nil
+}
+
 // modelFor は、リクエストが指定したモデル名を返します。
 // 指定が無ければ既定モデルを使います。タスクのペイロードは呼び出し元が組み立てるため、
 // モデル名が欠けることは十分にあり、そこで生成ごと失敗させる理由はありません。

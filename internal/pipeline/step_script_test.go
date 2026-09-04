@@ -304,3 +304,34 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 }
+
+// TestScriptStepExecuteRejectsEmptyScript は、AI が空の台本を返したら工程が失敗する
+// ことを確かめます。空のまま先へ進めると、保存だけ成功して喋る行の無いジョブが
+// 「成功」として記録されます。
+func TestScriptStepExecuteRejectsEmptyScript(t *testing.T) {
+	t.Parallel()
+
+	step := NewScriptStep(
+		&mockContentReader{
+			openFunc: func(context.Context, string) (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader("十分に長い入力テキストです。")), nil
+			},
+		},
+		&mockPromptBuilder{generateFunc: func(string, string) (string, error) { return "prompt", nil }},
+		&mockAIClient{
+			generateFunc: func(context.Context, string, string, gemini.GenerateOptions) (*gemini.Response, error) {
+				return &gemini.Response{Text: `{"title":"t","lines":[]}`}, nil
+			},
+		},
+		"gemini-2.5-flash",
+		testSpeakers(t),
+	)
+
+	sc := &Context{Request: domain.Request{InputURI: "gs://bucket/input.txt", Mode: "duet"}}
+	if err := step.Execute(context.Background(), sc); err == nil {
+		t.Fatal("Execute() error = nil, want an error for the empty script")
+	}
+	if len(sc.Script.Lines) != 0 {
+		t.Errorf("empty script was placed on the context: %+v", sc.Script)
+	}
+}

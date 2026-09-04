@@ -14,12 +14,24 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-var _ scriptGenerator = (*MockScriptStep)(nil)
-var _ publisher = (*MockPublishStep)(nil)
+var _ Step = (*MockScriptStep)(nil)
+var _ Step = (*MockPublishStep)(nil)
 var _ domain.Notifier = (*MockNotifier)(nil)
 
+// MockScriptStep は台本生成の工程を差し替えます。RunFunc が返した台本をそのまま載せます。
 type MockScriptStep struct {
 	RunFunc func(ctx context.Context, req domain.Request) (domain.Script, error)
+}
+
+func (*MockScriptStep) Name() string { return "generate_script" }
+
+func (m *MockScriptStep) Execute(ctx context.Context, sc *Context) error {
+	script, err := m.Run(ctx, sc.Request)
+	if err != nil {
+		return err
+	}
+	sc.Script = script
+	return nil
 }
 
 func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) (domain.Script, error) {
@@ -29,9 +41,30 @@ func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) (domain.Sc
 	return m.RunFunc(ctx, req)
 }
 
+// MockPublishStep は保存・合成の工程を差し替えます。本物と同じく generate は
+// PublishScriptFunc、それ以外は RunFunc へ振り分けます。
 type MockPublishStep struct {
 	RunFunc           func(ctx context.Context, outputURI string, script domain.Script) (string, error)
 	PublishScriptFunc func(ctx context.Context, outputURI string, script domain.Script) (string, error)
+}
+
+func (*MockPublishStep) Name() string { return "publish" }
+
+func (m *MockPublishStep) Execute(ctx context.Context, sc *Context) error {
+	var (
+		publicURL string
+		err       error
+	)
+	if sc.Request.Command == domain.CommandGenerate {
+		publicURL, err = m.PublishScript(ctx, sc.Request.OutputURI, sc.Script)
+	} else {
+		publicURL, err = m.Run(ctx, sc.Request.OutputURI, sc.Script)
+	}
+	if err != nil {
+		return err
+	}
+	sc.PublicURL = publicURL
+	return nil
 }
 
 func (m *MockPublishStep) PublishScript(ctx context.Context, outputURI string, script domain.Script) (string, error) {
@@ -101,7 +134,7 @@ func TestPipelineExecute(t *testing.T) {
 		publishCalled := false
 		notifyCalled := false
 
-		p := NewPipeline(
+		p := NewRunner(
 			&MockScriptStep{
 				RunFunc: func(_ context.Context, got domain.Request) (domain.Script, error) {
 					generateCalled = true
@@ -159,7 +192,7 @@ func TestPipelineExecute(t *testing.T) {
 		expectedErr := errors.New("generate failed")
 		failureNotified := false
 
-		p := NewPipeline(
+		p := NewRunner(
 			&MockScriptStep{
 				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 					return domain.Script{}, expectedErr
@@ -192,44 +225,13 @@ func TestPipelineExecute(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 空スクリプト生成時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
-		t.Parallel()
-
-		failureNotified := false
-
-		p := NewPipeline(
-			&MockScriptStep{
-				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
-					return domain.Script{}, nil
-				},
-			},
-			&MockPublishStep{},
-			&MockNotifier{
-				NotifyFailureFunc: func(_ context.Context, _ domain.Request, _ error) error {
-					failureNotified = true
-					return nil
-				},
-			},
-			&MockScriptStore{},
-			nil,
-			0,
-		)
-
-		if err := p.Execute(ctx, req); err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if !failureNotified {
-			t.Fatal("failure notifier was not called")
-		}
-	})
-
 	t.Run("異常系: 公開失敗時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("publish failed")
 		failureNotified := false
 
-		p := NewPipeline(
+		p := NewRunner(
 			&MockScriptStep{
 				RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 					return domain.Script{Title: "テスト台本", Lines: sampleLines}, nil
@@ -287,7 +289,7 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 	generateCalled := false
 	var published []domain.ScriptLine
 
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 				generateCalled = true
@@ -360,7 +362,7 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 
 			touched := false
 			failureNotified := false
-			p := NewPipeline(
+			p := NewRunner(
 				&MockScriptStep{
 					RunFunc: func(_ context.Context, _ domain.Request) (domain.Script, error) {
 						touched = true
@@ -405,7 +407,7 @@ func TestPipelineNotifications(t *testing.T) {
 
 	t.Run("notifySuccess: notifierがnilでもパニックしないこと", func(t *testing.T) {
 		t.Parallel()
-		p := &Pipeline{}
+		p := &Runner{}
 		p.notifySuccess(ctx, req, "")
 	})
 
@@ -419,12 +421,15 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	t.Parallel()
 
 	type failure struct {
-		ctx context.Context
-		err error
+		// ctxErr は通知が呼ばれた時点の ctx の状態です。Finish の ctx は Lifecycle が
+		// 上限つきで切り出すため、Execute から戻ったあとには cancel 済みで、呼ばれた
+		// 時点で見ないと「切り離されていたか」を判定できません。
+		ctxErr error
+		err    error
 	}
 	notified := make(chan failure, 1)
 
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(ctx context.Context, _ domain.Request) (domain.Script, error) {
 				// 上限を超えるまで待ちます。実際の合成が長引いた状態の代わりです。
@@ -435,7 +440,7 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 		&MockPublishStep{},
 		&MockNotifier{
 			NotifyFailureFunc: func(ctx context.Context, _ domain.Request, err error) error {
-				notified <- failure{ctx: ctx, err: err}
+				notified <- failure{ctxErr: ctx.Err(), err: err}
 				return nil
 			},
 		},
@@ -455,8 +460,8 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 
 	select {
 	case got := <-notified:
-		if got.ctx.Err() != nil {
-			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctx.Err())
+		if got.ctxErr != nil {
+			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctxErr)
 		}
 		// 通知側が打ち切りだと判別できること。ここが切れていると、
 		// SlackAdapter は時間切れを普通の失敗として出してしまいます。
@@ -525,7 +530,7 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 			t.Parallel()
 
 			store := &memoryStatusStore{}
-			p := NewPipeline(
+			p := NewRunner(
 				&MockScriptStep{
 					RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
 						return domain.Script{
@@ -584,7 +589,7 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 		},
 	}
 
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
 				return domain.Script{}, errors.New("生成に失敗しました")
@@ -630,7 +635,7 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	}
 
 	var generated, published, notified int
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
 			generated++
 			return domain.Script{Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
@@ -686,7 +691,7 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 	}
 
 	var published int
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{},
 		&MockPublishStep{RunFunc: func(context.Context, string, domain.Script) (string, error) {
 			published++
@@ -727,7 +732,7 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 
 	var generated int
 	var notifiedFailure int
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
 			generated++
 			return domain.Script{Lines: []domain.ScriptLine{{Text: "本文"}}}, nil
@@ -756,8 +761,10 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 	if store.saved.State != jobstatus.StateSucceeded {
 		t.Errorf("State = %q, want succeeded（読めないだけで記録を潰さない）", store.saved.State)
 	}
-	if notifiedFailure != 0 {
-		t.Errorf("判断を保留しただけで失敗通知を出している: %d 回", notifiedFailure)
+	// 実行は見送りますが、黙って返しません。キューの再試行が来なければジョブは queued の
+	// まま誰にも気付かれないので、記録を伴わない通知で人に投げ直しを促します（ワーカー規約 2.1）。
+	if notifiedFailure != 1 {
+		t.Errorf("状態を読めなかったことを通知していない: %d 回", notifiedFailure)
 	}
 }
 
@@ -781,7 +788,7 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 		},
 	}
 
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{},
 		&MockPublishStep{},
 		&MockNotifier{},
@@ -816,7 +823,7 @@ func TestPipelineRecordsMode(t *testing.T) {
 	t.Parallel()
 
 	store := &memoryStatusStore{}
-	p := NewPipeline(
+	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
 				return domain.Script{Title: "題名", Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Text: "本文"}}}, nil
@@ -883,7 +890,7 @@ func TestExecuteClassifiesRetry(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			p := &Pipeline{
+			p := &Runner{
 				scripts: &MockScriptStore{
 					LoadFunc: func(context.Context, string) (domain.Script, error) {
 						return tt.loadScript, tt.loadErr
