@@ -154,10 +154,12 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
 
 ### Key invariants
 
-- **`internal/domain` is dependency-free** — ports (interfaces) and plain data models only.
-  Adapters implement these ports; runners and pipeline depend only on the interfaces, never on
-  concrete adapter types. New external integrations become a new adapter + port, not a change to
-  `domain`.
+- **`internal/domain` holds ports and data models, and constructs nothing** — no clients, no I/O.
+  It does borrow one vocabulary: `gcp-kit/jobstatus`'s `Status` / `State`, so `Repository` satisfies
+  `jobstatus.StatusStore` without an adapter whose only job is to rename fields. **Vocabulary types
+  and pure helpers may be borrowed; clients may not.** Adapters implement these ports; runners and
+  pipeline depend only on the interfaces, never on concrete adapter types. New external integrations
+  become a new adapter + port, not a change to `domain`.
 - **`internal/builder` is the only place that constructs concrete adapters.** `BuildContainer`
   builds GCS storage → Store → HTTP client → Notifier → Pipeline, tracking every opened
   resource in a `[]io.Closer` so a partial failure during construction cleans up what was already
@@ -180,8 +182,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   carries a valid token and every POST is rejected. Every `method="post"` needs the
   `csrf_token` hidden field — `templates_test.go` counts them, since a missing one looks like a
   perfectly normal page until someone submits it.
-- **Job state lives in `go-job-firestore`**, unlike the siblings: `jobfirestore.Status` written to
-  Firestore `ap-voice/<jobID>`, **outside the job's GCS prefix**. Deleting a job's objects no longer
+- **Job state lives in Firestore, outside the job's GCS prefix**: `gcp-kit/jobstatus` writes a
+  `jobstatus.Status` to `ap-voice/<jobID>`. Deleting a job's objects no longer
   takes its state with it, so `Repository.Delete` removes the document explicitly; if that fails the
   delete still succeeds and the orphan is logged. The record also carries `mode`, which
   **nothing else preserves**: a finished script only reveals the speaker line-up, so a one-speaker
@@ -211,8 +213,8 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   that may say `succeeded`, disarming the guard for the next delivery. Failure is recorded on the
   un-cancelled notification context for the same reason the notification is: a timed-out context
   records nothing.
-  `Repository` satisfies `jobfirestore.StatusStore`, which is why the store is assembled in one
-  place. `List` takes `jobfirestore.ListOption` and does not invent a filter vocabulary of its own;
+  `Repository` satisfies `jobstatus.StatusStore`, which is why the store is assembled in one
+  place. `List` takes `jobstatus.ListOption` and does not invent a filter vocabulary of its own;
   `?state=` on the history screen is `WithState` with the recorded spelling, and an unknown value
   is a 400 rather than a silent full listing (a typo answering "no failures" is worse than an
   error). **The filtered query needs a composite index** (`state` asc + `queued_at` desc) that the
