@@ -119,10 +119,7 @@ go run .        # SERVER_ROLE が必須
 
 **同じリソースはルートも 1 本です。** 表現は `Accept` で決まり、`application/json` を送れば
 JSON が、ブラウザの `Accept` なら画面が返ります。エラー本文も同じ判定で `{"error": "..."}`
-になります。
-
-**`/api/` 接頭辞は持ちません。** 人と機械の違いは本文の形（フォームか JSON か）と `Accept` で
-吸収し、URL は 1 本です。パスの切り方は public-docs の URL 命名規約に従います。
+になります。パスの切り方は public-docs の URL 命名規約に従います。
 
 **副作用のあるメソッドには CSRF トークンが要ります。** フォームは `csrf_token` の hidden で、
 画面の JS は `X-CSRF-Token` ヘッダーで送ります。OIDC Bearer で認証した機械はこの検証に入りません
@@ -260,7 +257,7 @@ ap-voice/
 
 ---
 
-### 📜 ライセンス (License)
+## 📜 ライセンス (License)
 
 * 使用キャラクター: VOICEVOX:ずんだもん、VOICEVOX:四国めたん、VOICEVOX:春日部つむぎ ほか
   （**使える話者は `assets/speakers.json`** = エンジンの `/speakers` 応答が決めます。
