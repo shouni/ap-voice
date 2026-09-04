@@ -8,7 +8,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.4.0
-	github.com/shouni/gcp-kit v1.16.0
+	github.com/shouni/gcp-kit v1.17.0
 	github.com/shouni/genai-kit v1.0.1
 	github.com/shouni/go-http-kit v1.11.0
 	github.com/shouni/go-notify v1.4.0
@@ -18,7 +18,6 @@ require (
 	github.com/shouni/go-utils v1.7.1
 	github.com/shouni/go-voicevox v1.11.0
 	github.com/shouni/go-web-reader v1.5.1
-	github.com/shouni/netarmor v1.4.0
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -76,6 +75,7 @@ require (
 	github.com/ikawaha/kagome/v2 v2.11.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/shouni/netarmor v1.4.0 // indirect
 	github.com/slack-go/slack v0.29.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
