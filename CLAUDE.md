@@ -119,9 +119,10 @@ is easy to break by editing.
   point of the app's own limit is to give up *before* Cloud Tasks does — otherwise the process is
   SIGTERMed mid-job and the failure notification never fires, and the record stays at `running`,
   so the job is simply lost. `ValidateEssentialConfig` rejects a configuration that inverts them.
-  `Pipeline.Execute` applies the limit, and deliberately keeps a **separate, un-cancelled context
-  for notifications** — reusing the timed-out one would silence the very notification the ladder
-  exists to deliver (`TestPipelineExecute_TimesOutAndStillNotifies`). That test also pins the
+  `worker.Lifecycle.Timeout` applies the limit to the run alone, and the kit calls `Finish`
+  (record + notify) on a **separate, un-cancelled context** — reusing the timed-out one would
+  silence the very notification the ladder exists to deliver
+  (`TestPipelineExecute_TimesOutAndStillNotifies`). That test also pins the
   error chain: the failure handed to the notifier must still satisfy
   `errors.Is(err, context.DeadlineExceeded)`, because `SlackAdapter` gives a timeout its own
   heading and guidance. One `%v` where a `%w` belongs, anywhere between the engine and the
@@ -313,30 +314,34 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   router would otherwise turn a DI mistake into a silent 404 indistinguishable from a config
   mistake. `router_test.go` pins all three states.
 - **The worker handler is `gcp-kit/worker`, not hand-written.** `worker.NewHandler[domain.Request]`
-  takes anything with `Execute(ctx, T) error`, which `pipeline.Pipeline` already satisfied, so
+  takes anything with `Execute(ctx, T) error`, which `pipeline.Runner` satisfies by delegating to
+  `worker.Lifecycle`, so
   JSON decoding, body-size limits and Cloud Tasks retry metadata come from the kit.
   `domain.Request` doubles as the task payload; its `json` tags are the wire contract with
   whatever enqueues it.
-- **`Pipeline.Execute` is the only orchestration point**: validate → resolve script → publish
-  (WAV + script upload + optional signed URL) → notify. Notification fires from a single `defer`,
-  so failure paths do not have to remember to notify. **There are two outcomes, not three** — the
+- **`Runner.lifecycle` is the only orchestration point**, and the order is the kit's, not ours
+  (public-docs worker convention): `Begin` (re-run guard + `running`) → `Validate` (a failure is
+  `Permanent`) → `Run` (resolve script → publish: WAV + script upload + optional signed URL) →
+  `Finish` (record → notify, on a detached context, for success and failure alike; a panic
+  arrives as `worker.ErrPanicked`). Nothing here recovers, detaches or times out by hand. **There are two outcomes, not three** — the
   sibling apps notify a "skipped" case for input that has not changed, and ap-voice carried the
   whole path (port method, pipeline helper, Slack title) with nothing able to trigger it. Note
   `deadcode` reports such a path as live, because its tests count as callers.
-- **Script generation and synthesis are separate commands**, and `Pipeline.Execute` branches on
-  `Command` twice — once in `resolveScript`, once in `publish`:
+- **Script generation and synthesis are separate commands**, and the mapping from `Command` to
+  steps lives in one place, `DefaultPlanner.Plan` (`planner.go`): the script's origin is the only
+  difference (`ScriptStep` generates, `LoadScriptStep` reads), and `PublishStep` is shared:
   - `generate` — reads the source, calls Gemini, and stops at `PublishStep.PublishScript`, which
     writes the script only. **It produces no audio and returns no signed URL**, deliberately:
     signing does not check that the object exists, so signing a WAV that was never made hands out
     a 404 link in the Slack notification.
   - `generate_and_synthesize` — the same as `generate` followed by `synthesize`, for when there
-    is nothing to fix. **It needs no new branching**: `resolveScript` treats anything that is not
-    `synthesize` as a generation, and `publish` treats anything that is not `generate` as going
-    all the way to audio, so the third value lands on the wanted side of both.
+    is nothing to fix. **It needs no new step**: the planner gives it `ScriptStep` + `PublishStep`
+    like `generate`, and `PublishStep` treats anything that is not `generate` as going all the
+    way to audio, so the third value lands on the wanted side of both.
   - `synthesize` — never touches Gemini. It loads the stored script by `JobID`
     (`domain.ScriptStore`), and that is the only way in: **the script is not carried in the task
     payload**, because a long one can reach Cloud Tasks' 1MB limit. `Request` used to have a
-    `Script` field that `resolveScript` preferred when set, and once every enqueue path saved the
+    `Script` field that the load step preferred when set, and once every enqueue path saved the
     script and passed the ID alone — including the two that accept a caller's own script, the
     `POST /jobs` JSON body and the form's script tab — nothing could set it. It went the way the
     "skipped" notification did, and for the same reason: tests were its only callers.

@@ -13,7 +13,7 @@ import (
 )
 
 // buildPipeline は、各段を組み立てて Pipeline を返します。
-func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeline, error) {
+func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Runner, error) {
 	scriptStep, err := buildScriptStep(ctx, appCtx)
 	if err != nil {
 		return nil, fmt.Errorf("台本生成の段の初期化に失敗しました: %w", err)
@@ -23,7 +23,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Pipeli
 		return nil, fmt.Errorf("保存の段の初期化に失敗しました: %w", err)
 	}
 
-	p := pipeline.NewPipeline(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.JobStatus, appCtx.Config.Pipeline.Timeout)
+	p := pipeline.NewRunner(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.JobStatus, appCtx.Config.Pipeline.Timeout)
 
 	return p, nil
 }
