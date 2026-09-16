@@ -13,7 +13,7 @@ require (
 	github.com/shouni/go-http-kit v1.11.1
 	github.com/shouni/go-notify v1.4.1
 	github.com/shouni/go-prompt-kit v1.7.1
-	github.com/shouni/go-remote-io v1.11.4
+	github.com/shouni/go-remote-io v1.11.5
 	github.com/shouni/go-serve-kit v1.2.0
 	github.com/shouni/go-utils v1.7.1
 	github.com/shouni/go-voicevox v1.11.2
