@@ -7,17 +7,16 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/go-cmp v0.7.0
-	github.com/shouni/audio v1.4.3
-	github.com/shouni/gcp-kit v1.18.0
-	github.com/shouni/genai-kit v1.4.0
+	github.com/shouni/gcp-kit v1.19.0
+	github.com/shouni/genai-kit v1.5.0
 	github.com/shouni/go-http-kit v1.13.0
-	github.com/shouni/go-notify v1.4.3
+	github.com/shouni/go-notify v1.5.0
 	github.com/shouni/go-prompt-kit v1.7.1
 	github.com/shouni/go-remote-io v1.12.0
-	github.com/shouni/go-serve-kit v1.2.1
+	github.com/shouni/go-serve-kit v1.3.0
 	github.com/shouni/go-utils v1.8.0
-	github.com/shouni/go-voicevox v1.11.3
-	github.com/shouni/go-web-reader v1.7.0
+	github.com/shouni/go-voicevox v1.12.0
+	github.com/shouni/go-web-reader v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -75,6 +74,7 @@ require (
 	github.com/ikawaha/kagome/v2 v2.11.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/shouni/audio v1.4.3 // indirect
 	github.com/shouni/netarmor v1.4.2 // indirect
 	github.com/slack-go/slack v0.29.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
@@ -99,6 +99,6 @@ require (
 	google.golang.org/genproto v0.0.0-20260908043556-f8649ddbbfe6 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260908043556-f8649ddbbfe6 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260908043556-f8649ddbbfe6 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )

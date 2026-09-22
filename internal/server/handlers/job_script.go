@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -34,8 +33,7 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		// 読めなかっただけの場合を 404 に混ぜません。混ぜると、GCS の障害中は
 		// すべてのジョブが「台本が無い」ように見え、呼び出し側が静かに受け入れます。
-		slog.ErrorContext(r.Context(), "台本の取得に失敗しました", "job_id", jobID, "error", err)
-		respond.Error(w, r, http.StatusBadGateway, "台本を読めませんでした")
+		respond.ServerError(w, r, http.StatusBadGateway, err, "台本の取得に失敗しました", "job_id", jobID)
 		return
 	}
 
@@ -71,7 +69,7 @@ func (h *Handler) ScriptUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.SaveScript(r.Context(), jobID, cleaned); err != nil {
-		respond.ErrorJSON(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
+		respond.ServerErrorJSON(w, r, http.StatusBadGateway, err, "台本の保存に失敗しました", "job_id", jobID)
 		return
 	}
 	respond.JSON(w, r, http.StatusOK, cleaned)

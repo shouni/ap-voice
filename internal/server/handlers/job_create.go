@@ -75,7 +75,7 @@ func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
-		respond.ErrorJSON(w, r, http.StatusInternalServerError, "ジョブIDの発行に失敗しました")
+		respond.ServerErrorJSON(w, r, http.StatusInternalServerError, err, "ジョブIDの発行に失敗しました")
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if saveErr := h.repo.SaveScript(r.Context(), jobID, cleaned); saveErr != nil {
-			respond.ErrorJSON(w, r, http.StatusBadGateway, "台本の保存に失敗しました")
+			respond.ServerErrorJSON(w, r, http.StatusBadGateway, saveErr, "台本の保存に失敗しました", "job_id", jobID)
 			return
 		}
 	}

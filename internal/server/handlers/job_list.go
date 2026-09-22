@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -123,8 +122,7 @@ func (h *Handler) JobList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// 絞り込みは複合索引を要ります（state と queued_at）。索引はデプロイ設定が
 		// 持つので、無い環境では絞り込んだときだけここに来ます。
-		slog.ErrorContext(r.Context(), "履歴の取得に失敗しました", "state", state, "error", err)
-		respond.Error(w, r, http.StatusBadGateway, "履歴の取得に失敗しました")
+		respond.ServerError(w, r, http.StatusBadGateway, err, "履歴の取得に失敗しました", "state", state)
 		return
 	}
 

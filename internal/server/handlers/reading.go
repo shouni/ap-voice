@@ -62,7 +62,7 @@ func (h *Handler) PreviewReading(w http.ResponseWriter, r *http.Request) {
 	for _, line := range body.Lines {
 		reading, err := h.reading.ConvertToReading(line.Text)
 		if err != nil {
-			respond.ErrorJSON(w, r, http.StatusInternalServerError, err.Error())
+			respond.ServerErrorJSON(w, r, http.StatusInternalServerError, err, "読み変換に失敗しました")
 			return
 		}
 		out = append(out, readingLine{
