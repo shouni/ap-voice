@@ -271,29 +271,17 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
 	}
 
-	// ジョブ配下へさらにスコープを絞ると、一覧で得た名前をそのまま削除へ渡せます。
-	jobStore := r.store.Sub(r.layout.VoiceJobPrefix(jobID))
-
-	var entries []remoteio.Entry
-	for entry, err := range jobStore.List(ctx, "") {
-		if err != nil {
-			return fmt.Errorf("削除対象の一覧取得に失敗しました (%s): %w", jobID, err)
-		}
-		entries = append(entries, entry)
+	deleted, err := remoteio.DeletePrefix(ctx, r.store, r.layout.VoiceJobPrefix(jobID))
+	if err != nil {
+		return fmt.Errorf("削除に失敗しました (%s): %w", jobID, err)
 	}
 
 	// 成果物が 1 つも無いジョブは、台本を書く前に失敗したジョブです。以前はここで
 	// 「見つかりません」と返していましたが、消したいのはまさにそのジョブでした。
 	// 記録だけが履歴に残り、詳細画面は台本が無くて開けず、削除もこの分岐で
 	// 断られるため、どこからも消せないまま並び続けていました。
-	if len(entries) == 0 {
+	if deleted == 0 {
 		return r.deleteRecord(ctx, jobID)
-	}
-
-	for _, entry := range entries {
-		if err := jobStore.Delete(ctx, entry.Name); err != nil {
-			return fmt.Errorf("削除に失敗しました (%s): %w", entry.URI, err)
-		}
 	}
 	// 状態は成果物と別の場所にあるので、ここで消さないと孤児が残ります。
 	// 以前は状態ファイルがジョブディレクトリ配下にあり、上の一括削除で一緒に
@@ -307,7 +295,7 @@ func (r *Repository) Delete(ctx context.Context, jobID string) error {
 			"job_id", jobID, "error", err)
 	}
 
-	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", len(entries))
+	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", deleted)
 	return nil
 }
 
