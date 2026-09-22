@@ -9,7 +9,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.4.3
 	github.com/shouni/gcp-kit v1.18.0
-	github.com/shouni/genai-kit v1.3.3
+	github.com/shouni/genai-kit v1.4.0
 	github.com/shouni/go-http-kit v1.13.0
 	github.com/shouni/go-notify v1.4.3
 	github.com/shouni/go-prompt-kit v1.7.1
