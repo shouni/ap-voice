@@ -60,8 +60,7 @@ func (h *Handler) JobDelete(w http.ResponseWriter, r *http.Request) {
 			respond.Error(w, r, http.StatusNotFound, "ジョブが見つかりません")
 			return
 		}
-		slog.ErrorContext(r.Context(), "ジョブの削除に失敗しました", "job_id", jobID, "error", err)
-		respond.Error(w, r, http.StatusBadGateway, "削除に失敗しました")
+		respond.ServerError(w, r, http.StatusBadGateway, err, "ジョブの削除に失敗しました", "job_id", jobID)
 		return
 	}
 
@@ -100,8 +99,7 @@ func (h *Handler) jobStatus(w http.ResponseWriter, r *http.Request) {
 		respond.ErrorJSON(w, r, http.StatusNotFound, "ジョブ状態が見つかりません")
 		return
 	case err != nil:
-		slog.ErrorContext(r.Context(), "ジョブ状態の取得に失敗しました", "job_id", jobID, "error", err)
-		respond.ErrorJSON(w, r, http.StatusBadGateway, "ジョブ状態を読めませんでした")
+		respond.ServerErrorJSON(w, r, http.StatusBadGateway, err, "ジョブ状態の取得に失敗しました", "job_id", jobID)
 		return
 	}
 	respond.JSON(w, r, http.StatusOK, status)

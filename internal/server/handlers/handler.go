@@ -253,7 +253,6 @@ func (h *Handler) recordQueued(ctx context.Context, req domain.Request) {
 	// 成立しません。作り直しでは CarryOver が最初の投入時刻を引き継ぐので、
 	// 履歴の位置は動きません（投入の時刻はここでしか分からないため、
 	// NewJobStatus ではなくこちらで足します）。
-	status.QueuedAt = time.Now().UTC()
 
 	h.status.Record(ctx, req.JobID, status, func(next, prev *domain.JobStatus) {
 		// 作り直しでは、今回の組み立てでは分からない値を残します（一覧は CarryFrom）。

@@ -22,7 +22,7 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 		// 無い場合に署名付き URL を返すと、開いた先で 404 に当たります。
 		hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 		if err != nil {
-			respond.Error(w, r, http.StatusBadGateway, "音声の有無を確認できませんでした")
+			respond.ServerError(w, r, http.StatusBadGateway, err, "音声の有無を確認できませんでした", "job_id", jobID)
 			return
 		}
 		if !hasAudio {
@@ -33,7 +33,7 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.signer.SignURL(r.Context(), h.layout.AudioURI(h.bucket, jobID), http.MethodGet, signedURLExpiry)
 	if err != nil {
-		respond.Error(w, r, http.StatusBadGateway, "音声のURL生成に失敗しました")
+		respond.ServerError(w, r, http.StatusBadGateway, err, "音声のURL生成に失敗しました", "job_id", jobID)
 		return
 	}
 

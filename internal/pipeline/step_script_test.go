@@ -158,6 +158,32 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
+	// 構造化出力でも、モデルはコードフェンスや前置きを付けて返すことがあります。
+	// 生の Text を直接 json.Unmarshal していたときは、ここで数分かけた生成が失われていました。
+	t.Run("正常系: コードフェンス付きの応答も読めること", func(t *testing.T) {
+		t.Parallel()
+
+		runner := NewScriptStep(
+			&mockContentReader{openFunc: func(context.Context, string) (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader("これは十分に長い入力テキストです。")), nil
+			}},
+			&mockPromptBuilder{generateFunc: func(string, string) (string, error) { return "p", nil }},
+			&mockAIClient{generateFunc: func(context.Context, string, string, gemini.GenerateOptions) (*gemini.Response, error) {
+				return &gemini.Response{Text: "```json\n{\"title\":\"t\",\"lines\":[{\"speaker\":\"ずんだもん\",\"style\":\"ノーマル\",\"text\":\"x\"}]}\n```"}, nil
+			}},
+			defaultTestModel,
+			testSpeakers(t),
+		)
+
+		got, err := runner.Run(ctx, req)
+		if err != nil {
+			t.Fatalf("Run() failed: %v", err)
+		}
+		if got.Title != "t" || len(got.Lines) != 1 {
+			t.Fatalf("unexpected output: %+v", got)
+		}
+	})
+
 	t.Run("異常系: InputURI が空ならエラーになること", func(t *testing.T) {
 		t.Parallel()
 

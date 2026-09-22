@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shouni/gcp-kit/worker"
 	"github.com/shouni/go-notify/notify"
 
 	"github.com/shouni/ap-voice/internal/domain"
@@ -258,10 +259,19 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 	}{
 		{
 			name: "打ち切り",
-			// go-voicevox は原因を包んで返すため、素の DeadlineExceeded では届きません。
-			cause:     fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded),
+			// Lifecycle が PIPELINE_TIMEOUT で打ち切ると、元のエラーに worker.ErrTimedOut の
+			// 印が付いて Finish へ届きます（文面はそのまま）。
+			cause:     timedOut{fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded)},
 			wantTitle: timeoutTitles.Failure,
 			wantGuide: true,
+		},
+		{
+			// 下流 1 回の期限切れ（VOICEVOX の 60 秒など）は、同じ DeadlineExceeded でも
+			// パイプラインの打ち切りではありません。以前はこれも「時間切れ」と出ていました。
+			name:      "下流の期限切れは本当の失敗",
+			cause:     fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded),
+			wantTitle: slackTitles.Failure,
+			wantGuide: false,
 		},
 		{
 			name:      "Cloud Run の停止",
@@ -335,3 +345,10 @@ func TestNotifyGroupsFieldsByPurpose(t *testing.T) {
 		t.Errorf("Body =\n%q\nwant\n%q", got, want)
 	}
 }
+
+// timedOut は、worker.Lifecycle が Timeout の発火時に付ける印と同じ形のテスト用エラーです。
+type timedOut struct{ cause error }
+
+func (e timedOut) Error() string        { return e.cause.Error() }
+func (e timedOut) Unwrap() error        { return e.cause }
+func (e timedOut) Is(target error) bool { return target == worker.ErrTimedOut }

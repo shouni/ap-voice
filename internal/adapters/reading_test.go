@@ -84,7 +84,7 @@ func TestReadingAdapterLoadsDictionaryOnce(t *testing.T) {
 	if first != second {
 		t.Errorf("同じ入力で結果が違います: %q と %q", first, second)
 	}
-	if a.converter == nil {
+	if a.preview == nil {
 		t.Error("変換器が保持されていません")
 	}
 }
@@ -119,13 +119,12 @@ func TestConvertToReadingReadsDigits(t *testing.T) {
 // 検証します。
 //
 // ReadingAdapter は「go-voicevox が合成の直前に通すのと同じ変換」を名乗っています。
-// 設定の宛先は違い（プレビューは phonetic.Option、合成は voicevox.Option）、
-// 型が違うので取り違えてもコンパイルは通ります。片方だけに足した誤りは、
-// プレビューと実際の音声を突き合わせるまで表に出ません。
-//
-// 対応は readingOptions と NewVoiceAdapter の 2 か所にあります。ここでは
-// readingOptions が空でないことと、それが数字読みを含むことを固定します。
-// NewVoiceAdapter 側は VOICEVOX エンジンが要るのでここでは呼べません。
+// 以前はプレビューが phonetic.Option、合成が voicevox.Option と型が違い、片方にだけ
+// 足した誤りはプレビューと実際の音声を突き合わせるまで表に出ませんでした。いまは
+// readingOptions が返す 1 つの []voicevox.Option を、NewVoiceAdapter（合成）と
+// NewReadingPreview（プレビュー）の両方へ渡します。ここでは readingOptions が
+// 数字読みを含むことを固定します。NewVoiceAdapter 側は VOICEVOX エンジンが要るので
+// ここでは呼べません。
 func TestReadingOptionsMatchSynthesis(t *testing.T) {
 	t.Parallel()
 

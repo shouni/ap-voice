@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -122,8 +121,11 @@ func (gr *ScriptStep) Run(ctx context.Context, req domain.Request) (domain.Scrip
 		return domain.Script{}, fmt.Errorf("スクリプト生成に失敗しました: %w", err)
 	}
 
-	var script domain.Script
-	if err := json.Unmarshal([]byte(generatedResponse.Text), &script); err != nil {
+	// 空判定・コードフェンス等の補修・デコードは gemini.DecodeJSON が持ちます。
+	// 構造化出力でも本文に前置きやフェンスが混ざることがあり、生の Text を直接
+	// json.Unmarshal すると、そこで数分かけた生成が丸ごと失われます。
+	script, err := gemini.DecodeJSON[domain.Script](generatedResponse.Text)
+	if err != nil {
 		return domain.Script{}, fmt.Errorf("AI応答のJSONデコードに失敗しました: %w", err)
 	}
 	slog.Info("AI スクリプト生成完了", "line_count", len(script.Lines), "title", script.Title)

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/shouni/gcp-kit/worker"
 	"github.com/shouni/go-http-kit/httpkit"
 	"github.com/shouni/go-notify/notify"
 	"github.com/shouni/go-notify/slack"
@@ -113,10 +114,12 @@ func (s *SlackAdapter) NotifyFailure(ctx context.Context, req domain.Request, er
 
 // isTimeout は、打ち切りが原因の失敗かどうかを返します。
 //
-// context.Canceled も見るのは、Cloud Run が SIGTERM でインスタンスを畳むときに
-// そちらで抜けるためです。利用者から見ればどちらも「途中で止まった」です。
+// worker.ErrTimedOut は Lifecycle が PIPELINE_TIMEOUT で打ち切った印です。下流 1 回の
+// 期限切れ（VOICEVOX の 60 秒など）も DeadlineExceeded で返るため、それだけでは
+// 区別できません。context.Canceled も見るのは、Cloud Run が SIGTERM でインスタンスを
+// 畳むときにそちらで抜けるためです。利用者から見ればどちらも「途中で止まった」です。
 func isTimeout(err error) bool {
-	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+	return errors.Is(err, worker.ErrTimedOut) || errors.Is(err, context.Canceled)
 }
 
 // metadata は、通知本文を組み立てます。publicURL が空なら音声の行は出ません。

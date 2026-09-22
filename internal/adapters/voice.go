@@ -34,16 +34,14 @@ type VoiceAdapter struct {
 // 流量の設定は cfg が持ちます。エンジンの大きさで変わる値なので、ここに定数を
 // 置かず env から受けます（config.VoicevoxConfig 参照）。
 func NewVoiceAdapter(ctx context.Context, httpClient voicevox.Requester, cfg config.VoicevoxConfig, speakers *speaker.Registry, writer remoteio.Writer) (*VoiceAdapter, error) {
-	engine, err := voicevox.New(
-		ctx,
-		httpClient,
-		cfg.APIURL,
-		speakers,
+	// 読みに関わる Option は readingOptions から取ります。読みプレビューと同じ
+	// 1 つの並びを渡すことで、確認した読みと合成される読みが食い違わないようにします。
+	opts := append(readingOptions(),
 		voicevox.WithMaxParallelSegments(cfg.MaxParallelSegments),
 		voicevox.WithSegmentRateLimit(cfg.SegmentRateLimit),
 		voicevox.WithSegmentTimeout(cfg.SegmentTimeout),
-		voicevox.WithNumberReading(),
 	)
+	engine, err := voicevox.New(ctx, httpClient, cfg.APIURL, speakers, opts...)
 
 	if err != nil {
 		return nil, fmt.Errorf("EngineRunnerの初期化に失敗しました: %w", err)
