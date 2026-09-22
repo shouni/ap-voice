@@ -8,14 +8,14 @@ require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/audio v1.4.3
-	github.com/shouni/gcp-kit v1.17.5
+	github.com/shouni/gcp-kit v1.18.0
 	github.com/shouni/genai-kit v1.3.3
-	github.com/shouni/go-http-kit v1.12.0
+	github.com/shouni/go-http-kit v1.13.0
 	github.com/shouni/go-notify v1.4.3
 	github.com/shouni/go-prompt-kit v1.7.1
 	github.com/shouni/go-remote-io v1.11.9
 	github.com/shouni/go-serve-kit v1.2.1
-	github.com/shouni/go-utils v1.7.1
+	github.com/shouni/go-utils v1.8.0
 	github.com/shouni/go-voicevox v1.11.3
 	github.com/shouni/go-web-reader v1.7.0
 	go.yaml.in/yaml/v3 v3.0.5
