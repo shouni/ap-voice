@@ -34,8 +34,8 @@ type ServerConfig struct {
 	ServiceURL string `env:"SERVICE_URL" envDefault:"http://localhost:8080"`
 	Port       string `env:"PORT" envDefault:"8080"`
 	// Role はこのプロセスが担う役割です。明示が必須で、未設定は起動時エラーになります。
-	Role            serverrole.Role `env:"SERVER_ROLE"`
-	ShutdownTimeout time.Duration
+	// 正常停止の猶予はキットの既定（Cloud Run の SIGKILL 猶予に収まる値）に任せます。
+	Role serverrole.Role `env:"SERVER_ROLE"`
 }
 
 // TasksConfig は Cloud Tasks キューの設定と、受信時の OIDC 検証の設定です。
