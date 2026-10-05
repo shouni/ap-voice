@@ -12,11 +12,11 @@ require (
 	github.com/shouni/go-http-kit v1.13.0
 	github.com/shouni/go-notify v1.6.1
 	github.com/shouni/go-prompt-kit v1.7.1
-	github.com/shouni/go-remote-io v1.13.2
+	github.com/shouni/go-remote-io v1.13.3
 	github.com/shouni/go-serve-kit v1.3.0
 	github.com/shouni/go-utils v1.8.1
 	github.com/shouni/go-voicevox v1.12.1
-	github.com/shouni/go-web-reader v1.8.2
+	github.com/shouni/go-web-reader v1.8.3
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -41,7 +41,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.6 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.4.10 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.4.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4 // indirect
