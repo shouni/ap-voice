@@ -213,8 +213,11 @@ assets/         embedded prompts, speakers.json, HTML templates and static files
   that may say `succeeded`, disarming the guard for the next delivery. Failure is recorded on the
   un-cancelled notification context for the same reason the notification is: a timed-out context
   records nothing.
-  `Repository` satisfies `jobstatus.StatusStore`, which is why the store is assembled in one
-  place. `List` takes `jobstatus.ListOption` and does not invent a filter vocabulary of its own;
+  The builder makes **one** `*jobstatus.Store` (`repository.NewJobStatusStore`) and hands it to
+  both `Repository` and the `Recorder`. The `Recorder` must get the bare store, not a wrapper:
+  `Begin` finds `Store.Modify` by type and then runs the guard and the `running` write in one
+  Firestore transaction. A wrapper hides `Modify` and silently falls back to a separate `Get` and
+  `Save`, where a redelivery can overwrite `succeeded` — nothing fails to compile or test. `List` takes `jobstatus.ListOption` and does not invent a filter vocabulary of its own;
   `?state=` on the history screen is `WithState` with the recorded spelling, and an unknown value
   is a 400 rather than a silent full listing (a typo answering "no failures" is worse than an
   error). **The filtered query needs a composite index** (`state` asc + `queued_at` desc) that the
