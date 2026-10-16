@@ -9,14 +9,14 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/shouni/gcp-kit v1.21.0
 	github.com/shouni/genai-kit v1.5.5
-	github.com/shouni/go-http-kit v1.13.1
-	github.com/shouni/go-notify v1.6.2
+	github.com/shouni/go-http-kit v1.13.3
+	github.com/shouni/go-notify v1.6.3
 	github.com/shouni/go-prompt-kit v1.7.1
-	github.com/shouni/go-remote-io v1.13.6
+	github.com/shouni/go-remote-io v1.13.7
 	github.com/shouni/go-serve-kit v1.3.0
 	github.com/shouni/go-utils v1.8.1
 	github.com/shouni/go-voicevox v1.12.2
-	github.com/shouni/go-web-reader v1.8.6
+	github.com/shouni/go-web-reader v1.8.8
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -74,7 +74,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shouni/audio v1.4.4 // indirect
-	github.com/shouni/netarmor v1.4.2 // indirect
+	github.com/shouni/netarmor v1.4.3 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.47.0 // indirect
