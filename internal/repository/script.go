@@ -53,17 +53,9 @@ type statusStore interface {
 	List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]domain.JobStatus, jobstatus.PageMeta, error)
 }
 
-// Get は、ジョブの状態を読みます。jobstatus.StatusStore を満たします。
+// Get は、ジョブの状態を読みます。履歴の詳細画面が使います。
 func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, error) {
 	return r.status.Get(ctx, jobID)
-}
-
-// Save は、ジョブの状態を書きます。jobstatus.StatusStore を満たします。
-//
-// Repository が StatusStore を満たすことで、Recorder をここから組み立てられます。
-// 保存先の組み立て（バケットとプレフィックス）を 2 か所に書かずに済みます。
-func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobStatus) error {
-	return r.status.Save(ctx, jobID, status)
 }
 
 // statusCollection はジョブ状態を置く Firestore のコレクションです。
@@ -74,23 +66,38 @@ func (r *Repository) Save(ctx context.Context, jobID string, status domain.JobSt
 // デプロイごとに変わる値ではないからです。
 const statusCollection = "ap-voice"
 
-// NewRepository は Repository を構築します。
+// NewJobStatusStore は、ジョブ状態を置く Firestore のストアを返します。
 //
-// firestore は nil でも構築できます。その場合ジョブ状態の読み書きだけが失敗し、
-// 成果物の読み出しは動きます（テストが状態を要求しないため）。
-func NewRepository(store remoteio.Store, bucket string, firestore *firestore.Client) (*Repository, error) {
+// builder はこれを 1 つだけ作り、Recorder と NewRepository の両方へ渡します。
+// Recorder には、この *jobstatus.Store を包まずに渡してください。Store が持つ
+// Modify（再実行ガードを 1 つのトランザクションで行う）は、Recorder が型で
+// 見つけます。包んだ型を渡すと Modify が見えなくなり、コンパイルもテストも
+// 通ったまま、Get と Save を別々に呼ぶ割り込みうる経路へ戻ります。
+//
+// client は nil でも構築できます。その場合ジョブ状態の読み書きだけが失敗します
+// （成果物だけを検証するテスト向けです）。
+func NewJobStatusStore(client *firestore.Client) *jobstatus.Store[domain.JobStatus] {
+	return jobstatus.NewStore[domain.JobStatus](client, statusCollection)
+}
+
+// Store が Modifier を満たさなくなったら（gcp-kit を下げた、型を包んだ）、ここで
+// コンパイルが止まります。満たさないまま動くと、再実行ガードは黙って非アトミックに戻ります。
+var _ jobstatus.Modifier[domain.JobStatus] = (*jobstatus.Store[domain.JobStatus])(nil)
+
+// NewRepository は Repository を構築します。status は NewJobStatusStore の戻り値です。
+func NewRepository(store remoteio.Store, bucket string, status *jobstatus.Store[domain.JobStatus]) (*Repository, error) {
 	if store == nil {
 		return nil, fmt.Errorf("ストレージが指定されていません")
 	}
 	if bucket == "" {
 		return nil, fmt.Errorf("バケットが指定されていません")
 	}
+	if status == nil {
+		return nil, fmt.Errorf("ジョブ状態のストアが指定されていません")
+	}
 	layout := domain.NewStorageLayout()
 	scoped := store.Sub(remoteio.BuildURI(remoteio.SchemeGCS, bucket, ""))
-	return &Repository{
-		store: scoped, layout: layout,
-		status: jobstatus.NewStore[domain.JobStatus](firestore, statusCollection),
-	}, nil
+	return &Repository{store: scoped, layout: layout, status: status}, nil
 }
 
 // SaveScript は、編集された台本を保存済みのものへ書き戻します。

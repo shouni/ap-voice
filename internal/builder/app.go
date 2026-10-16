@@ -94,15 +94,18 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 
 	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
 	// worker は synthesize が保存済み台本を読むために。
-	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket, jobStatusClient)
+	//
+	// ジョブ状態のストアは 1 つだけ作り、Recorder と Repository の両方へ渡します。
+	// Recorder には包まずに渡します（repository.NewJobStatusStore を参照）。
+	statusStore := repository.NewJobStatusStore(jobStatusClient)
+	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket, statusStore)
 	if err != nil {
 		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
 	}
 
 	appCtx := &app.Container{
-		Config: cfg,
-		// Repository が StatusStore を満たすので、保存先の組み立てはそちら 1 か所です。
-		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](repo),
+		Config:     cfg,
+		JobStatus:  jobstatus.NewRecorder[domain.JobStatus](statusStore),
 		Speakers:   speakers,
 		Prompt:     prompt,
 		Repository: repo,
