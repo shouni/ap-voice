@@ -3,7 +3,7 @@ module github.com/shouni/ap-voice
 go 1.27
 
 require (
-	cloud.google.com/go/firestore v1.28.0
+	cloud.google.com/go/firestore v1.29.0
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/go-cmp v0.7.0
