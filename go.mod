@@ -7,16 +7,16 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/go-cmp v0.7.0
-	github.com/shouni/gcp-kit v1.21.0
-	github.com/shouni/genai-kit v1.6.0
+	github.com/shouni/gcp-kit v1.21.1
+	github.com/shouni/genai-kit v1.6.1
 	github.com/shouni/go-http-kit v1.13.3
 	github.com/shouni/go-notify v1.6.3
 	github.com/shouni/go-prompt-kit v1.7.1
-	github.com/shouni/go-remote-io v1.13.8
+	github.com/shouni/go-remote-io v1.13.11
 	github.com/shouni/go-serve-kit v1.3.0
 	github.com/shouni/go-utils v1.8.1
 	github.com/shouni/go-voicevox v1.12.3
-	github.com/shouni/go-web-reader v1.8.9
+	github.com/shouni/go-web-reader v1.8.10
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
@@ -25,11 +25,11 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.24.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
-	cloud.google.com/go/cloudtasks v1.20.0 // indirect
+	cloud.google.com/go/cloudtasks v1.21.0 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
-	cloud.google.com/go/iam v1.14.0 // indirect
+	cloud.google.com/go/iam v1.15.0 // indirect
 	cloud.google.com/go/longrunning v1.3.0 // indirect
-	cloud.google.com/go/monitoring v1.31.0 // indirect
+	cloud.google.com/go/monitoring v1.32.0 // indirect
 	cloud.google.com/go/storage v1.70.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.62.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.62.0 // indirect
@@ -94,7 +94,7 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/api v0.308.0 // indirect
-	google.golang.org/genai v1.75.0 // indirect
+	google.golang.org/genai v1.76.0 // indirect
 	google.golang.org/genproto v0.0.0-20261019180522-ce908d29299b // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261019180522-ce908d29299b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
