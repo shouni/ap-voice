@@ -143,8 +143,8 @@ github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46/go.mod h1:uAQ5PCi+MFsC7HjREoAz1BU+Mq60+05gifQSsHSDG/8=
 github.com/shouni/audio v1.5.0 h1:Hrcs/SLecMwiH1nO/SfVJVsIqtUIpF+NhZEPKdCQhOU=
 github.com/shouni/audio v1.5.0/go.mod h1:VOSXgko/HpXPB6Yf7+IQQ87c+S55gjIsOuOJAj6m3iE=
-github.com/shouni/gcp-kit v1.21.1 h1:DrLlFiUj//JbgLLbes0JfZn5jGPWSZ5OZ1h1GZFrZls=
-github.com/shouni/gcp-kit v1.21.1/go.mod h1:E4AuYcivqCRd7U4mm4Mc2dBHbusTFQ8L+uTI0xqtQxo=
+github.com/shouni/gcp-kit v1.21.2 h1:FYGuVA+JId/LXx2SZvvRpY3XhobOD77tNDfYDe9WNO0=
+github.com/shouni/gcp-kit v1.21.2/go.mod h1:Ejij5S6A0yR9SolcNGmh10xGBWZMWsxGGv87RMUfsIc=
 github.com/shouni/genai-kit v1.6.1 h1:cDYBIoJMB2X5BW1XpJE4Z6c11g0oPY+iZBOaR4MUw5Y=
 github.com/shouni/genai-kit v1.6.1/go.mod h1:qBzPvXoIp8HGOfjMtGKHb3TMp2ppF+g8VF2fqeAkwLQ=
 github.com/shouni/go-http-kit v1.13.3 h1:xKZThB6Yzxv3XWa9U/L4mxpu9Clu5lYr9q6NczMI3Lk=
