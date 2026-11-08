@@ -47,7 +47,7 @@ func formHandler(t *testing.T, queue domain.TaskQueue, repo ScriptRepository) *H
 		modes:       modes,
 		models:      []string{"gemini-test"},
 		bucket:      "test",
-		musicBucket: "ap-music",
+		musicBucket: "music-bucket",
 		layout:      domain.NewStorageLayout(),
 		repo:        repo,
 		speakers:    registry,
@@ -164,7 +164,7 @@ func TestEnqueueFromRecipeBuildsURIFromJobID(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 	}
-	const want = "gs://ap-music/music/music-20260814-031712-5c812debb05f/recipe.json"
+	const want = "gs://music-bucket/music/music-20260814-031712-5c812debb05f/recipe.json"
 	if queue.got.InputURI != want {
 		t.Errorf("InputURI = %q, want %q", queue.got.InputURI, want)
 	}

@@ -171,7 +171,7 @@ func TestJobCreateJSONResolvesRecipeFromMusicJobID(t *testing.T) {
 	queue := &capturingQueue{}
 	h := apiHandler(t, nil)
 	h.queue = queue
-	h.musicBucket = "ap-music"
+	h.musicBucket = "music-bucket"
 
 	req := httptest.NewRequest("POST", "/jobs", strings.NewReader(
 		`{"command":"generate","music_job_id":"music-20260814-031712-5c812debb05f","mode":"music_promo"}`))
@@ -182,7 +182,7 @@ func TestJobCreateJSONResolvesRecipeFromMusicJobID(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 	}
-	const want = "gs://ap-music/music/music-20260814-031712-5c812debb05f/recipe.json"
+	const want = "gs://music-bucket/music/music-20260814-031712-5c812debb05f/recipe.json"
 	if queue.got.InputURI != want {
 		t.Errorf("InputURI = %q, want %q", queue.got.InputURI, want)
 	}
@@ -196,7 +196,7 @@ func TestJobCreateJSONRejectsBadMusicJobID(t *testing.T) {
 	queue := &capturingQueue{}
 	h := apiHandler(t, nil)
 	h.queue = queue
-	h.musicBucket = "ap-music"
+	h.musicBucket = "music-bucket"
 
 	req := httptest.NewRequest("POST", "/jobs", strings.NewReader(
 		`{"command":"generate","music_job_id":"not-a-job-id","mode":"music_promo"}`))

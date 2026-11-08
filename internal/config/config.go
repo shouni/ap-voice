@@ -212,7 +212,9 @@ type StorageConfig struct {
 	// ジョブ ID から解決するために使います。
 	// 動画生成サービスと同じ環境変数・同じ規則です（gs://<MusicBucket>/music/<jobID>/recipe.json）。
 	// 読む側が 2 つに増えたので、片方だけ別名にすると設定を移すときに取り違えます。
-	MusicBucket string `env:"AP_MUSIC_BUCKET" envDefault:"ap-music"`
+	// 既定値は持ちません（動画生成サービスと同じ）。バケット名はデプロイ先が決めるもので、
+	// 未設定ならそのタブがジョブ ID を受け付けないだけで、他のモードは動きます。
+	MusicBucket string `env:"AP_MUSIC_BUCKET"`
 	// FirestoreDatabase はジョブ状態を置く Firestore データベースです。
 	//
 	// 名前付きデータベースを使うのは、(default) の枠を占めないためです。
