@@ -15,7 +15,7 @@ require (
 	github.com/shouni/go-remote-io v1.13.14
 	github.com/shouni/go-serve-kit v1.3.0
 	github.com/shouni/go-utils v1.8.1
-	github.com/shouni/go-voicevox v1.12.3
+	github.com/shouni/go-voicevox v1.12.4
 	github.com/shouni/go-web-reader v1.8.11
 	go.yaml.in/yaml/v3 v3.0.6
 )
@@ -73,7 +73,7 @@ require (
 	github.com/ikawaha/kagome/v2 v2.11.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/shouni/audio v1.5.0 // indirect
+	github.com/shouni/audio v1.5.1 // indirect
 	github.com/shouni/netarmor v1.4.3 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
