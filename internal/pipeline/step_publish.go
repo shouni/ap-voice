@@ -10,19 +10,19 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// Signer は PublishStep が必要とする署名機能だけを表します。
-// remoteio.Store がそのまま満たします。
+// Signer represents only the signing that PublishStep needs.
+// remoteio.Store satisfies it as is.
 type Signer interface {
 	SignURL(ctx context.Context, name, method string, expires time.Duration) (string, error)
 }
 
-// PublishStep は、スクリプトの公開処理を実行する具象構造体です。
+// PublishStep is the concrete type that publishes the script.
 type PublishStep struct {
 	voice  domain.Voice
 	signer Signer
 }
 
-// NewPublishStep は PublishStep の新しいインスタンスを作成します。
+// NewPublishStep creates a new PublishStep.
 func NewPublishStep(voice domain.Voice, signer Signer) *PublishStep {
 	return &PublishStep{
 		voice:  voice,
@@ -30,17 +30,17 @@ func NewPublishStep(voice domain.Voice, signer Signer) *PublishStep {
 	}
 }
 
-// Name は工程名です。
+// Name is the step name.
 func (*PublishStep) Name() string { return "publish" }
 
-// Execute は、Command に応じて保存する成果物を切り替え、公開 URL を sc.PublicURL に載せます。
+// Execute switches the artifacts stored by Command and puts the public URL on sc.PublicURL.
 //
-// generate は台本まで、それ以外は音声まで。generate で音声を作らないのは、
-// 台本を確認・修正してから合成へ進めるようにするためです。
+// generate goes as far as the script, everything else as far as the audio. generate makes no audio
+// so that the script can be checked and corrected before moving on to synthesis.
 func (r *PublishStep) Execute(ctx context.Context, sc *Context) error {
 	publicURL, err := r.publishFor(ctx, sc.Request, sc.Script)
 	if err != nil {
-		return fmt.Errorf("公開処理の実行に失敗しました: %w", err)
+		return fmt.Errorf("failed to publish: %w", err)
 	}
 	sc.PublicURL = publicURL
 	return nil
@@ -53,60 +53,60 @@ func (r *PublishStep) publishFor(ctx context.Context, req domain.Request, script
 	return r.Run(ctx, req.OutputURI, script)
 }
 
-// PublishScript は台本だけを保存します。generate はここで終わります。
+// PublishScript stores only the script. generate ends here.
 //
-// 音声まで作らないのは、台本を確認・修正してから合成へ進めるようにするためです。
-// 合成は分単位かかるので、直す前提の台本で先に走らせても捨てることになります。
+// It stops short of the audio so that the script can be checked and corrected before synthesis.
+// Synthesis takes minutes, so running it first on a script that is expected to be fixed would be thrown away.
 func (r *PublishStep) PublishScript(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if outputURI == "" {
-		return "", errors.New("出力先パス(outputURI)が指定されていません")
+		return "", errors.New("no output path (outputURI) was given")
 	}
 
-	slog.InfoContext(ctx, "台本の保存を開始します。", "output_path", outputURI)
+	slog.InfoContext(ctx, "saving the script", "output_path", outputURI)
 	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
-		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
+		return "", fmt.Errorf("failed to save the script (%s): %w", outputURI, err)
 	}
-	slog.InfoContext(ctx, "台本の保存が完了しました。", "output_path", outputURI)
+	slog.InfoContext(ctx, "script saved", "output_path", outputURI)
 
-	// 署名付き URL は返しません。署名は対象の存在を確かめないため、まだ作っていない
-	// 音声の URL を署名でき、通知に載せると 404 のリンクを配ることになります。
-	// この段階で見るべきものは台本で、それは詳細画面が表示します。
+	// No signed URL is returned. Signing does not check that the object exists, so the URL of audio
+	// not yet made could be signed, and putting it in a notification would hand out a 404 link.
+	// What to look at at this stage is the script, which the detail page shows.
 	return "", nil
 }
 
-// Run は台本を保存してから音声を合成します。
+// Run stores the script and then synthesises the audio.
 //
-// 順序が逆だと、合成の時間切れで台本ごと失われます。台本と音声をまとめて作る
-// 経路では、生成した台本はまだどこにも保存されていません。音声を先に作ると、
-// 合成が上限に達した時点で Gemini の生成結果が消え、やり直すしかなくなります。
-// 先に保存しておけば、詳細画面から合成だけをやり直せます。
+// In the opposite order, a synthesis timeout would lose the script with it. On the path that makes
+// script and audio together, the generated script is not stored anywhere yet. If the audio came first,
+// synthesis hitting its limit would lose Gemini's output, leaving only a full redo.
+// Stored first, synthesis alone can be redone from the detail page.
 //
-// 台本を毎回書き直すのは、修正済みの台本を渡された場合に、保存されている台本と
-// 実際に喋った内容がずれないようにするためです。
+// The script is rewritten every time so that, when a corrected script is passed in, the stored script
+// does not drift from what was actually spoken.
 func (r *PublishStep) Run(ctx context.Context, outputURI string, script domain.Script) (string, error) {
 	if outputURI == "" {
-		return "", errors.New("出力先パス(outputURI)が指定されていません")
+		return "", errors.New("no output path (outputURI) was given")
 	}
 
 	if err := r.voice.UploadScript(ctx, outputURI, script); err != nil {
-		return "", fmt.Errorf("台本の保存に失敗しました (%s): %w", outputURI, err)
+		return "", fmt.Errorf("failed to save the script (%s): %w", outputURI, err)
 	}
 
-	slog.InfoContext(ctx, "音声合成を開始します。", "output_path", outputURI)
+	slog.InfoContext(ctx, "starting speech synthesis", "output_path", outputURI)
 	if err := r.voice.UploadWav(ctx, outputURI, script.Lines); err != nil {
-		return "", fmt.Errorf("音声合成パイプラインの実行に失敗しました (%s): %w", outputURI, err)
+		return "", fmt.Errorf("speech synthesis pipeline failed (%s): %w", outputURI, err)
 	}
-	slog.InfoContext(ctx, "音声合成が完了しました。", "output_path", outputURI)
+	slog.InfoContext(ctx, "speech synthesis finished", "output_path", outputURI)
 
 	return r.publicURLOrEmpty(ctx, outputURI), nil
 }
 
-// publicURLOrEmpty は署名付き URL を返します。作れなくても処理は続けます。
-// 成果物は保存できているので、URL が無いことを失敗にする理由がありません。
+// publicURLOrEmpty returns a signed URL. Processing continues even if one cannot be made.
+// The artifacts are stored, so there is no reason to treat a missing URL as a failure.
 func (r *PublishStep) publicURLOrEmpty(ctx context.Context, outputURI string) string {
 	publicURL, err := r.buildPublicURL(ctx, outputURI)
 	if err != nil {
-		slog.WarnContext(ctx, "公開URLの生成に失敗したため、URLなしで続行します。", "output_path", outputURI, "error", err)
+		slog.WarnContext(ctx, "failed to build the public URL; continuing without one", "output_path", outputURI, "error", err)
 		return ""
 	}
 	return publicURL

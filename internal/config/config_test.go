@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// managedEnvKeys は loadFor が面倒を見る環境変数です。
-// 渡されなかったものも必ず空にします。実行環境に値が残っていると、
-// テストが手元でだけ通る（あるいは落ちる）ためです。
+// managedEnvKeys are the environment variables loadFor takes care of.
+// Those not passed are always emptied. A value left in the environment would make
+// a test pass (or fail) only on one machine.
 var managedEnvKeys = []string{
 	"SERVER_ROLE", "SERVICE_URL", "PORT",
 	"CLOUD_TASKS_QUEUE_ID", "WORKER_URL", "TASK_AUDIENCE_URL",
@@ -23,19 +23,19 @@ var managedEnvKeys = []string{
 	"PIPELINE_TIMEOUT", "TASK_DISPATCH_DEADLINE",
 }
 
-// essentialEnv は、どのロールでも要る最低限です。
+// essentialEnv is the minimum every role needs.
 var essentialEnv = map[string]string{
 	"GEMINI_MODELS":    "model-a",
 	"GCP_PROJECT_ID":   "proj",
 	"GCS_VOICE_BUCKET": "ap-voice",
-	// 三段のタイムアウトはデプロイ設定が決めるため、アプリは既定値を持ちません。
-	// PIPELINE_TIMEOUT が要るのは worker 面だけですが、web 面では無視されるので
-	// ここにまとめて置きます。
+	// The deployment decides the three timeout tiers, so the app has no defaults.
+	// Only the worker side needs PIPELINE_TIMEOUT, but the web side ignores it, so
+	// it is set here for both.
 	"TASK_DISPATCH_DEADLINE": "30m",
 	"PIPELINE_TIMEOUT":       "25m",
 }
 
-// webEnv は Web 面が起動できる一式を返します。overrides で個別に潰せます。
+// webEnv returns a full set the web side can start with. overrides can blank individual values.
 func webEnv(overrides map[string]string) map[string]string {
 	envs := map[string]string{
 		"SERVER_ROLE":                       "web",
@@ -53,9 +53,9 @@ func webEnv(overrides map[string]string) map[string]string {
 	return envs
 }
 
-// setEnv は managedEnvKeys を envs の内容で差し替えます。
-// SERVER_ROLE は指定が無ければ both で埋めます。役割の検証そのものを見るテスト以外は
-// 役割に関心が無く、全ケースに書くと本題が埋もれるためです。
+// setEnv replaces managedEnvKeys with the contents of envs.
+// SERVER_ROLE is filled with both unless given. Tests other than those about role validation
+// do not care about the role, and writing it in every case would bury the point.
 func setEnv(t *testing.T, envs map[string]string) {
 	t.Helper()
 
@@ -67,7 +67,7 @@ func setEnv(t *testing.T, envs map[string]string) {
 	}
 }
 
-// loadFor は環境変数を差し替えたうえで LoadConfig を呼びます。
+// loadFor swaps the environment variables and calls LoadConfig.
 func loadFor(t *testing.T, envs map[string]string) *Config {
 	t.Helper()
 
@@ -80,7 +80,7 @@ func loadFor(t *testing.T, envs map[string]string) *Config {
 	return cfg
 }
 
-// モデル一覧はカンマ区切りで、先頭が既定モデルになります。
+// The model list is comma-separated, and the first is the default model.
 func TestLoadConfig_GeminiModels(t *testing.T) {
 	cfg := loadFor(t, map[string]string{
 		"GEMINI_MODELS":  " model-a , model-b ,, model-a , model-c ",
@@ -97,40 +97,40 @@ func TestLoadConfig_GeminiModels(t *testing.T) {
 		}
 	}
 
-	// 単数形は環境変数からではなく一覧の先頭から埋まります。
+	// The singular is filled from the head of the list, not from an environment variable.
 	if cfg.AI.GeminiModel != "model-a" {
 		t.Errorf("GeminiModel = %q, want model-a", cfg.AI.GeminiModel)
 	}
 }
 
-// 既定値へ黙って落ちると、古いモデルを使い続けたまま気付けません。
+// Silently falling back to a default would keep an outdated model in use unnoticed.
 func TestValidateEssentialConfig_ModelsRequired(t *testing.T) {
 	cfg := loadFor(t, map[string]string{"GCP_PROJECT_ID": "proj"})
 
 	err := cfg.ValidateEssentialConfig()
 	if err == nil {
-		t.Fatal("モデル名未指定が素通りした")
+		t.Fatal("a missing model name got through")
 	}
 	if !strings.Contains(err.Error(), "GEMINI_MODELS") {
-		t.Errorf("エラーに指定方法が無い: %v", err)
+		t.Errorf("the error does not say how to set it: %v", err)
 	}
 }
 
-// Gemini は Vertex AI 経由でのみ呼ぶため、ProjectID が無ければ起動できません。
+// Gemini is called only through Vertex AI, so it cannot start without ProjectID.
 func TestValidateEssentialConfig_ProjectIDRequired(t *testing.T) {
-	t.Run("未設定なら落ちる", func(t *testing.T) {
+	t.Run("fails when unset", func(t *testing.T) {
 		cfg := loadFor(t, map[string]string{"GEMINI_MODELS": "model-a"})
 
 		err := cfg.ValidateEssentialConfig()
 		if err == nil {
-			t.Fatal("ProjectID の未設定が素通りした")
+			t.Fatal("a missing ProjectID got through")
 		}
 		if !strings.Contains(err.Error(), "GCP_PROJECT_ID") {
-			t.Errorf("エラーに指定方法が無い: %v", err)
+			t.Errorf("the error does not say how to set it: %v", err)
 		}
 	})
 
-	t.Run("揃っていれば通る", func(t *testing.T) {
+	t.Run("passes when complete", func(t *testing.T) {
 		cfg := loadFor(t, webEnv(nil))
 		if err := cfg.ValidateEssentialConfig(); err != nil {
 			t.Fatalf("ValidateEssentialConfig() = %v, want nil", err)
@@ -138,17 +138,17 @@ func TestValidateEssentialConfig_ProjectIDRequired(t *testing.T) {
 	})
 }
 
-// VOICEVOX_API_URL は未設定を許します。go-voicevox 側が localhost:50021 へ落とし、
-// ローカル実行とサイドカー構成のどちらもその値でよいためです。
+// VOICEVOX_API_URL may be unset. go-voicevox falls back to localhost:50021,
+// which suits both local runs and the sidecar setup.
 func TestLoadConfig_VoicevoxAPIURL(t *testing.T) {
-	t.Run("前後の空白を落とす", func(t *testing.T) {
+	t.Run("trims surrounding whitespace", func(t *testing.T) {
 		cfg := loadFor(t, map[string]string{"VOICEVOX_API_URL": "  https://voicevox.example.run.app  "})
 		if cfg.Voicevox.APIURL != "https://voicevox.example.run.app" {
 			t.Fatalf("APIURL = %q, want https://voicevox.example.run.app", cfg.Voicevox.APIURL)
 		}
 	})
 
-	t.Run("未設定なら空のまま", func(t *testing.T) {
+	t.Run("stays empty when unset", func(t *testing.T) {
 		cfg := loadFor(t, nil)
 		if cfg.Voicevox.APIURL != "" {
 			t.Fatalf("APIURL = %q, want empty", cfg.Voicevox.APIURL)
@@ -156,8 +156,8 @@ func TestLoadConfig_VoicevoxAPIURL(t *testing.T) {
 	})
 }
 
-// 空文字を渡された場合も既定値で埋まることを確かめます。
-// envDefault は変数が未設定のときしか効かないため、normalize 側が担っています。
+// Checks that an empty string is also filled with the default.
+// envDefault only applies when the variable is unset, so normalize takes care of it.
 func TestLoadConfig_Defaults(t *testing.T) {
 	cfg := loadFor(t, nil)
 
@@ -169,8 +169,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	}
 }
 
-// SERVER_ROLE は明示が必須です。未設定を both とみなすと、環境変数が1つ欠けただけで
-// 公開している Web 面に Worker のルートが復活します。
+// SERVER_ROLE must be explicit. Treating unset as both would bring the worker routes back on the
+// public web side just because one environment variable went missing.
 func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
@@ -178,13 +178,13 @@ func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 		ok        bool
 		wantInErr string
 	}{
-		// 値が無いとデコーダは UnmarshalText を呼ばないため、normalize が
-		// 環境変数名つきで返します。
-		{name: "未設定は落ちる", raw: "", ok: false, wantInErr: "SERVER_ROLE"},
-		// 未知の値は env のデコード時点で弾かれます（serverrole.Role が
-		// encoding.TextUnmarshaler を実装しているため）。env が包むので環境変数名では
-		// なくフィールド名が出ますが、何が不正で何なら通るかは残ります。
-		{name: "未知の値は落ちる", raw: "batch", ok: false, wantInErr: `"batch"`},
+		// Without a value the decoder does not call UnmarshalText, so normalize
+		// returns the error with the environment variable name.
+		{name: "unset fails", raw: "", ok: false, wantInErr: "SERVER_ROLE"},
+		// An unknown value is rejected while env decodes it (serverrole.Role implements
+		// encoding.TextUnmarshaler). env wraps it, so the field name appears rather than the
+		// environment variable name, but what was invalid and what would pass remain.
+		{name: "unknown value fails", raw: "batch", ok: false, wantInErr: `"batch"`},
 		{name: "web", raw: "web", ok: true},
 		{name: "worker", raw: "worker", ok: true},
 		{name: "both", raw: "both", ok: true},
@@ -201,40 +201,40 @@ func TestLoadConfig_ServerRoleRequired(t *testing.T) {
 			}
 			if !tt.ok {
 				if err == nil {
-					t.Fatal("不正な SERVER_ROLE が素通りした")
+					t.Fatal("an invalid SERVER_ROLE got through")
 				}
 				if !strings.Contains(err.Error(), tt.wantInErr) {
-					t.Errorf("エラーに %q が無い: %v", tt.wantInErr, err)
+					t.Errorf("the error lacks %q: %v", tt.wantInErr, err)
 				}
-				// どちらの経路でも、通る値が何かは示されている必要があります。
+				// On either path, the values that would pass must be shown.
 				if !strings.Contains(err.Error(), `"web"`) {
-					t.Errorf("エラーに選択肢が無い: %v", err)
+					t.Errorf("the error lists no choices: %v", err)
 				}
 			}
 		})
 	}
 }
 
-// Cloud Tasks の検証設定は Worker 面だけの要件です。Web 面に要求すると、
-// 担当しない面の設定まで配ることになります。
+// The Cloud Tasks verification settings are a worker-only requirement. Requiring them of the web side
+// would hand out settings for a side it does not serve.
 func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 	base := essentialEnv
 
-	t.Run("worker は許可リストが要る", func(t *testing.T) {
+	t.Run("worker needs the allowlist", func(t *testing.T) {
 		envs := map[string]string{"SERVER_ROLE": "worker"}
 		maps.Copy(envs, base)
 		cfg := loadFor(t, envs)
 
 		err := cfg.ValidateEssentialConfig()
 		if err == nil {
-			t.Fatal("許可リストの未設定が素通りした")
+			t.Fatal("a missing allowlist got through")
 		}
 		if !strings.Contains(err.Error(), "ALLOWED_TASK_SERVICE_ACCOUNTS") {
-			t.Errorf("エラーに指定方法が無い: %v", err)
+			t.Errorf("the error does not say how to set it: %v", err)
 		}
 	})
 
-	t.Run("web は許可リストが要らない", func(t *testing.T) {
+	t.Run("web does not need the allowlist", func(t *testing.T) {
 		cfg := loadFor(t, webEnv(nil))
 
 		if err := cfg.ValidateEssentialConfig(); err != nil {
@@ -242,7 +242,7 @@ func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 		}
 	})
 
-	t.Run("worker も揃っていれば通る", func(t *testing.T) {
+	t.Run("worker passes when complete", func(t *testing.T) {
 		envs := map[string]string{
 			"SERVER_ROLE":                   "worker",
 			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
@@ -257,7 +257,7 @@ func TestValidateEssentialConfig_WorkerOnlyRequirements(t *testing.T) {
 	})
 }
 
-// TASK_AUDIENCE_URL の未指定は SERVICE_URL で埋めます。
+// A missing TASK_AUDIENCE_URL is filled from SERVICE_URL.
 func TestLoadConfig_TaskAudienceFallsBackToServiceURL(t *testing.T) {
 	cfg := loadFor(t, map[string]string{"SERVICE_URL": "https://ap-voice.example.run.app"})
 
@@ -266,7 +266,7 @@ func TestLoadConfig_TaskAudienceFallsBackToServiceURL(t *testing.T) {
 	}
 }
 
-// 明示された値は既定値に上書きされません。
+// An explicit value is not overwritten by the default.
 func TestLoadConfig_ExplicitValuesWin(t *testing.T) {
 	cfg := loadFor(t, map[string]string{
 		"GCP_LOCATION_ID": "asia-northeast1",
@@ -281,35 +281,35 @@ func TestLoadConfig_ExplicitValuesWin(t *testing.T) {
 	}
 }
 
-// タスク投入と OAuth は Web 面だけの要件です。Worker 面に要求すると、
-// 使わない認証情報へのアクセス権を配ることになります。
+// Task enqueueing and OAuth are web-only requirements. Requiring them of the worker side
+// would hand out access to credentials it never uses.
 func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		missing string
 		wantIn  string
 	}{
-		{name: "キュー名", missing: "CLOUD_TASKS_QUEUE_ID", wantIn: "CLOUD_TASKS_QUEUE_ID"},
-		{name: "投入先", missing: "WORKER_URL", wantIn: "WORKER_URL"},
+		{name: "queue name", missing: "CLOUD_TASKS_QUEUE_ID", wantIn: "CLOUD_TASKS_QUEUE_ID"},
+		{name: "worker URL", missing: "WORKER_URL", wantIn: "WORKER_URL"},
 		{name: "caller SA", missing: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL", wantIn: "TASK_CALLER_SERVICE_ACCOUNT_EMAIL"},
-		{name: "OAuth クライアント", missing: "GOOGLE_CLIENT_ID", wantIn: "GOOGLE_CLIENT_ID"},
-		{name: "許可リスト", missing: "ALLOWED_EMAILS", wantIn: "許可された"},
+		{name: "OAuth client", missing: "GOOGLE_CLIENT_ID", wantIn: "GOOGLE_CLIENT_ID"},
+		{name: "allowlist", missing: "ALLOWED_EMAILS", wantIn: "allowed email"},
 	} {
-		t.Run(tt.name+"が無いと落ちる", func(t *testing.T) {
+		t.Run(tt.name+" missing fails", func(t *testing.T) {
 			cfg := loadFor(t, webEnv(map[string]string{tt.missing: ""}))
 
 			err := cfg.ValidateEssentialConfig()
 			if err == nil {
-				t.Fatalf("%s の未設定が素通りした", tt.missing)
+				t.Fatalf("a missing %s got through", tt.missing)
 			}
 			if !strings.Contains(err.Error(), tt.wantIn) {
-				t.Errorf("エラーに %q が無い: %v", tt.wantIn, err)
+				t.Errorf("the error lacks %q: %v", tt.wantIn, err)
 			}
 		})
 	}
 
-	// worker 面は上記をどれも要求しません。
-	t.Run("worker は Web 面の設定を要求しない", func(t *testing.T) {
+	// The worker side requires none of the above.
+	t.Run("worker does not require the web settings", func(t *testing.T) {
 		envs := map[string]string{
 			"SERVER_ROLE":                   "worker",
 			"TASK_AUDIENCE_URL":             "https://ap-voice-worker.example.run.app",
@@ -324,8 +324,8 @@ func TestValidateEssentialConfig_WebOnlyRequirements(t *testing.T) {
 	})
 }
 
-// 出力先バケットは両ロールで要ります。web は履歴の一覧と出力先の組み立てに、
-// worker は synthesize が保存済み台本を読むために使います。
+// The output bucket is needed by both roles: web to list the history and build output locations,
+// the worker for synthesize to read stored scripts.
 func TestValidateEssentialConfig_BucketRequiredForBothRoles(t *testing.T) {
 	for _, role := range []string{"web", "worker", "both"} {
 		t.Run(role, func(t *testing.T) {
@@ -339,19 +339,19 @@ func TestValidateEssentialConfig_BucketRequiredForBothRoles(t *testing.T) {
 
 			err := cfg.ValidateEssentialConfig()
 			if err == nil {
-				t.Fatal("バケット未設定が素通りした")
+				t.Fatal("a missing bucket got through")
 			}
 			if !strings.Contains(err.Error(), "GCS_VOICE_BUCKET") {
-				t.Errorf("エラーに指定方法が無い: %v", err)
+				t.Errorf("the error does not say how to set it: %v", err)
 			}
 		})
 	}
 }
 
-// 合成の流量はエンジンの大きさで変わるため env で調整できます。
-// 未設定なら既定値が入り、コードを触らずに絞れることを固定します。
+// Synthesis throughput depends on the size of the engine, so it can be tuned through env.
+// This pins that unset gives the defaults, so it can be throttled without touching code.
 func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
-	t.Run("未設定なら既定値", func(t *testing.T) {
+	t.Run("defaults when unset", func(t *testing.T) {
 		cfg := loadFor(t, nil)
 
 		if cfg.Voicevox.MaxParallelSegments != DefaultMaxParallelSegments {
@@ -365,9 +365,9 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 		}
 	})
 
-	// 実測が覆ったときに再ビルド無しで戻す、という操作が env だけで済むこと。
-	// 既定と違う値を置きます。既定と同じ値だと、env が無視されていても通ります。
-	t.Run("上書きできる", func(t *testing.T) {
+	// When measurements overturn a value, reverting it without a rebuild must take only env.
+	// It sets a value different from the default; with the default value it would pass even if env were ignored.
+	t.Run("can be overridden", func(t *testing.T) {
 		cfg := loadFor(t, map[string]string{
 			"VOICEVOX_MAX_PARALLEL_SEGMENTS": "8",
 			"VOICEVOX_SEGMENT_RATE_LIMIT":    "1s",
@@ -386,8 +386,8 @@ func TestLoadConfig_VoicevoxThroughput(t *testing.T) {
 	})
 }
 
-// worker では未設定を落とすこと。無制限だと Cloud Tasks が先に打ち切り、
-// 失敗の記録も通知も残らないまま再試行もされません。
+// The worker must fail when it is unset. Unlimited, Cloud Tasks cuts the request first, and
+// nothing is recorded or notified, and it is not retried either.
 func TestPipelineTimeoutRequiredOnWorker(t *testing.T) {
 	envs := map[string]string{
 		"SERVER_ROLE":                   "worker",
@@ -404,9 +404,9 @@ func TestPipelineTimeoutRequiredOnWorker(t *testing.T) {
 
 	err := cfg.ValidateEssentialConfig()
 	if err == nil {
-		t.Fatal("未設定が素通りしました")
+		t.Fatal("unset got through")
 	}
 	if !strings.Contains(err.Error(), "PIPELINE_TIMEOUT") {
-		t.Errorf("エラーに変数名がありません: %v", err)
+		t.Errorf("the error lacks the variable name: %v", err)
 	}
 }

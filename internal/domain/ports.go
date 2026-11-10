@@ -5,40 +5,40 @@ import (
 	"errors"
 )
 
-// Pipeline は、処理を行うインターフェースです。
+// Pipeline is the interface that does the processing.
 type Pipeline interface {
-	// Execute は、すべての依存関係を構築し実行します。
+	// Execute builds every dependency and runs.
 	Execute(ctx context.Context, req Request) error
 }
 
-// Voice は、音声合成と成果物の保存を行うインターフェースです。
+// Voice is the interface that synthesises audio and stores the artifacts.
 type Voice interface {
 	UploadWav(ctx context.Context, outputURI string, lines []ScriptLine) error
 	UploadScript(ctx context.Context, outputURI string, script Script) error
 }
 
-// ErrScriptNotFound は、そのジョブの台本がまだ保存されていないことを表します。
+// ErrScriptNotFound means the job's script has not been stored yet.
 //
-// ポートの契約なのでここに置きます。実装側に置くと、「見つからない」を判定したい
-// 呼び出し元まで実装パッケージを import することになり、ポートを挟んだ意味が
-// 無くなります。
+// It is part of the port's contract, so it lives here. On the implementation side, a caller that
+// wants to detect "not found" would have to import the implementation package, defeating the
+// point of the port.
 var ErrScriptNotFound = errors.New("domain: script not found")
 
-// ScriptStore は、保存済みの台本を読み書きします。
+// ScriptStore reads and writes stored scripts.
 //
-// generate が書き、synthesize と詳細画面が読みます。この口があるのは、台本を
-// タスクのペイロードで運ばないためです（理由は Request.JobID）。
+// generate writes it, and synthesize and the detail page read it. This port exists because the
+// script is not carried in the task payload (see Request.JobID).
 //
-// 台本がまだ無い場合は ErrScriptNotFound を返します。読めなかった（一時障害）
-// のとは別物です。前者は待っても直りませんが、後者は直り得ます。
+// When there is no script yet it returns ErrScriptNotFound. That differs from failing to read it
+// (a transient failure): the former is not fixed by waiting, the latter may be.
 type ScriptStore interface {
 	Load(ctx context.Context, jobID string) (Script, error)
 }
 
-// TaskQueue は、実行を Worker 面へ引き渡すインターフェースです。
+// TaskQueue is the interface that hands a run over to the worker side.
 //
-// Web 面は Worker を直接呼ばず、必ずキュー越しに渡します。合成は分単位かかるため
-// リクエストの中で待てず、また公開側と実行側で権限を分けるためでもあります。
+// The web side never calls the worker directly; it always goes through the queue. Synthesis takes
+// minutes, so it cannot be awaited within a request, and it also separates the permissions of the public and executing sides.
 type TaskQueue interface {
 	Enqueue(ctx context.Context, req Request) error
 }

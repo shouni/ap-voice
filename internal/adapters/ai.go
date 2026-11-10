@@ -1,4 +1,4 @@
-// Package adapters は、外部サービス（Gemini・Slack 等）との接続を実装します。
+// Package adapters implements the connections to external services (Gemini, Slack and so on).
 package adapters
 
 import (
@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	// defaultVertexLocationID は Vertex AI のデフォルトロケーションです。
+	// defaultVertexLocationID is the default Vertex AI location.
 	defaultVertexLocationID = "global"
-	// defaultInitialDelay リトライのデフォルトの遅延期間を指定します。
+	// defaultInitialDelay is the default initial delay between retries.
 	defaultInitialDelay = 30 * time.Second
 )
 
-// NewAIAdapter は Vertex AI と通信するためのクライアントを初期化します。
+// NewAIAdapter initialises the client that talks to Vertex AI.
 func NewAIAdapter(ctx context.Context, gcp config.GCPConfig) (*gemini.Client, error) {
 	if gcp.ProjectID == "" {
 		return nil, fmt.Errorf("GCP_PROJECT_ID is not set")
@@ -33,7 +33,7 @@ func NewAIAdapter(ctx context.Context, gcp config.GCPConfig) (*gemini.Client, er
 	aiClient, err := gemini.New(ctx, clientConfig)
 
 	if err != nil {
-		return nil, fmt.Errorf("AIクライアントの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize the AI client: %w", err)
 	}
 	return aiClient, nil
 }

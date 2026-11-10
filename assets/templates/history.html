@@ -7,9 +7,9 @@
     <a class="btn btn-primary btn-sm" href="/">台本を作成</a>
   </div>
 
-  {{/* 絞り込みは記録の状態そのままです（jobfirestore の語彙）。画面側で別の
-       呼び名を作ると、記録に書かれている値と選べる値が別物になります。
-       ページ送りにも state を持ち回さないと、2 ページ目で外れます。 */}}
+  {{/* The filter is the recorded state as is (jobfirestore's vocabulary). Inventing other names
+       on the page would make the values in the records differ from the values that can be chosen.
+       Unless the pager carries state along too, it drops on page 2. */}}
   <div class="btn-group btn-group-sm mb-3" role="group" aria-label="状態で絞り込む">
     <a class="btn btn-outline-secondary{{ if eq .Filter "" }} active{{ end }}" href="/jobs">すべて</a>
     <a class="btn btn-outline-secondary{{ if eq .Filter "queued" }} active{{ end }}" href="/jobs?state=queued">待機中</a>
@@ -29,9 +29,9 @@
               {{ if not .CreatedAt.IsZero }}{{ .CreatedAt.Format "2006/01/02 15:04" }} ・ {{ end }}<code>{{ .ID }}</code>
             </small>
           </span>
-          {{/* 状態を成果物より先に見ます。「台本のみ」は generate が成功した姿でもあり、
-               まだ実行中の姿でも、失敗した姿でもあります。区別が付かないと、
-               待てば出るのか、消してやり直すのかを一覧から判断できません。 */}}
+          {{/* The state is checked before the artifacts. "Script only" is what a successful generate looks
+               like, but also what a job still running or one that failed looks like. Without telling them apart,
+               the listing cannot say whether to wait or to delete and retry. */}}
           {{ if eq .State "failed" }}<span class="badge bg-danger flex-shrink-0">失敗</span>
           {{ else if eq .State "running" }}<span class="badge bg-primary flex-shrink-0">実行中</span>
           {{ else if eq .State "queued" }}<span class="badge bg-secondary flex-shrink-0">待機中</span>
@@ -46,7 +46,7 @@
     <p class="text-secondary">まだ何もありません。<a href="/">台本を作成</a>してください。</p>
   {{ end }}
 
-  {{/* ページ送り。1 ページに収まるときは出しません。 */}}
+  {{/* Pager. Not shown when everything fits on one page. */}}
   {{ if gt .Page.TotalPages 1 }}
     <nav class="d-flex justify-content-between align-items-center border-top pt-3 mt-3">
       {{ if .Page.HasPrev }}

@@ -8,46 +8,46 @@ import (
 	"github.com/shouni/go-voicevox/voicevox"
 )
 
-// ReadingAdapter は、合成前にテキストがどう読まれるかを返します。
+// ReadingAdapter returns how text will be read before it is synthesised.
 //
-// go-voicevox が合成の直前に通すのと同じ変換です（voicevox.NewReadingPreview）。
-// 読みは自明ではなく、「田中」「同姓同名」のような語は聴くまで確かめられません。
-// 合成してから気付くと、台本ぶんの合成時間がそのまま無駄になります。
+// It is the same conversion go-voicevox runs just before synthesis (voicevox.NewReadingPreview).
+// Readings are not obvious: words like 「田中」 or 「同姓同名」 cannot be checked until heard.
+// Noticing after synthesis wastes the whole script's synthesis time.
 type ReadingAdapter struct {
-	// once は辞書の読み込みを遅らせます。kagome の辞書は約 90MB あり、
-	// web 面のメモリは 512Mi です。読みを確かめない利用者にまで常時
-	// 積ませる理由はないので、最初に使われたときだけ読み込みます。
-	// 読み込みは 1 度きりで、以降のリクエストは待ちません。
+	// once defers loading the dictionary. kagome's dictionary is about 90MB and
+	// the web side has 512Mi of memory. There is no reason to keep it loaded for users who never
+	// check readings, so it is loaded only on first use.
+	// It is loaded exactly once; later requests do not wait.
 	once    sync.Once
 	preview *voicevox.ReadingPreview
 	err     error
 }
 
-// NewReadingAdapter は ReadingAdapter を構築します。ここでは辞書を読みません。
+// NewReadingAdapter builds a ReadingAdapter. It does not load the dictionary here.
 func NewReadingAdapter() *ReadingAdapter {
 	return &ReadingAdapter{}
 }
 
-// ConvertToReading は、テキストを読み（カタカナ）へ変換します。
+// ConvertToReading converts text into its reading (katakana).
 //
-// 合成と同じ 200 文字の切れ目で分けてから変換するので、長い行でも合成と同じ読みになります。
-// 表示は 1 行にまとめます。
+// It splits at the same 200-character boundaries as synthesis before converting, so even a long line reads as it will be synthesised.
+// The result is joined into one line for display.
 func (a *ReadingAdapter) ConvertToReading(text string) (string, error) {
 	a.once.Do(func() {
-		// 合成側（voicevox.New）と同じ Option を渡します。ここが食い違うと、
-		// 確認した読みと実際に合成される読みが別物になり、確認の意味が無くなります。
+		// Pass the same Options as the synthesis side (voicevox.New). If they differ,
+		// the reading that was checked and the one that is synthesised diverge, and checking loses its point.
 		a.preview, a.err = voicevox.NewReadingPreview(readingOptions()...)
 	})
 	if a.err != nil {
-		return "", fmt.Errorf("読み変換の初期化に失敗しました: %w", a.err)
+		return "", fmt.Errorf("failed to initialize reading conversion: %w", a.err)
 	}
 	return strings.Join(a.preview.Read(text), ""), nil
 }
 
-// readingOptions は、読み変換に関わる voicevox.Option です。
+// readingOptions are the voicevox.Options that affect reading conversion.
 //
-// 合成側（NewVoiceAdapter）と読みプレビューで同じものを渡すための 1 か所です。
-// 型が同じなので、片方にだけ足す書き方ができません。
+// It is the one place that hands the same list to the synthesis side (NewVoiceAdapter) and the reading preview.
+// They share a type, so adding to only one of them is not possible.
 func readingOptions() []voicevox.Option {
 	return []voicevox.Option{voicevox.WithNumberReading()}
 }

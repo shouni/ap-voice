@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// TestAPISpeakersListsStylesPerSpeaker は、話者ごとに実在するスタイルだけが
-// 返ることを検証します。
+// TestAPISpeakersListsStylesPerSpeaker verifies that only styles that exist for each speaker
+// are returned.
 //
-// これが無いと、クライアントは当てずっぽうで台本を書くことになります。持つ
-// スタイルは話者ごとに違い（春日部つむぎは 1 つ、ずんだもんは複数）、実在しない
-// 組み合わせは保存時に弾かれるので、組を選ぶ材料がここにしかありません。
+// Without it, a client would write scripts by guesswork. The styles differ
+// per speaker (春日部つむぎ has 1, ずんだもん several), and a non-existent pair
+// is rejected on save, so this is the only place to learn which pairs to choose.
 func TestSpeakersListsStylesPerSpeaker(t *testing.T) {
 	t.Parallel()
 
@@ -28,31 +28,31 @@ func TestSpeakersListsStylesPerSpeaker(t *testing.T) {
 
 	var got map[string][]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("応答が JSON として読めません: %v", err)
+		t.Fatalf("response is not readable as JSON: %v", err)
 	}
 	if len(got) == 0 {
-		t.Fatal("話者が 1 人も返っていません（構築時の組み立てが空のまま）")
+		t.Fatal("no speakers returned (the table built at construction is empty)")
 	}
 
 	styles, ok := got["春日部つむぎ"]
 	if !ok {
-		t.Fatalf("春日部つむぎ がいません（返った話者数: %d）", len(got))
+		t.Fatalf("春日部つむぎ is missing (speakers returned: %d)", len(got))
 	}
 	if !slices.Contains(styles, "ノーマル") {
-		t.Errorf("春日部つむぎ のスタイル = %v, want ノーマル を含む", styles)
+		t.Errorf("春日部つむぎ styles = %v, want them to include ノーマル", styles)
 	}
 
-	// 話者ごとに違うことを 1 件で押さえます。同じ一覧を全員へ配ると、
-	// 実在しない組み合わせを選べる状態に戻ります。
+	// One case pins that they differ per speaker. Handing everyone the same list would
+	// make non-existent pairs selectable again.
 	if zundamon := got["ずんだもん"]; len(zundamon) <= len(styles) {
-		t.Errorf("ずんだもん = %v, 春日部つむぎ = %v。話者ごとに絞れていません", zundamon, styles)
+		t.Errorf("ずんだもん = %v, 春日部つむぎ = %v; not narrowed per speaker", zundamon, styles)
 	}
 }
 
-// TestAPISpeakersServesTheSameTableAsTheEditor は、編集画面へ渡す対応表と
-// API の応答が同じものであることを検証します。
+// TestAPISpeakersServesTheSameTableAsTheEditor verifies that the table handed to the editor
+// and the API response are the same thing.
 //
-// 別々に組むと、片方だけが実在しない組み合わせを出すようになります。
+// Built separately, one of them would start offering non-existent pairs.
 func TestSpeakersServesTheSameTableAsTheEditor(t *testing.T) {
 	t.Parallel()
 
@@ -60,7 +60,7 @@ func TestSpeakersServesTheSameTableAsTheEditor(t *testing.T) {
 
 	var fromJSON map[string][]string
 	if err := json.Unmarshal([]byte(h.stylesJSON), &fromJSON); err != nil {
-		t.Fatalf("画面へ渡す対応表が JSON として読めません: %v", err)
+		t.Fatalf("the table handed to the page is not readable as JSON: %v", err)
 	}
 
 	rec := httptest.NewRecorder()
@@ -68,15 +68,15 @@ func TestSpeakersServesTheSameTableAsTheEditor(t *testing.T) {
 
 	var fromAPI map[string][]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &fromAPI); err != nil {
-		t.Fatalf("API の応答が JSON として読めません: %v", err)
+		t.Fatalf("the API response is not readable as JSON: %v", err)
 	}
 
 	if len(fromJSON) != len(fromAPI) {
-		t.Fatalf("話者数が違います: 画面 %d, API %d", len(fromJSON), len(fromAPI))
+		t.Fatalf("speaker counts differ: page %d, API %d", len(fromJSON), len(fromAPI))
 	}
 	for name, styles := range fromAPI {
 		if !slices.Equal(fromJSON[name], styles) {
-			t.Errorf("%s のスタイルが違います: 画面 %v, API %v", name, fromJSON[name], styles)
+			t.Errorf("styles for %s differ: page %v, API %v", name, fromJSON[name], styles)
 		}
 	}
 }

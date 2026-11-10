@@ -13,9 +13,9 @@ import (
 	"github.com/shouni/ap-voice/assets"
 )
 
-// stubRenderer は、渡されたモードと入力を記録する PromptRenderer です。
+// stubRenderer is a PromptRenderer that records the modes and inputs it is given.
 type stubRenderer struct {
-	// recipeOnly は、素のテキストを拒みレシピだけを受け付けるモードです。
+	// recipeOnly is a mode that rejects plain text and accepts only a recipe.
 	recipeOnly string
 	got        []string
 }
@@ -23,24 +23,23 @@ type stubRenderer struct {
 func (s *stubRenderer) Generate(mode, content string) (string, error) {
 	s.got = append(s.got, mode)
 	if mode == s.recipeOnly && !strings.HasPrefix(strings.TrimSpace(content), "{") {
-		return "", errors.New("楽曲レシピのJSONデコードに失敗しました")
+		return "", errors.New("failed to decode the music recipe JSON")
 	}
 	return "組み立て済み: " + mode, nil
 }
 
-// testModesHandler は、指定のモードと組み立てを持つ Handler を返します。
+// testModesHandler returns a Handler with the given modes and assembly.
 func testModesHandler(t *testing.T, renderer PromptRenderer, modes ...assets.Mode) *Handler {
 	t.Helper()
 	return &Handler{templates: parseTemplates(t), renderer: renderer, modes: modes}
 }
 
-// TestModesListDoesNotAssemblePrompts は、一覧がプロンプトを組み立てないことを
-// 検証します。
+// TestModesListDoesNotAssemblePrompts verifies that the listing does not assemble prompts.
 //
-// 一覧に要るのは front matter だけです。7 モード分の本文は合わせて 1 万字を
-// 超えるため、読むか分からないものを毎回組み立てるとページが重くなるだけです。
-// 本文が要るのは詳細で、MCP のように機械が読む場合も、索引と本文を別々に
-// 取れる方が無駄がありません。
+// The listing needs only the front matter. The bodies of 7 modes add up to more than 10,000
+// characters, so assembling what may never be read every time only makes the page heavier.
+// The detail page needs the body, and for machine readers such as MCP, fetching the index and
+// the bodies separately wastes less.
 func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 	t.Parallel()
 
@@ -54,22 +53,22 @@ func TestModesListDoesNotAssemblePrompts(t *testing.T) {
 	body := render(t, h.Modes, "/modes")
 
 	if len(renderer.got) != 0 {
-		t.Errorf("一覧でプロンプトを %d 回組み立てています", len(renderer.got))
+		t.Errorf("the listing assembles prompts %d times", len(renderer.got))
 	}
-	// 入力の型も一覧に出ます。作成画面のどのタブに並ぶかがこれで決まるためです。
+	// The input type is listed too, since it decides which tab of the create page the mode appears on.
 	for _, want := range []string{"tech_solo", "楽曲紹介", `href="/modes/tech_solo"`, "テキスト", "楽曲レシピ"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("一覧に %q が出ていません", want)
+			t.Errorf("the listing lacks %q", want)
 		}
 	}
 }
 
-// TestModeDetailPicksTheSampleFromFrontMatter は、入力の型に合った仮の入力が
-// 一度で選ばれることを検証します。
+// TestModeDetailPicksTheSampleFromFrontMatter verifies that a stand-in input matching the input
+// type is picked in one go.
 //
-// 以前は素のテキストで試し、失敗したらレシピで試し直していました。
-// 当てずっぽうだと、本当の組み立て失敗も「型が違っただけ」に見えて隠れます。
-// どちらを渡すかは front matter の input が最初から知っています。
+// It used to try plain text and, on failure, retry with a recipe.
+// Guessing makes a real assembly failure look like "just the wrong type" and hides it.
+// The front matter's input knows from the start which one to pass.
 func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
 	t.Parallel()
 
@@ -82,21 +81,21 @@ func TestModeDetailPicksTheSampleFromFrontMatter(t *testing.T) {
 	body := renderDetailFor(t, h, "music_promo")
 
 	if !strings.Contains(body, "組み立て済み: music_promo") {
-		t.Error("本文が出ていません")
+		t.Error("the body is not shown")
 	}
 	if strings.Contains(body, "組み立てに失敗しました") {
-		t.Error("エラー表示になっています")
+		t.Error("an error is shown")
 	}
-	// 1 回だけです。型が分かっているので、外して試す必要がありません。
+	// Just once. The type is known, so there is no need to try and miss.
 	if len(renderer.got) != 1 {
-		t.Errorf("呼び出し回数 = %d, want 1", len(renderer.got))
+		t.Errorf("call count = %d, want 1", len(renderer.got))
 	}
 }
 
-// TestModeDetailShowsTheInputKind は、詳細に入力の型が出ることを検証します。
+// TestModeDetailShowsTheInputKind verifies that the detail page shows the input type.
 //
-// 型が作成画面のどのタブに出るかを決めるため、カタログを見た人が
-// 「このモードはどこから投げるのか」を判断できる必要があります。
+// The type decides which tab of the create page it appears on, so whoever reads the catalogue
+// needs to be able to tell "where is this mode submitted from".
 func TestModeDetailShowsTheInputKind(t *testing.T) {
 	t.Parallel()
 
@@ -109,20 +108,20 @@ func TestModeDetailShowsTheInputKind(t *testing.T) {
 
 	recipe := renderDetailFor(t, h, "music_promo")
 	if !strings.Contains(recipe, "楽曲レシピ") || !strings.Contains(recipe, "ジョブID") {
-		t.Error("レシピ入力であることが詳細に出ていません")
+		t.Error("the detail page does not say it takes a recipe")
 	}
 
 	text := renderDetailFor(t, h, "tech_solo")
 	if !strings.Contains(text, "入力ソース") {
-		t.Error("テキスト入力であることが詳細に出ていません")
+		t.Error("the detail page does not say it takes text")
 	}
 	if strings.Contains(text, "ジョブID") {
-		t.Error("テキスト入力なのにジョブIDの案内が出ています")
+		t.Error("a text-input mode shows the job ID guidance")
 	}
 }
 
-// TestModeDetailShowsFailureWithoutBreakingThePage は、組み立てに失敗しても
-// そのモードの説明は読めることを検証します。
+// TestModeDetailShowsFailureWithoutBreakingThePage verifies that the mode's description stays
+// readable even when assembly fails.
 func TestModeDetailShowsFailureWithoutBreakingThePage(t *testing.T) {
 	t.Parallel()
 
@@ -133,15 +132,15 @@ func TestModeDetailShowsFailureWithoutBreakingThePage(t *testing.T) {
 
 	body := renderDetailFor(t, h, "tech_solo")
 	if !strings.Contains(body, "ずんだもんが 1 人で語ります") {
-		t.Error("説明まで消えています")
+		t.Error("the description has vanished too")
 	}
 	if !strings.Contains(body, "組み立てに失敗しました") {
-		t.Error("失敗の表示がありません")
+		t.Error("no failure is shown")
 	}
 }
 
-// TestModeDetailRejectsUnknownKey は、一覧に無いキーを 404 にすることを検証します。
-// Generate も未知のモードを弾きますが、そこまで行くと 500 相当の見え方になります。
+// TestModeDetailRejectsUnknownKey verifies that a key not in the listing is a 404.
+// Generate rejects unknown modes too, but by then it looks like a 500.
 func TestModeDetailRejectsUnknownKey(t *testing.T) {
 	t.Parallel()
 
@@ -159,10 +158,10 @@ func TestModeDetailRejectsUnknownKey(t *testing.T) {
 type brokenRenderer struct{}
 
 func (brokenRenderer) Generate(string, string) (string, error) {
-	return "", errors.New("テンプレートが壊れています")
+	return "", errors.New("the template is broken")
 }
 
-// render はハンドラーを呼んで本文を返します。
+// render calls the handler and returns the body.
 func render(t *testing.T, h http.HandlerFunc, path string) string {
 	t.Helper()
 
@@ -174,14 +173,14 @@ func render(t *testing.T, h http.HandlerFunc, path string) string {
 	return rec.Body.String()
 }
 
-// withModeParam は、chi の URL パラメータを載せたリクエストを返します。
+// withModeParam returns a request carrying chi's URL parameter.
 func withModeParam(r *http.Request, mode string) *http.Request {
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("mode", mode)
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, ctx))
 }
 
-// renderDetailFor は、指定モードの詳細を描画して本文を返します。
+// renderDetailFor renders the given mode's detail and returns the body.
 func renderDetailFor(t *testing.T, h *Handler, mode string) string {
 	t.Helper()
 

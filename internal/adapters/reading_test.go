@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// TestConvertToReadingShowsNonObviousReadings は、聴くまで分からない読みが
-// 事前に見えることを検証します。
+// TestConvertToReadingShowsNonObviousReadings verifies that readings you would only learn by
+// listening are visible beforehand.
 //
-// 読みは自明ではありません。楽曲生成サービスが同じ理由で preview_lyrics_reading を
-// 持っており、その説明が挙げている「水面」はここでも スイメン になります。
-// 合成してから気付くと、台本の長さぶんの合成時間がそのまま無駄になります。
+// Readings are not obvious. The music generation service has preview_lyrics_reading for the same
+// reason, and the 「水面」 its description cites becomes スイメン here too.
+// Noticing after synthesis wastes the script's whole length in synthesis time.
 func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {
 	t.Parallel()
 
@@ -21,9 +21,9 @@ func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {
 		text string
 		want string
 	}{
-		{name: "水面はミナモではない", text: "水面に映る月", want: "スイメンニウツルツキ"},
-		{name: "助詞のはが発音どおりになる", text: "指示は大事故のもと", want: "シジワダイジコノモト"},
-		{name: "カタカナはそのまま", text: "カタカナハソノママ", want: "カタカナハソノママ"},
+		{name: "reads suimen, not minamo", text: "水面に映る月", want: "スイメンニウツルツキ"},
+		{name: "the particle ha is read as wa", text: "指示は大事故のもと", want: "シジワダイジコノモト"},
+		{name: "katakana stays as is", text: "カタカナハソノママ", want: "カタカナハソノママ"},
 	}
 
 	for _, tt := range tests {
@@ -41,12 +41,11 @@ func TestConvertToReadingShowsNonObviousReadings(t *testing.T) {
 	}
 }
 
-// TestConvertToReadingLeavesLatinAlone は、アルファベットが変換されずに
-// そのまま残ることを検証します。
+// TestConvertToReadingLeavesLatinAlone verifies that Latin letters are left unconverted.
 //
-// プロンプトが「略語はカタカナで書く」と求めている根拠です。変換が面倒を
-// 見てくれないため、台本の側でカタカナにしておかないと VOICEVOX へ英字のまま
-// 渡ります。この振る舞いが変わったら、プロンプトの指示も見直す必要があります。
+// It is why the prompts ask for abbreviations in katakana. The conversion does not take care of
+// them, so unless the script writes them in katakana they reach VOICEVOX as Latin letters.
+// If this behaviour changes, the prompts' instructions need revisiting too.
 func TestConvertToReadingLeavesLatinAlone(t *testing.T) {
 	t.Parallel()
 
@@ -55,19 +54,18 @@ func TestConvertToReadingLeavesLatinAlone(t *testing.T) {
 		t.Fatalf("ConvertToReading() error = %v", err)
 	}
 	if !strings.Contains(got, "API") || !strings.Contains(got, "Cloud Run") {
-		t.Errorf("英字が変換されています: %q", got)
+		t.Errorf("Latin letters were converted: %q", got)
 	}
-	// 日本語の部分は読みになります。
+	// The Japanese part becomes a reading.
 	if !strings.Contains(got, "ジドウカ") {
-		t.Errorf("日本語が変換されていません: %q", got)
+		t.Errorf("Japanese was not converted: %q", got)
 	}
 }
 
-// TestReadingAdapterLoadsDictionaryOnce は、辞書の読み込みが 1 度きりで
-// あることを検証します。
+// TestReadingAdapterLoadsDictionaryOnce verifies that the dictionary is loaded exactly once.
 //
-// kagome の辞書は約 90MB あり、web 面のメモリは 512Mi です。呼ばれるたびに
-// 読み直すと、読みを確かめるだけで応答が目に見えて遅くなります。
+// kagome's dictionary is about 90MB and the web side has 512Mi of memory. Reloading it on every
+// call would visibly slow the response just to check a reading.
 func TestReadingAdapterLoadsDictionaryOnce(t *testing.T) {
 	t.Parallel()
 
@@ -75,27 +73,27 @@ func TestReadingAdapterLoadsDictionaryOnce(t *testing.T) {
 
 	first, err := a.ConvertToReading("最初の行")
 	if err != nil {
-		t.Fatalf("1 回目: %v", err)
+		t.Fatalf("first call: %v", err)
 	}
 	second, err := a.ConvertToReading("最初の行")
 	if err != nil {
-		t.Fatalf("2 回目: %v", err)
+		t.Fatalf("second call: %v", err)
 	}
 	if first != second {
-		t.Errorf("同じ入力で結果が違います: %q と %q", first, second)
+		t.Errorf("same input gave different results: %q and %q", first, second)
 	}
 	if a.preview == nil {
-		t.Error("変換器が保持されていません")
+		t.Error("the converter is not retained")
 	}
 }
 
-// TestConvertToReadingReadsDigits は、算用数字が読みへ変換されることを検証します。
+// TestConvertToReadingReadsDigits verifies that Arabic numerals are converted into readings.
 //
-// 既定では変換されません。phonetic は数字をそのまま通すため、VOICEVOX が
-// 字面どおりに読みます（8日→ハチニチ、1人→イチニン、20歳→ニジュッサイ）。
-// 台本には日付も人数も出るので、readingOptions が WithNumberReading を渡している
-// ことがその防波堤です。落としても静かに壊れます— プレビューにも数字がそのまま
-// 並ぶので、気づけるのは合成した音声を聴いたときだけです。
+// They are not converted by default. phonetic passes digits through, so VOICEVOX reads them
+// literally (8日→ハチニチ, 1人→イチニン, 20歳→ニジュッサイ).
+// Scripts contain dates and head counts, so readingOptions passing WithNumberReading
+// is the breakwater. Dropping it breaks things quietly — the preview shows the digits as is too,
+// so it is noticed only when listening to the synthesised audio.
 func TestConvertToReadingReadsDigits(t *testing.T) {
 	t.Parallel()
 
@@ -109,27 +107,27 @@ func TestConvertToReadingReadsDigits(t *testing.T) {
 				t.Fatalf("ConvertToReading(%q) error = %v", text, err)
 			}
 			if strings.ContainsAny(got, "0123456789") {
-				t.Errorf("ConvertToReading(%q) = %q, 算用数字が残っています", text, got)
+				t.Errorf("ConvertToReading(%q) = %q, Arabic numerals remain", text, got)
 			}
 		})
 	}
 }
 
-// TestReadingOptionsMatchSynthesis は、読みプレビューと合成が同じ設定を使うことを
-// 検証します。
+// TestReadingOptionsMatchSynthesis verifies that the reading preview and synthesis use the same
+// settings.
 //
-// ReadingAdapter は「go-voicevox が合成の直前に通すのと同じ変換」を名乗っています。
-// 以前はプレビューが phonetic.Option、合成が voicevox.Option と型が違い、片方にだけ
-// 足した誤りはプレビューと実際の音声を突き合わせるまで表に出ませんでした。いまは
-// readingOptions が返す 1 つの []voicevox.Option を、NewVoiceAdapter（合成）と
-// NewReadingPreview（プレビュー）の両方へ渡します。ここでは readingOptions が
-// 数字読みを含むことを固定します。NewVoiceAdapter 側は VOICEVOX エンジンが要るので
-// ここでは呼べません。
+// ReadingAdapter claims to be "the same conversion go-voicevox runs just before synthesis".
+// The preview used to take phonetic.Option and synthesis voicevox.Option, different types, and a
+// mistake added to only one stayed hidden until the preview was compared with the actual audio. Now
+// the single []voicevox.Option readingOptions returns goes to both NewVoiceAdapter (synthesis) and
+// NewReadingPreview (preview). This pins that readingOptions includes number reading.
+// NewVoiceAdapter needs a VOICEVOX engine, so it cannot be called
+// here.
 func TestReadingOptionsMatchSynthesis(t *testing.T) {
 	t.Parallel()
 
 	if len(readingOptions()) == 0 {
-		t.Fatal("readingOptions が空です。合成側にだけ設定が足された可能性があります")
+		t.Fatal("readingOptions is empty; a setting may have been added to the synthesis side only")
 	}
 
 	got, err := NewReadingAdapter().ConvertToReading("8日")
@@ -137,6 +135,6 @@ func TestReadingOptionsMatchSynthesis(t *testing.T) {
 		t.Fatalf("ConvertToReading() error = %v", err)
 	}
 	if strings.Contains(got, "8") {
-		t.Errorf("プレビュー = %q。合成側は WithNumberReading を渡しているので食い違います", got)
+		t.Errorf("preview = %q; synthesis passes WithNumberReading, so they disagree", got)
 	}
 }

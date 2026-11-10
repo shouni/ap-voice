@@ -12,39 +12,39 @@ import (
 	"github.com/shouni/go-utils/jobid"
 )
 
-// apiAccepted は投入を受け付けたときの応答です。
+// apiAccepted is the response when an enqueue is accepted.
 //
-// 姉妹サービスと同じ封筒です（MCP サーバーの client.TaskQueuedResponse が
-// status と job_id を読みます）。ここだけ形が違うと、共通クライアントに
-// ap-voice 用の分岐が要ります。
+// It is the same envelope as the sibling services (the MCP server's client.TaskQueuedResponse reads
+// status and job_id). If only this one had a different shape, the shared client would need an
+// ap-voice-specific branch.
 type apiAccepted struct {
 	Status string `json:"status"`
 	JobID  string `json:"job_id"`
-	// Command は ap-voice 独自です。3 つのコマンドのどれを受け付けたかを返します。
+	// Command is ap-voice's own. It returns which of the three commands was accepted.
 	Command string `json:"command,omitempty"`
 }
 
-// apiEnqueue は、ジョブ投入の要求です。
+// apiEnqueue is the job enqueue request.
 //
-// 入口は 2 つあります。入力ソースから AI に書かせるか（generate 系）、
-// 既に手元にある台本をそのまま渡すか（synthesize）です。後者は呼び出し側が
-// 自分で書いた台本を喋らせる経路で、Gemini を呼びません。
+// There are two ways in: have the AI write from an input source (the generate family),
+// or hand over a script already in hand as is (synthesize). The latter is the path for the
+// caller to have its own script spoken, and does not call Gemini.
 type apiEnqueue struct {
 	Command  string `json:"command"`
 	InputURI string `json:"input_uri,omitempty"`
-	// MusicJobID は、入力が楽曲レシピのときのジョブ ID です。
+	// MusicJobID is the job ID when the input is a music recipe.
 	//
-	// 解決はここでやります。呼び出し側に gs:// を組み立てさせると、
-	// 置き場の規則がサービスの外へ漏れ、変えるときに全員へ知らせて回ることに
-	// なります。画面の「楽曲レシピ」タブと同じ関数を通ります。
+	// It is resolved here. Making callers assemble the gs:// would leak the storage layout rule
+	// outside the service, and changing it would mean telling everyone.
+	// It goes through the same function as the page's 「楽曲レシピ」 tab.
 	MusicJobID string `json:"music_job_id,omitempty"`
 	Mode       string `json:"mode,omitempty"`
 	AIModel    string `json:"ai_model,omitempty"`
-	// Script は command が synthesize のときの台本です。
+	// Script is the script when command is synthesize.
 	Script *domain.Script `json:"script,omitempty"`
 }
 
-// createJobJSON は、JSON 本文から新しいジョブを投入します（POST /jobs）。
+// createJobJSON enqueues a new job from a JSON body (POST /jobs).
 func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 	var body apiEnqueue
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -61,8 +61,8 @@ func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// music_job_id は input_uri より優先します（動画生成サービスの compose_video と同じ）。
-	// 両方来たときに黙って片方を捨てるより、ID を書いた側の意図を採ります。
+	// music_job_id takes precedence over input_uri (like the video generation service's compose_video).
+	// Rather than silently dropping one when both arrive, it follows the intent of whoever wrote the ID.
 	inputURI := body.InputURI
 	if body.MusicJobID != "" {
 		resolved, rErr := h.recipeInputURI(body.MusicJobID)
@@ -88,8 +88,8 @@ func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 		AIModel:   body.AIModel,
 	}
 
-	// 持ち込まれた台本は、投入の前に保存します。保存先はジョブ ID から決まるので、
-	// 既存ジョブの差し替えと同じ経路です（ジョブが既にあるかどうかは問いません）。
+	// A supplied script is saved before the enqueue. Its location follows from the job ID, so
+	// it is the same path as replacing an existing job's script (whether the job already exists does not matter).
 	if command == domain.CommandSynthesize {
 		if body.Script == nil {
 			respond.ErrorJSON(w, r, http.StatusBadRequest, "synthesize には script が要ります")
@@ -116,10 +116,10 @@ func (h *Handler) createJobJSON(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, r, status, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(command)})
 }
 
-// JobCreate は、新しいジョブを投入します（POST /jobs）。
+// JobCreate enqueues a new job (POST /jobs).
 //
-// 入口は 1 本で、本文の形で分かれます。JSON は機械（MCP サーバー）、フォームは
-// 画面の 3 タブです。読み取りと応答の形だけが違い、採番・保存・投入は同じ経路です。
+// There is one way in, split by the body's shape. JSON is for machines (the MCP server), the form
+// for the page's three tabs. Only the reading and the response shape differ; ID minting, saving and enqueueing are the same path.
 func (h *Handler) JobCreate(w http.ResponseWriter, r *http.Request) {
 	if isJSONBody(r) {
 		h.createJobJSON(w, r)
@@ -128,24 +128,24 @@ func (h *Handler) JobCreate(w http.ResponseWriter, r *http.Request) {
 	h.createJobForm(w, r)
 }
 
-// isJSONBody は、本文が JSON かどうかを Content-Type で判定します。
+// isJSONBody decides from Content-Type whether the body is JSON.
 func isJSONBody(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json")
 }
 
-// isFormBody は、本文が HTML フォームかどうかを Content-Type で判定します。
+// isFormBody decides from Content-Type whether the body is an HTML form.
 func isFormBody(r *http.Request) bool {
 	ct := strings.ToLower(r.Header.Get("Content-Type"))
 	return strings.Contains(ct, "application/x-www-form-urlencoded") || strings.Contains(ct, "multipart/form-data")
 }
 
-// acceptedAt は、投入とアクションの応答にポーリング先を載せます。
+// acceptedAt puts the polling URL on enqueue and action responses.
 //
-// 呼び出し側は本文を読まなくても次に叩く URL が分かります。画面向けの応答にも
-// 同じヘッダを付けます（読み方が Accept で変わらないように）。
+// Callers know the next URL to call without reading the body. Responses for the page carry
+// the same header (so how it reads does not change with Accept).
 func acceptedAt(w http.ResponseWriter, jobID string) {
 	w.Header().Set("Location", jobsBasePath+"/"+jobID)
 }
 
-// jobsBasePath はジョブのパスです。投入から削除まで 1 件をこの配下で指します。
+// jobsBasePath is the path of jobs. One job is named under it from enqueue to delete.
 const jobsBasePath = "/jobs"

@@ -1,10 +1,10 @@
-{{/* 全画面共通の外枠です。以前は 5 つの画面がそれぞれ <!doctype html> から </html> まで
-     丸ごと持っており、head の違いは <title> だけでした。Bootstrap を CDN から自前配信へ
-     移したとき同じ 3 行を 5 ファイル直すことになり、1 つ直し漏らせばその画面だけ
-     スタイルが崩れる状態だったので、ここへ集約しています。
+{{/* The outer frame every page shares. Each of 5 pages used to carry everything from <!doctype html> to </html>,
+     and their heads differed only in <title>. Moving Bootstrap from a CDN to self-hosting
+     meant fixing the same 3 lines in 5 files, and missing one would break that page's
+     styling alone, so it is gathered here.
 
-     ページ側が define するのは title と content です。読み込む JS は .JS が運びます
-     （どの画面が何を読むかは handlers の pageScripts が持ちます）。 */}}
+     Pages define title and content. .JS carries the JS to load
+     (which page loads what is held by pageScripts in handlers). */}}
 {{ define "layout.html" }}<!doctype html>
 <html lang="ja">
 <head>

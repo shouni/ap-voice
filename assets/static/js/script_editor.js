@@ -1,15 +1,15 @@
-// 台本の編集画面の振る舞いです。行の編集（スタイルの選択肢・追加・並べ替え・削除）と、
-// 読みの確認をまとめています。
+// Behaviour of the script editor. It gathers line editing (style options, adding, reordering,
+// deleting) and reading checks.
 //
-// どちらも、画面側に一覧や規則を写さないために書かれています。話者とスタイルの対応表は
-// サーバーが data 属性で渡し（#voice-styles）、行数の上限もサーバーが渡します
-// （#script-form の data-max-lines）。写すと必ずずれます。
+// Both are written so that no list or rule is copied into the page. The speaker-to-style table
+// comes from the server in a data attribute (#voice-styles), and so does the line cap
+// (data-max-lines on #script-form). Copies always drift.
 (() => {
     'use strict';
 
-    // 属性から読み戻します。インラインスクリプトで window へ置く形はやめました
-    // （CSP の script-src を 'self' だけにするため）。壊れた値で画面全体を止めない
-    // よう、解析に失敗したら選択肢の差し替えだけを諦めます。
+    // Read back from the attribute. Placing it on window with an inline script was dropped
+    // (to keep the CSP's script-src at 'self'). So that a broken value does not stop the whole page,
+    // a parse failure only gives up on swapping the options.
     const stylesBySpeaker = (() => {
         const holder = document.getElementById('voice-styles');
         if (!holder) {
@@ -23,26 +23,26 @@
         }
     })();
 
-    // maxLines は行数の上限です。サーバーが持つ数を読むだけで、ここへは写しません
-    // （写すと、どちらかを直したときにもう一方が古いまま残ります）。読めなければ
-    // 上限なしとして扱い、判断をサーバーへ返します。
+    // maxLines is the line cap. It only reads the number the server holds and does not copy it here
+    // (a copy would stay stale when the other is fixed). If unreadable, it is
+    // treated as no cap, and the decision goes back to the server.
     //
-    // 超えた台本は保存時に弾かれ、そのとき画面は保存済みの台本を読み直すので、
-    // 編集中の内容が消えます。足せなくすることで、その経路を塞ぎます。
+    // A script over the cap is rejected on save, and the page then reloads the stored script,
+    // losing what was being edited. Refusing to add more closes that path.
     const maxLines = () => {
         const form = document.getElementById('script-form');
         const value = form ? parseInt(form.dataset.maxLines, 10) : NaN;
         return value > 0 ? value : Infinity;
     };
 
-    // --- 行の編集 -----------------------------------------------------------
+    // --- Line editing ----------------------------------------------------------
 
-    // fillStyles は、選ばれている話者のスタイルで select を組み直します。
-    // 直前に選ばれていた値が新しい話者にもあれば、それを保ちます。
+    // fillStyles rebuilds the select with the selected speaker's styles.
+    // If the previously selected value exists for the new speaker too, it is kept.
     //
-    // 話者ごとに持つスタイルは違います（春日部つむぎは「ノーマル」だけ、ずんだもんは
-    // 8 種類）。全部を一律に並べると、その話者が持たない組み合わせを選べてしまい、
-    // 合成時に既定スタイルへ黙って落ちて指示が無視されます。
+    // Each speaker has different styles (春日部つむぎ has only 「ノーマル」, ずんだもん has
+    // 8). Listing all of them for everyone would allow pairs the speaker does not have, which at
+    // synthesis silently fall back to the default style, ignoring the instruction.
     const fillStyles = (speakerSelect, styleSelect) => {
         const styles = stylesBySpeaker[speakerSelect.value] || [];
         if (styles.length === 0) {
@@ -60,16 +60,16 @@
             styleSelect.appendChild(option);
         }
 
-        // 前の話者のスタイルが新しい話者に無ければ、先頭（その話者の既定）へ落とします。
+        // If the previous speaker's style does not exist for the new one, fall back to the first (that speaker's default).
         if (!styles.includes(wanted)) {
             styleSelect.selectedIndex = 0;
         }
     };
 
-    // rowsOf は台本の行（tbody の tr）を並び順のまま返します。
+    // rowsOf returns the script's rows (the tbody's tr) in order.
     const rowsOf = (body) => Array.from(body.querySelectorAll('tr'));
 
-    // refresh は、行を足し引きしたあとの見出しの行数を合わせます。
+    // refresh updates the line count in the heading after rows are added or removed.
     const refresh = (body) => {
         const count = rowsOf(body).length;
         for (const node of document.querySelectorAll('.js-line-count')) {
@@ -77,7 +77,7 @@
         }
     };
 
-    // fillRow は、1 行のスタイル選択肢を話者ぶんへ広げます。
+    // fillRow expands one row's style options to the speaker's set.
     const fillRow = (row) => {
         const speakerSelect = row.querySelector('.js-speaker');
         const styleSelect = row.querySelector('.js-style');
@@ -86,11 +86,11 @@
         }
     };
 
-    // addAfter は、指定の行の下に空の行を差し込みます。
+    // addAfter inserts an empty row below the given one.
     //
-    // 行はテンプレートから組み立てず、元の行を写して作ります。話者の選択肢も
-    // スタイルの初期値も画面に既にあるので、同じ並びを JS 側へ書き写さずに済みます
-    // （書き写すと assets/speakers.json と二重になります）。
+    // Rows are not built from a template but copied from an existing row. The speaker options and
+    // the initial style are already on the page, so the same list need not be copied into JS
+    // (a copy would duplicate assets/speakers.json).
     const addAfter = (body, row) => {
         if (rowsOf(body).length >= maxLines()) {
             return;
@@ -112,8 +112,8 @@
         text?.focus();
     };
 
-    // move は、行を 1 つ上（または下）へ入れ替えます。話す順序は台本そのものなので、
-    // 入れ替えるのに本文を切り貼りさせる理由がありません。
+    // move swaps a row one up (or down). The speaking order is the script itself, so
+    // there is no reason to make anyone cut and paste text to reorder.
     const move = (row, up) => {
         const sibling = up ? row.previousElementSibling : row.nextElementSibling;
         if (!sibling) {
@@ -126,12 +126,12 @@
         }
     };
 
-    // remove は行ごと取り除きます。話者・スタイル・本文は 3 つの並びとして送るので、
-    // 行ごと消せば数が揃ったままです（本文だけ空にする従来の消し方も残ります）。
+    // remove takes out the whole row. Speaker, style and text are sent as three lists,
+    // so removing whole rows keeps their counts equal (the old way, emptying the text, still works).
     const remove = (body, row) => {
         if (rowsOf(body).length <= 1) {
-            // 最後の 1 行は消しません。空の台本は保存できず、行が 0 だと
-            // 写して増やす元も無くなります。
+            // The last row is not removed. An empty script cannot be saved, and with zero rows
+            // there would be nothing to copy from to add more.
             const text = row.querySelector('.js-text');
             if (text) {
                 text.value = '';
@@ -143,17 +143,17 @@
         refresh(body);
     };
 
-    // --- 読みの確認 ---------------------------------------------------------
+    // --- Reading checks --------------------------------------------------------
 
-    // 読みは自明ではありません（「水面」は ミナモ ではなく スイメン、算用数字も文脈で
-    // 変わります）。台本ぶんの合成時間を使ってから気付くと、その時間がそのまま無駄に
-    // なります。返すのはサーバーで、合成の直前と同じ変換を通すため、ここに出るものが
-    // 実際に読まれるものです。
+    // Readings are not obvious (「水面」 reads スイメン, not ミナモ, and Arabic numerals change with
+    // context). Noticing after spending the script's synthesis time wastes all of that
+    // time. The server returns the readings through the same conversion as just before synthesis, so what
+    // appears here is what will actually be read.
     //
-    // 表の中身をそのまま送ります。保存済みの台本ではありません。直した行の読みを
-    // 確かめたいのに、保存しないと確かめられないのでは、直す前に戻ってしまいます。
+    // It sends the table's contents as they are, not the stored script. Having to save before
+    // checking the reading of a line you just fixed would defeat the purpose.
 
-    // show は、返ってきた読みを各行の下へ差し込みます。
+    // show inserts the returned readings below each row.
     const show = (fields, lines) => {
         fields.forEach((field, index) => {
             const target = field.parentNode.querySelector('.js-reading');
@@ -164,15 +164,15 @@
         });
     };
 
-    // clearReadings は差し込んだ読みを消します。送り直すたびに前回の結果が残らないように。
+    // clearReadings removes the inserted readings, so the previous result does not linger on each resend.
     const clearReadings = () => {
         for (const node of document.querySelectorAll('.js-reading')) {
             node.textContent = '';
         }
     };
 
-    // failureMessage は、応答の {"error": "..."} を取り出します。読めない応答でも
-    // 画面には何か出します（黙って何も起きないのがいちばん困ります）。
+    // failureMessage extracts {"error": "..."} from the response. Even for an unreadable response
+    // something is shown (nothing happening silently is the worst).
     const failureMessage = async (response) => {
         try {
             const body = await response.json();
@@ -187,7 +187,7 @@
         if (fields.length === 0) {
             return;
         }
-        // 超えた分を送ってから 400 で返されるより、押した時点で理由を出すほうが分かります。
+        // Showing the reason when the button is pressed is clearer than sending the excess and getting a 400 back.
         const limit = maxLines();
         if (fields.length > limit) {
             status.textContent = `行が多すぎます（${fields.length} 行、上限 ${limit} 行）`;
@@ -206,7 +206,7 @@
                     'Accept': 'application/json',
                     'X-CSRF-Token': window.App.csrfToken()
                 },
-                // 空の行も落としません。応答は要求と同じ並びで返るので、番号がずれます。
+                // Empty rows are not dropped either. The response comes back in the request's order, so the numbering would shift.
                 body: JSON.stringify({lines: fields.map((field) => ({text: field.value}))})
             });
             if (!response.ok) {
@@ -222,7 +222,7 @@
         }
     };
 
-    // --- 組み立て -----------------------------------------------------------
+    // --- Wiring ----------------------------------------------------------------
 
     document.addEventListener('DOMContentLoaded', () => {
         const body = document.querySelector('#script-form tbody');
@@ -230,8 +230,8 @@
             return;
         }
 
-        // 行は増えるので、行ごとではなく表に 1 つだけ張ります。写した行にもそのまま
-        // 効くため、複製のたびにイベントを張り直す必要がありません。
+        // Rows multiply, so one listener goes on the table rather than on each row. It also applies to
+        // copied rows, so there is no need to re-bind events on every copy.
         body.addEventListener('change', (event) => {
             const row = event.target.closest('tr');
             if (row && event.target.classList.contains('js-speaker')) {
@@ -256,7 +256,7 @@
             }
         });
 
-        // 初回。保存済みの値 1 つだけが入っている状態から、話者ぶんへ広げます。
+        // First render. From the state holding only the stored value, expand to the speaker's set.
         rowsOf(body).forEach(fillRow);
         refresh(body);
 

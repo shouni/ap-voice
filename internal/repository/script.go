@@ -1,5 +1,5 @@
-// Package repository は、GCS 上の成果物の読み出しと、Firestore 上のジョブ状態の
-// 読み書きを担います。履歴の一覧は状態だけで組み立て、成果物には触れません。
+// Package repository reads artifacts on GCS and reads and writes job state on Firestore.
+// The history listing is built from state alone, without touching artifacts.
 package repository
 
 import (
@@ -21,31 +21,31 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// ErrJobNotFound は、成果物としても記録としても存在しないジョブを指したことを表します。
+// ErrJobNotFound means the job pointed at exists neither as artifacts nor as a record.
 //
-// 「成果物が無い」ではありません。台本を書く前に失敗したジョブは成果物を 1 つも
-// 持ちませんが、記録は残っており、消せなければ履歴に残り続けます。
+// It is not "has no artifacts". A job that failed before writing a script has no artifacts at all,
+// but its record remains, and unless it can be deleted it stays in the history.
 var ErrJobNotFound = errors.New("repository: job not found")
 
-// Repository は、ジョブの成果物を読み出します。
+// Repository reads job artifacts.
 //
-// 書き込みは PublishStep が担い、ここは読むだけです。成果物がジョブ ID ごとの
-// プレフィックスにまとまっているため、一覧も削除も中身を知らずに行えます。
+// PublishStep does the writing; this only reads. Artifacts are grouped under a prefix per
+// job ID, so listing and deleting work without knowing the contents.
 type Repository struct {
-	// store は gs://{bucket} にスコープ済みのストアです。以降のパスはすべて
-	// そこからの相対名なので、呼び出しごとにバケットを連れ回す必要がありません。
+	// store is scoped to gs://{bucket}. Every path below is relative to it,
+	// so the bucket need not be carried around on every call.
 	store  remoteio.Store
 	layout domain.StorageLayout
-	// status はジョブの進行状況です。成果物とは別の場所（Firestore）にあるので、
-	// プレフィックスの一括削除では片付きません。Delete が明示的に消します。
+	// status is the job's progress. It lives somewhere other than the artifacts (Firestore), so
+	// a bulk delete of the prefix does not clean it up. Delete removes it explicitly.
 	//
-	// 具象ではなくインターフェースで持つのは、一覧の検証に Firestore を要求しない
-	// ためです（実物が要る検査はエミュレータの担当）。
+	// It is held as an interface rather than the concrete type so that verifying the listing
+	// does not require Firestore (checks that need the real thing belong to the emulator).
 	status statusStore
 }
 
-// statusStore は Repository がジョブ状態に対して行う操作です。
-// *jobstatus.Store[domain.JobStatus] がそのまま満たします。
+// statusStore is what Repository does to job state.
+// *jobstatus.Store[domain.JobStatus] satisfies it as is.
 type statusStore interface {
 	Get(ctx context.Context, jobID string) (domain.JobStatus, error)
 	Save(ctx context.Context, jobID string, status domain.JobStatus) error
@@ -53,82 +53,82 @@ type statusStore interface {
 	List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]domain.JobStatus, jobstatus.PageMeta, error)
 }
 
-// Get は、ジョブの状態を読みます。履歴の詳細画面が使います。
+// Get reads the job's state. The history detail page uses it.
 func (r *Repository) Get(ctx context.Context, jobID string) (domain.JobStatus, error) {
 	return r.status.Get(ctx, jobID)
 }
 
-// statusCollection はジョブ状態を置く Firestore のコレクションです。
+// statusCollection is the Firestore collection that holds job states.
 //
-// 成果物のバケットと同じ語彙にしてあります。コレクションはサービスごとに 1 本で、
-// 共有 1 本に判別フィールドを持たせる形は採りません（絞り忘れが落ちずに他サービスの
-// ジョブを履歴へ混ぜるためです）。設定にせず定数なのは、これがサービスの身元であって
-// デプロイごとに変わる値ではないからです。
+// It uses the same vocabulary as the artifact bucket. There is one collection per service,
+// not one shared collection with a discriminator field (a forgotten filter would not fail and would
+// mix other services' jobs into the history). It is a constant rather than a setting because it is
+// the service's identity, not a value that changes per deployment.
 const statusCollection = "ap-voice"
 
-// NewJobStatusStore は、ジョブ状態を置く Firestore のストアを返します。
+// NewJobStatusStore returns the Firestore store that holds job states.
 //
-// builder はこれを 1 つだけ作り、Recorder と NewRepository の両方へ渡します。
-// Recorder には、この *jobstatus.Store を包まずに渡してください。Store が持つ
-// Modify（再実行ガードを 1 つのトランザクションで行う）は、Recorder が型で
-// 見つけます。包んだ型を渡すと Modify が見えなくなり、コンパイルもテストも
-// 通ったまま、Get と Save を別々に呼ぶ割り込みうる経路へ戻ります。
+// The builder makes exactly one and hands it to both the Recorder and NewRepository.
+// Pass this *jobstatus.Store to the Recorder unwrapped. The Recorder finds the Store's
+// Modify (doing the re-run guard in one transaction) by type. Passing a wrapping type
+// hides Modify, and with compilation and tests still passing, it falls back to the
+// interruptible path that calls Get and Save separately.
 //
-// client は nil でも構築できます。その場合ジョブ状態の読み書きだけが失敗します
-// （成果物だけを検証するテスト向けです）。
+// It can be built with a nil client. Then only job state reads and writes fail
+// (for tests that verify artifacts alone).
 func NewJobStatusStore(client *firestore.Client) *jobstatus.Store[domain.JobStatus] {
 	return jobstatus.NewStore[domain.JobStatus](client, statusCollection)
 }
 
-// Store が Modifier を満たさなくなったら（gcp-kit を下げた、型を包んだ）、ここで
-// コンパイルが止まります。満たさないまま動くと、再実行ガードは黙って非アトミックに戻ります。
+// If Store stops satisfying Modifier (gcp-kit downgraded, the type wrapped), compilation stops
+// here. Running without it, the re-run guard would silently become non-atomic again.
 var _ jobstatus.Modifier[domain.JobStatus] = (*jobstatus.Store[domain.JobStatus])(nil)
 
-// NewRepository は Repository を構築します。status は NewJobStatusStore の戻り値です。
+// NewRepository builds a Repository. status is the return value of NewJobStatusStore.
 func NewRepository(store remoteio.Store, bucket string, status *jobstatus.Store[domain.JobStatus]) (*Repository, error) {
 	if store == nil {
-		return nil, fmt.Errorf("ストレージが指定されていません")
+		return nil, fmt.Errorf("no storage was given")
 	}
 	if bucket == "" {
-		return nil, fmt.Errorf("バケットが指定されていません")
+		return nil, fmt.Errorf("no bucket was given")
 	}
 	if status == nil {
-		return nil, fmt.Errorf("ジョブ状態のストアが指定されていません")
+		return nil, fmt.Errorf("no job state store was given")
 	}
 	layout := domain.NewStorageLayout()
 	scoped := store.Sub(remoteio.BuildURI(remoteio.SchemeGCS, bucket, ""))
 	return &Repository{store: scoped, layout: layout, status: status}, nil
 }
 
-// SaveScript は、編集された台本を保存済みのものへ書き戻します。
+// SaveScript writes an edited script back over the stored one.
 //
-// 書き戻す先は Load が読む場所と同じです（どちらも StorageLayout が決めます）。
-// ずれると、編集したのに古い台本で合成される、という気付きにくい壊れ方をします。
+// It writes back to the same place Load reads (StorageLayout decides both).
+// If they drifted, it would break in a hard-to-notice way: edited, yet synthesised from the old script.
 func (r *Repository) SaveScript(ctx context.Context, jobID string, script domain.Script) error {
 	if err := jobid.Validate(jobID); err != nil {
-		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+		return fmt.Errorf("invalid job ID (%s): %w", jobID, err)
 	}
 
 	body, err := json.MarshalIndent(script, "", "  ")
 	if err != nil {
-		return fmt.Errorf("台本のJSONエンコードに失敗しました: %w", err)
+		return fmt.Errorf("failed to encode the script as JSON: %w", err)
 	}
 
 	uri := r.layout.ScriptPath(jobID)
 	if err := r.store.Write(ctx, uri, bytes.NewReader(body),
 		remoteio.WithContentType("application/json; charset=utf-8")); err != nil {
-		return fmt.Errorf("台本の保存に失敗しました (%s): %w", uri, err)
+		return fmt.Errorf("failed to save the script (%s): %w", uri, err)
 	}
-	// 一覧の題名は状態から取るので、ここで追随させないと古い題名が残ります。
-	// 台本を読んで題名を出していた頃は保存した瞬間に反映されていました。
-	// 失敗しても保存そのものは成功として返します（題名の鮮度より台本が大事です）。
+	// The listing takes titles from the state, so unless it follows here the old title remains.
+	// Back when titles came from reading the script, a save was reflected immediately.
+	// Even if this fails, the save itself is reported as a success (the script matters more than the title's freshness).
 	r.refreshTitle(ctx, jobID, script.Title)
 
-	slog.InfoContext(ctx, "編集された台本を保存しました", "job_id", jobID, "lines", len(script.Lines))
+	slog.InfoContext(ctx, "saved the edited script", "job_id", jobID, "lines", len(script.Lines))
 	return nil
 }
 
-// refreshTitle は、保存済みの状態にある題名だけを書き換えます。
+// refreshTitle rewrites only the title on the stored state.
 func (r *Repository) refreshTitle(ctx context.Context, jobID, title string) {
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -137,9 +137,9 @@ func (r *Repository) refreshTitle(ctx context.Context, jobID, title string) {
 
 	status, err := r.status.Get(ctx, jobID)
 	if err != nil {
-		// 未記録なら追随させるものがありません。記録前の台本編集で起こります。
+		// With no record there is nothing to follow. It happens when a script is edited before any record exists.
 		if !errors.Is(err, jobstatus.ErrNotFound) {
-			slog.WarnContext(ctx, "題名の追随のためのジョブ状態を読めませんでした",
+			slog.WarnContext(ctx, "could not read the job state to update the title",
 				"job_id", jobID, "error", err)
 		}
 		return
@@ -150,21 +150,21 @@ func (r *Repository) refreshTitle(ctx context.Context, jobID, title string) {
 
 	status.Title = title
 	if err := r.status.Save(ctx, jobID, status); err != nil {
-		slog.WarnContext(ctx, "ジョブ状態の題名を更新できませんでした",
+		slog.WarnContext(ctx, "could not update the title on the job state",
 			"job_id", jobID, "error", err)
 	}
 }
 
-// Load は、保存済みの台本を読み出します。domain.ScriptStore を満たします。
+// Load reads the stored script. It satisfies domain.ScriptStore.
 //
-// まだ書かれていない場合は ErrScriptNotFound を返します。台本が無いのは異常では
-// なく、generate が終わる前と generate に失敗したジョブの通常の姿です。呼び出し側が
-// 「まだ無い」と「読めなかった」を区別できないと、どちらも同じ失敗として扱うしか
-// なくなり、詳細画面が状態を見せられません。
+// When not written yet it returns ErrScriptNotFound. A missing script is not an anomaly but
+// the normal shape of a job before generate finishes or after it fails. If the caller could not
+// tell "not yet" from "could not read", it would have to treat both as the same failure, and
+// the detail page could not show the state.
 func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, error) {
-	// ジョブ ID はフォームからも来るため、パスへ埋める前に必ず検証します。
+	// Job IDs also come from forms, so they are always validated before going into a path.
 	if err := jobid.Validate(jobID); err != nil {
-		return domain.Script{}, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+		return domain.Script{}, fmt.Errorf("invalid job ID (%s): %w", jobID, err)
 	}
 
 	path := r.layout.ScriptPath(jobID)
@@ -174,77 +174,77 @@ func (r *Repository) Load(ctx context.Context, jobID string) (domain.Script, err
 	}
 	defer func() {
 		if closeErr := stream.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "台本ストリームのクローズに失敗しました", "error", closeErr)
+			slog.WarnContext(ctx, "failed to close the script stream", "error", closeErr)
 		}
 	}()
 
 	body, err := io.ReadAll(stream)
 	if err != nil {
-		return domain.Script{}, fmt.Errorf("台本の読み込みに失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("failed to read the script: %w", err)
 	}
 
 	var script domain.Script
 	if err := json.Unmarshal(body, &script); err != nil {
-		return domain.Script{}, fmt.Errorf("台本のJSONデコードに失敗しました: %w", err)
+		return domain.Script{}, fmt.Errorf("failed to decode the script JSON: %w", err)
 	}
 	return script, nil
 }
 
-// openFailure は、台本を開けなかった理由を「まだ無い」と「読めなかった」に分けます。
+// openFailure splits why the script could not be opened into "not yet" and "could not read".
 //
-// 不在の綴りは保存先ごとに違う（GCS と local で別のエラー値）ので、返ってきた
-// エラーの中身は見ません。在るかどうかをもう一度だけ問い合わせて決めます。
-// 余分な 1 往復は失敗した経路にしか乗らず、成功する読み出しは今までどおりです。
+// How absence is spelled differs per store (different error values for GCS and local), so the
+// returned error's contents are not inspected. It asks once more whether the object exists.
+// The extra round trip rides only on the failing path; successful reads are unchanged.
 func (r *Repository) openFailure(ctx context.Context, jobID, path string, err error) error {
 	if exists, existsErr := r.store.Exists(ctx, path); existsErr == nil && !exists {
-		return fmt.Errorf("台本がまだありません (%s): %w", jobID, domain.ErrScriptNotFound)
+		return fmt.Errorf("no script yet (%s): %w", jobID, domain.ErrScriptNotFound)
 	}
-	return fmt.Errorf("台本の読み込みに失敗しました: %w", err)
+	return fmt.Errorf("failed to read the script: %w", err)
 }
 
-// HasAudio は、そのジョブの音声が既にあるかを返します。
+// HasAudio reports whether the job's audio already exists.
 //
-// 一覧を引いて探しません。以前は List の結果から該当ジョブを線形探索していましたが、
-// これには 2 つの問題がありました。1 つは、真偽値 1 つを知るために全ジョブの台本を
-// 読んでいたこと。もう 1 つは、上限（50 件）から外れた古いジョブが必ず false になる
-// ことで、音声があるのに詳細画面から再生欄が消えていました。
+// It does not search a listing. It used to search the List result linearly for the job, which
+// had two problems. One, it read every job's script to learn a single boolean.
+// Two, old jobs beyond the cap (50) were always false, so the playback section vanished from
+// the detail page although the audio existed.
 func (r *Repository) HasAudio(ctx context.Context, jobID string) (bool, error) {
 	if err := jobid.Validate(jobID); err != nil {
-		return false, fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+		return false, fmt.Errorf("invalid job ID (%s): %w", jobID, err)
 	}
 	return r.store.Exists(ctx, r.layout.AudioPath(jobID))
 }
 
-// Job は履歴一覧の 1 件です。
+// Job is one entry of the history listing.
 type Job struct {
 	ID string
-	// Title は台本の題名です。読めなければジョブ ID を入れます。
-	// 台本が壊れていても音声だけは残っていることがあり、一覧から消えると
-	// 消す手段まで失われるためです。
+	// Title is the script's title. If it cannot be read, the job ID goes here.
+	// The audio may survive even when the script is broken, and vanishing from the listing
+	// would lose the way to delete it.
 	Title string
-	// CreatedAt はジョブ ID から復元した作成時刻です。
+	// CreatedAt is the creation time recovered from the job ID.
 	CreatedAt time.Time
-	// HasAudio は音声が既に作られているかです。台本だけの段階と区別します。
+	// HasAudio reports whether the audio has been made. It distinguishes the script-only stage.
 	HasAudio bool
-	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
-	// 見分けられません。記録には最初から入っていた値で、一覧が読まずに捨てていました。
+	// State is the progress state. Going by artifacts alone cannot tell running from failed.
+	// The record had the value all along; the listing used to read it and throw it away.
 	State jobstatus.State
-	// Error は失敗理由です。State が failed のときだけ入ります。
+	// Error is the failure reason. Set only when State is failed.
 	Error string
 }
 
-// List は、指定ページのジョブを新しい順に返します。絞り込みは呼び出し側が決めます
-// （jobstatus.WithState など）。ここで絞り込みの語彙を作り直すと、ライブラリが
-// 既に持っているものが 2 つになります。
+// List returns the given page of jobs, newest first. The caller decides the filter
+// (jobstatus.WithState and so on). Re-creating the filter vocabulary here would duplicate
+// what the library already has.
 //
-// 成果物を一切読みません。以前はバケット配下を全走査してジョブ ID と音声の
-// 有無を集め、ページ分の台本を並行に読んで題名を得ていました。ジョブが増えるほど
-// 走査が伸び、件数に上限がありません。いまは 1 ページ分をクエリで取り、必要な
-// 3 つの値（題名・音声の有無・作成時刻）をすべて状態から導きます。
+// It reads no artifacts at all. It used to scan the whole bucket to collect job IDs and audio
+// presence, and read a page's scripts in parallel to get titles. The scan grew with the number
+// of jobs, without bound. Now one page is fetched by query, and the three values needed
+// (title, audio presence, creation time) all come from the state.
 func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobstatus.ListOption) ([]Job, jobstatus.PageMeta, error) {
 	statuses, meta, err := r.status.List(ctx, page, perPage, opts...)
 	if err != nil {
-		return nil, jobstatus.PageMeta{}, fmt.Errorf("履歴の一覧取得に失敗しました: %w", err)
+		return nil, jobstatus.PageMeta{}, fmt.Errorf("failed to list the history: %w", err)
 	}
 
 	jobs := make([]Job, 0, len(statuses))
@@ -252,14 +252,14 @@ func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobsta
 		job := Job{
 			ID:    status.JobID,
 			Title: status.Title,
-			// 音声を作ったのは synthesize だけです。generate は台本で終わるので
-			// 在り処が入りません（成果物を数えずに区別できます）。
+			// Only synthesize made audio. generate ends at the script, so the location
+			// is not set (it can be told apart without counting artifacts).
 			HasAudio: status.AudioURI != "",
 			State:    status.State,
 			Error:    status.Error,
 		}
-		// 題名が無くても一覧から落としません。生成が題名の確定前に失敗した
-		// ジョブこそ消したいもので、一覧から消えると消す手段まで失われます。
+		// It stays in the listing even without a title. Jobs whose generation failed before the title
+		// was settled are exactly the ones to delete, and vanishing from the listing would lose the way to.
 		if job.Title == "" {
 			job.Title = status.JobID
 		}
@@ -269,63 +269,63 @@ func (r *Repository) List(ctx context.Context, page, perPage int, opts ...jobsta
 	return jobs, meta, nil
 }
 
-// Delete は、1 つのジョブの成果物をまとめて消します。
+// Delete removes one job's artifacts together.
 //
-// プレフィックス配下を一覧して消します。何が置かれたかを呼び出し側が知らなくても
-// 消せるのが、ジョブ ID ごとにまとめている理由です。
+// It lists and deletes everything under the prefix. Being deletable without the caller knowing
+// what was placed is the reason artifacts are grouped per job ID.
 func (r *Repository) Delete(ctx context.Context, jobID string) error {
 	if err := jobid.Validate(jobID); err != nil {
-		return fmt.Errorf("不正なジョブID (%s): %w", jobID, err)
+		return fmt.Errorf("invalid job ID (%s): %w", jobID, err)
 	}
 
 	deleted, err := remoteio.DeletePrefix(ctx, r.store, r.layout.VoiceJobPrefix(jobID))
 	if err != nil {
-		return fmt.Errorf("削除に失敗しました (%s): %w", jobID, err)
+		return fmt.Errorf("delete failed (%s): %w", jobID, err)
 	}
 
-	// 成果物が 1 つも無いジョブは、台本を書く前に失敗したジョブです。以前はここで
-	// 「見つかりません」と返していましたが、消したいのはまさにそのジョブでした。
-	// 記録だけが履歴に残り、詳細画面は台本が無くて開けず、削除もこの分岐で
-	// 断られるため、どこからも消せないまま並び続けていました。
+	// A job without a single artifact is one that failed before writing a script. This used to
+	// answer "not found", but that was exactly the job to delete.
+	// Only its record stayed in the history, the detail page could not open without a script, and
+	// deletion was refused by this branch, so it sat there undeletable from anywhere.
 	if deleted == 0 {
 		return r.deleteRecord(ctx, jobID)
 	}
-	// 状態は成果物と別の場所にあるので、ここで消さないと孤児が残ります。
-	// 以前は状態ファイルがジョブディレクトリ配下にあり、上の一括削除で一緒に
-	// 片付いていました。Firestore へ移したことで、その連動が失われています。
+	// The state lives apart from the artifacts, so unless it is deleted here an orphan remains.
+	// The state file used to sit under the job directory and was cleaned up by the bulk delete
+	// above. Moving it to Firestore lost that link.
 	//
-	// 失敗しても削除そのものは成功として返します。成果物は既に消えており、
-	// 呼び出し側の依頼は果たされているためです。残るのは観測用の記録だけなので、
-	// ここでエラーを返すと「消えたのに失敗した」と見える分だけ害が大きくなります。
+	// Even if this fails, the deletion itself is reported as a success. The artifacts are already gone
+	// and the caller's request has been fulfilled. What remains is only an observational record, so
+	// returning an error here would do more harm by looking like "it was deleted yet failed".
 	if err := r.status.Delete(ctx, jobID); err != nil {
-		slog.WarnContext(ctx, "ジョブ状態の削除に失敗しました。孤児が残ります",
+		slog.WarnContext(ctx, "failed to delete the job state; an orphan remains",
 			"job_id", jobID, "error", err)
 	}
 
-	slog.InfoContext(ctx, "ジョブの成果物を削除しました", "job_id", jobID, "objects", deleted)
+	slog.InfoContext(ctx, "deleted the job artifacts", "job_id", jobID, "objects", deleted)
 	return nil
 }
 
-// deleteRecord は、成果物が残っていないジョブの記録だけを消します。
+// deleteRecord deletes only the record of a job with no artifacts left.
 //
-// 記録も無ければ ErrJobNotFound です。「知らないジョブを指した」のと
-// 「作りかけで失敗したジョブを片付けた」のとでは、呼び出し側の返し方が
-// 変わります（前者は 404、後者は成功）。
+// With no record either, it is ErrJobNotFound. "Pointed at an unknown job" and
+// "cleaned up a job that failed halfway" are answered differently by the caller
+// (404 for the former, success for the latter).
 //
-// 成果物がある経路と違い、記録の削除に失敗したらエラーを返します。あちらは
-// 依頼された成果物が既に消えているので警告で足りますが、こちらは記録が
-// 消せなければ何も起きていないためです。
+// Unlike the path with artifacts, a failure to delete the record returns an error. There,
+// the requested artifacts are already gone so a warning is enough; here, if the record cannot
+// be deleted nothing has happened.
 func (r *Repository) deleteRecord(ctx context.Context, jobID string) error {
 	if _, err := r.status.Get(ctx, jobID); err != nil {
 		if errors.Is(err, jobstatus.ErrNotFound) {
-			return fmt.Errorf("ジョブが見つかりません (%s): %w", jobID, ErrJobNotFound)
+			return fmt.Errorf("job not found (%s): %w", jobID, ErrJobNotFound)
 		}
-		return fmt.Errorf("ジョブ状態の確認に失敗しました (%s): %w", jobID, err)
+		return fmt.Errorf("failed to check the job state (%s): %w", jobID, err)
 	}
 	if err := r.status.Delete(ctx, jobID); err != nil {
-		return fmt.Errorf("ジョブ状態の削除に失敗しました (%s): %w", jobID, err)
+		return fmt.Errorf("failed to delete the job state (%s): %w", jobID, err)
 	}
 
-	slog.InfoContext(ctx, "成果物の無いジョブの記録を削除しました", "job_id", jobID)
+	slog.InfoContext(ctx, "deleted the record of a job with no artifacts", "job_id", jobID)
 	return nil
 }

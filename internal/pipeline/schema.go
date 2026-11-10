@@ -6,21 +6,21 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 )
 
-// scriptTextMaxLength は、Gemini に対する目安の文字数上限です。
-// 実際の安全策は go-voicevox 側の 200 文字での強制分割です（内部実装なので名前は当てにしません）。
+// scriptTextMaxLength is the rough character limit given to Gemini.
+// The actual safeguard is go-voicevox's forced split at 200 characters (an internal detail, so its name is not relied on).
 const scriptTextMaxLength = 200
 
-// scriptTitleMaxLength は、履歴の一覧に収まる長さの目安です。
+// scriptTitleMaxLength is a rough length that fits in the history listing.
 const scriptTitleMaxLength = 60
 
-// scriptResponseSchema は、ナレーションスクリプトを ScriptLine の配列として
-// 受け取るための gemini.Schema を構築します。
+// scriptResponseSchema builds the gemini.Schema for receiving the narration script
+// as an array of ScriptLine.
 //
-// 許可語彙は assets/speakers.json（= エンジンの /speakers 応答）が単一の情報源です。
-// speaker と style は独立した enum なので、この形では「話者ごとに使えるスタイル」を
-// 表現できません。実在しない組み合わせを選ばれても合成側がその話者の既定へ落とすため、
-// 合成は通りますが指示は無視されます。話者ごと・モードごとの制約はプロンプト文章側が担います
-// （現在はどのモードも "ノーマル" 固定なので、この enum は実質そこまで絞られています）。
+// The single source of the allowed vocabulary is assets/speakers.json (= the engine's /speakers response).
+// speaker and style are independent enums, so this shape cannot express "the styles each speaker
+// can use". If a non-existent pair is chosen, synthesis falls back to that speaker's default, so
+// synthesis succeeds but the instruction is ignored. Per-speaker and per-mode constraints are carried by the prompt text
+// (every mode currently pins "ノーマル", so in practice this enum is narrowed that far).
 func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
 	maxLength := int64(scriptTextMaxLength)
 	titleMaxLength := int64(scriptTitleMaxLength)
@@ -50,8 +50,8 @@ func scriptResponseSchema(speakers *speaker.Registry) *gemini.Schema {
 		PropertyOrdering: []string{"speaker", "style", "text"},
 	}
 
-	// 配列ではなくオブジェクトを返させます。タイトルは履歴の一覧に出すもので、
-	// 台本と同じ生成で作らせれば追加の API 呼び出しが要りません。
+	// It returns an object rather than an array. The title is shown in the history listing, and
+	// producing it in the same generation as the script needs no extra API call.
 	return &gemini.Schema{
 		Type: gemini.TypeObject,
 		Properties: map[string]*gemini.Schema{

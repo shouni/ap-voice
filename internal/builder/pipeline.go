@@ -12,15 +12,15 @@ import (
 	"github.com/shouni/ap-voice/internal/pipeline"
 )
 
-// buildPipeline は、各段を組み立てて Pipeline を返します。
+// buildPipeline assembles each step and returns the Pipeline.
 func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Runner, error) {
 	scriptStep, err := buildScriptStep(ctx, appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("台本生成の段の初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize the script step: %w", err)
 	}
 	publishStep, err := buildPublishStep(ctx, appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("保存の段の初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize the publish step: %w", err)
 	}
 
 	p := pipeline.NewRunner(scriptStep, publishStep, appCtx.Notifier, appCtx.Repository, appCtx.JobStatus, appCtx.Config.Pipeline.Timeout)
@@ -28,7 +28,7 @@ func buildPipeline(ctx context.Context, appCtx *app.Container) (*pipeline.Runner
 	return p, nil
 }
 
-// buildScriptStep は、台本を生成する段を返します。
+// buildScriptStep returns the step that generates the script.
 func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.ScriptStep, error) {
 	aiClient, err := adapters.NewAIAdapter(ctx, appCtx.Config.GCP)
 	if err != nil {
@@ -50,7 +50,7 @@ func buildScriptStep(ctx context.Context, appCtx *app.Container) (*pipeline.Scri
 	), nil
 }
 
-// buildPublishStep は、成果物を保存する段を返します。
+// buildPublishStep returns the step that stores the artifacts.
 func buildPublishStep(ctx context.Context, appCtx *app.Container) (*pipeline.PublishStep, error) {
 	voiceAdapter, err := adapters.NewVoiceAdapter(ctx, appCtx.HTTPClient, appCtx.Config.Voicevox, appCtx.Speakers, appCtx.Store)
 	if err != nil {

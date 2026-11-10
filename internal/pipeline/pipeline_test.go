@@ -18,7 +18,7 @@ var _ Step = (*MockScriptStep)(nil)
 var _ Step = (*MockPublishStep)(nil)
 var _ domain.Notifier = (*MockNotifier)(nil)
 
-// MockScriptStep は台本生成の工程を差し替えます。RunFunc が返した台本をそのまま載せます。
+// MockScriptStep replaces the script generation step. It puts the script RunFunc returns on as is.
 type MockScriptStep struct {
 	RunFunc func(ctx context.Context, req domain.Request) (domain.Script, error)
 }
@@ -41,8 +41,8 @@ func (m *MockScriptStep) Run(ctx context.Context, req domain.Request) (domain.Sc
 	return m.RunFunc(ctx, req)
 }
 
-// MockPublishStep は保存・合成の工程を差し替えます。本物と同じく generate は
-// PublishScriptFunc、それ以外は RunFunc へ振り分けます。
+// MockPublishStep replaces the save and synthesis step. Like the real one, it routes generate to
+// PublishScriptFunc and everything else to RunFunc.
 type MockPublishStep struct {
 	RunFunc           func(ctx context.Context, outputURI string, script domain.Script) (string, error)
 	PublishScriptFunc func(ctx context.Context, outputURI string, script domain.Script) (string, error)
@@ -74,7 +74,7 @@ func (m *MockPublishStep) PublishScript(ctx context.Context, outputURI string, s
 	return m.PublishScriptFunc(ctx, outputURI, script)
 }
 
-// MockScriptStore は保存済み台本の読み出しを差し替えます。
+// MockScriptStore replaces reading stored scripts.
 type MockScriptStore struct {
 	LoadFunc func(ctx context.Context, jobID string) (domain.Script, error)
 }
@@ -127,7 +127,7 @@ func TestPipelineExecute(t *testing.T) {
 		{Speaker: "ずんだもん", Style: "ノーマル", Text: "generated script"},
 	}
 
-	t.Run("正常系: 生成と公開と成功通知が呼ばれること", func(t *testing.T) {
+	t.Run("ok: generation, publishing and the success notification are called", func(t *testing.T) {
 		t.Parallel()
 
 		generateCalled := false
@@ -145,7 +145,7 @@ func TestPipelineExecute(t *testing.T) {
 				},
 			},
 			&MockPublishStep{
-				// generate は台本だけを保存します。Run（音声合成）は呼ばれてはいけません。
+				// generate stores only the script. Run (speech synthesis) must not be called.
 				PublishScriptFunc: func(_ context.Context, outputURI string, script domain.Script) (string, error) {
 					publishCalled = true
 					if outputURI != req.OutputURI {
@@ -157,7 +157,7 @@ func TestPipelineExecute(t *testing.T) {
 					return "https://example.com/script.json", nil
 				},
 				RunFunc: func(_ context.Context, _ string, _ domain.Script) (string, error) {
-					t.Fatal("generate なのに音声合成が呼ばれた")
+					t.Fatal("speech synthesis was called for generate")
 					return "", nil
 				},
 			},
@@ -186,7 +186,7 @@ func TestPipelineExecute(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 生成失敗時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
+	t.Run("error: a generation failure sends a failure notification and returns an error", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("generate failed")
@@ -225,7 +225,7 @@ func TestPipelineExecute(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 公開失敗時は失敗通知を送ってエラーを返すこと", func(t *testing.T) {
+	t.Run("error: a publish failure sends a failure notification and returns an error", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("publish failed")
@@ -266,12 +266,12 @@ func TestPipelineExecute(t *testing.T) {
 	})
 }
 
-// synthesize は台本を生成しません。保存済みの台本がそのまま公開処理へ渡り、
-// Gemini を呼ぶ経路には一切入らないことを固定します。
+// synthesize does not generate a script. This pins that the stored script goes to publishing as is
+// and that the path calling Gemini is never entered.
 //
-// 台本の在り処は JobID だけです。かつてはペイロードの台本を優先する分岐があり、
-// このテストもそちらを通っていましたが、投入側はどれも台本を載せません
-// （長い台本が Cloud Tasks の 1MB 上限に当たるため、先に保存して ID を渡します）。
+// The script is located by JobID alone. There used to be a branch that preferred a script in the
+// payload, and this test went through it, but no enqueuer puts a script there
+// (a long script hits Cloud Tasks' 1MB limit, so it is saved first and the ID is passed).
 func TestPipelineExecute_Synthesize(t *testing.T) {
 	t.Parallel()
 
@@ -319,15 +319,15 @@ func TestPipelineExecute_Synthesize(t *testing.T) {
 		t.Fatalf("Execute() failed: %v", err)
 	}
 	if generateCalled {
-		t.Fatal("synthesize なのに台本生成が呼ばれた")
+		t.Fatal("script generation was called for synthesize")
 	}
 	if diff := cmp.Diff(script, published); diff != "" {
-		t.Fatalf("渡した台本が公開処理へ届いていない (-want +got):\n%s", diff)
+		t.Fatalf("the given script did not reach publishing (-want +got):\n%s", diff)
 	}
 }
 
-// 揃っていない入力は何度実行しても同じように失敗するため、
-// 外部を1つも叩かずに弾き、失敗通知だけを出します。
+// Incomplete input fails the same way however many times it runs, so
+// it is rejected without any external call, and only a failure notification goes out.
 func TestPipelineExecute_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
@@ -336,24 +336,24 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 		req  domain.Request
 	}{
 		{
-			name: "command 未指定",
+			name: "command not given",
 			req:  domain.Request{OutputURI: "gs://bucket/o.wav", InputURI: "https://example.com"},
 		},
 		{
-			name: "未知の command",
+			name: "unknown command",
 			req:  domain.Request{Command: "compose", OutputURI: "gs://bucket/o.wav"},
 		},
 		{
-			name: "generate なのに入力ソースが無い",
+			name: "generate without an input source",
 			req:  domain.Request{Command: domain.CommandGenerate, OutputURI: "gs://bucket/o.wav"},
 		},
 		{
-			// 台本の在り処は JobID だけです。無ければ何を喋らせるのか決まりません。
-			name: "synthesize なのに台本を指していない",
+			// The script is located by JobID alone. Without it, there is nothing to speak.
+			name: "synthesize not pointing at a script",
 			req:  domain.Request{Command: domain.CommandSynthesize, OutputURI: "gs://bucket/o.wav"},
 		},
 		{
-			name: "出力先が無い",
+			name: "no output",
 			req:  domain.Request{Command: domain.CommandGenerate, InputURI: "https://example.com"},
 		},
 	} {
@@ -387,13 +387,13 @@ func TestPipelineExecute_InvalidRequest(t *testing.T) {
 			)
 
 			if err := p.Execute(context.Background(), tt.req); err == nil {
-				t.Fatal("不正なリクエストが素通りした")
+				t.Fatal("an invalid request got through")
 			}
 			if touched {
-				t.Fatal("検証前に外部処理が呼ばれた")
+				t.Fatal("external processing was called before validation")
 			}
 			if !failureNotified {
-				t.Fatal("失敗通知が呼ばれていない")
+				t.Fatal("no failure notification was sent")
 			}
 		})
 	}
@@ -405,7 +405,7 @@ func TestPipelineNotifications(t *testing.T) {
 	ctx := context.Background()
 	req := domain.Request{OutputURI: "gs://bucket/output.wav"}
 
-	t.Run("notifySuccess: notifierがnilでもパニックしないこと", func(t *testing.T) {
+	t.Run("notifySuccess: does not panic when notifier is nil", func(t *testing.T) {
 		t.Parallel()
 		p := &Runner{}
 		p.notifySuccess(ctx, req, "")
@@ -413,17 +413,17 @@ func TestPipelineNotifications(t *testing.T) {
 
 }
 
-// 上限を超えたら打ち切り、失敗通知はその外側で送ります。
+// Past the limit the run is cut off, and the failure notification is sent outside it.
 //
-// 通知に打ち切り済みの ctx を渡すと通知自体が送れず、「Cloud Tasks より先に諦めて
-// 失敗を知らせる」という三段の目的が達成できません。ここはその退行を見ています。
+// Passing the cut-off ctx to the notification would keep it from being sent, defeating the three tiers'
+// purpose of "giving up before Cloud Tasks and reporting the failure". This guards against that regression.
 func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	t.Parallel()
 
 	type failure struct {
-		// ctxErr は通知が呼ばれた時点の ctx の状態です。Finish の ctx は Lifecycle が
-		// 上限つきで切り出すため、Execute から戻ったあとには cancel 済みで、呼ばれた
-		// 時点で見ないと「切り離されていたか」を判定できません。
+		// ctxErr is the ctx's state when the notification is called. Lifecycle cuts Finish's ctx out
+		// with a limit, so after Execute returns it is already cancelled; only by checking at call
+		// time can we tell whether it was detached.
 		ctxErr error
 		err    error
 	}
@@ -432,7 +432,7 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(ctx context.Context, _ domain.Request) (domain.Script, error) {
-				// 上限を超えるまで待ちます。実際の合成が長引いた状態の代わりです。
+				// Wait until past the limit. It stands in for a synthesis that runs long.
 				<-ctx.Done()
 				return domain.Script{}, ctx.Err()
 			},
@@ -461,24 +461,24 @@ func TestPipelineExecute_TimesOutAndStillNotifies(t *testing.T) {
 	select {
 	case got := <-notified:
 		if got.ctxErr != nil {
-			t.Fatalf("通知に渡った ctx が既にキャンセルされている: %v", got.ctxErr)
+			t.Fatalf("the ctx passed to the notification is already cancelled: %v", got.ctxErr)
 		}
-		// 通知側が打ち切りだと判別できること。ここが切れていると、
-		// SlackAdapter は時間切れを普通の失敗として出してしまいます。
-		// 途中の 1 箇所でも %w を %v に変えると落ちます。
+		// The notifier must be able to tell it was cut off. If this link breaks,
+		// SlackAdapter reports the timeout as an ordinary failure.
+		// Changing even one %w along the way to %v breaks it.
 		if !errors.Is(got.err, context.DeadlineExceeded) {
-			t.Errorf("通知に渡ったエラーから打ち切りを判別できません: %v", got.err)
+			t.Errorf("cannot tell a cutoff from the error passed to the notification: %v", got.err)
 		}
 	default:
-		t.Fatal("失敗通知が呼ばれていない")
+		t.Fatal("no failure notification was sent")
 	}
 }
 
-// memoryStatusStore は、最後に書かれた状態を覚えておくフェイクです。
+// memoryStatusStore is a fake that remembers the last state written.
 type memoryStatusStore struct {
 	saved domain.JobStatus
 	found bool
-	// getErr は読み取りの失敗（権限・障害）を再現します。
+	// getErr reproduces a read failure (permissions, outage).
 	getErr error
 }
 
@@ -487,9 +487,9 @@ func (s *memoryStatusStore) Get(context.Context, string) (domain.JobStatus, erro
 		return domain.JobStatus{}, s.getErr
 	}
 	if !s.found {
-		// 本物の Store は未記録を ErrNotFound で返します。ここを素のエラーにすると、
-		// 「未記録」と「読めない」を分けて扱う側（再実行ガード）の検証がすり抜けます。
-		return domain.JobStatus{}, fmt.Errorf("%w: 記録がありません", jobstatus.ErrNotFound)
+		// The real Store returns ErrNotFound for an unrecorded job. A bare error here would let checks
+		// on the side that treats "unrecorded" and "unreadable" separately (the re-run guard) slip through.
+		return domain.JobStatus{}, fmt.Errorf("%w: no record", jobstatus.ErrNotFound)
 	}
 	return s.saved, nil
 }
@@ -499,12 +499,12 @@ func (s *memoryStatusStore) Save(_ context.Context, _ string, status domain.JobS
 	return nil
 }
 
-// TestPipelineRecordsArtifactLocations は、完了した状態に成果物の在り処が
-// 載ることを検証します。
+// TestPipelineRecordsArtifactLocations verifies that the completed state carries the artifact
+// locations.
 //
-// 「できた」だけでは投入した側が成果物へ辿り着けません。音声は publish が
-// 作ったときだけ入り、generate は台本までなので入りません。ここを分けないと、
-// 台本しか無いジョブに音声の URI を書くことになります。
+// "Done" alone does not let the enqueuer reach the artifacts. The audio is set only when publish
+// made it; generate goes only as far as the script, so it is not set. Without the distinction,
+// a job with only a script would get an audio URI.
 func TestPipelineRecordsArtifactLocations(t *testing.T) {
 	t.Parallel()
 
@@ -514,12 +514,12 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 		wantAudioURI string
 	}{
 		{
-			name:         "generate は台本まで",
+			name:         "generate stops at the script",
 			command:      domain.CommandGenerate,
 			wantAudioURI: "",
 		},
 		{
-			name:         "まとめて作ると音声も入る",
+			name:         "making both sets the audio too",
 			command:      domain.CommandGenerateAndSynthesize,
 			wantAudioURI: "gs://bucket/voice/job-1/audio.wav",
 		},
@@ -562,7 +562,7 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 			if store.saved.AudioURI != tt.wantAudioURI {
 				t.Errorf("AudioURI = %q, want %q", store.saved.AudioURI, tt.wantAudioURI)
 			}
-			// 台本はどちらの経路でも保存されます。
+			// The script is stored on either path.
 			if store.saved.ScriptURI != "gs://bucket/voice/job-1/audio.json" {
 				t.Errorf("ScriptURI = %q", store.saved.ScriptURI)
 			}
@@ -573,11 +573,11 @@ func TestPipelineRecordsArtifactLocations(t *testing.T) {
 	}
 }
 
-// TestPipelineKeepsArtifactsOnFailure は、失敗しても前回の成果物の在り処が
-// 残ることを検証します。
+// TestPipelineKeepsArtifactsOnFailure verifies that the previous artifact locations remain after
+// a failure.
 //
-// ワーカーは毎回タスクから状態を組み立て直すため、引き継ぎが無いと
-// 合成の失敗で台本の在り処まで消え、詳細画面からやり直せなくなります。
+// The worker rebuilds the state from the task every time, so without carrying them over
+// a synthesis failure would erase even the script's location, and it could not be retried from the detail page.
 func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 	t.Parallel()
 
@@ -592,7 +592,7 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 	p := NewRunner(
 		&MockScriptStep{
 			RunFunc: func(context.Context, domain.Request) (domain.Script, error) {
-				return domain.Script{}, errors.New("生成に失敗しました")
+				return domain.Script{}, errors.New("generation failed")
 			},
 		},
 		&MockPublishStep{},
@@ -607,21 +607,21 @@ func TestPipelineKeepsArtifactsOnFailure(t *testing.T) {
 		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
 	})
 	if err == nil {
-		t.Fatal("失敗するはずが成功しています")
+		t.Fatal("succeeded although it should fail")
 	}
 
 	if store.saved.State != jobstatus.StateFailed {
 		t.Errorf("State = %q, want failed", store.saved.State)
 	}
 	if store.saved.ScriptURI == "" || store.saved.AudioURI == "" {
-		t.Errorf("失敗で成果物の在り処が消えています: %+v", store.saved)
+		t.Errorf("the failure erased the artifact locations: %+v", store.saved)
 	}
 }
 
-// 完了済みのジョブが再び届いても、合成をやり直さないこと。
+// A completed job that arrives again is not synthesised again.
 //
-// Cloud Tasks は at-least-once 配信なので、同じタスクが再び届くことがあります。
-// 合成は数分かかるため、素通りさせると同じ音声を作り直します。
+// Cloud Tasks delivers at least once, so the same task may arrive again.
+// Synthesis takes minutes, so letting it through would remake the same audio.
 func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 	t.Parallel()
 
@@ -658,32 +658,32 @@ func TestPipelineExecute_SkipsAlreadySucceededJob(t *testing.T) {
 		InputURI: "gs://bucket/in.txt", OutputURI: "gs://bucket/voice/job-1/audio.wav",
 	})
 	if err != nil {
-		t.Fatalf("Execute() error = %v, want nil（完了済みは正常に打ち切る）", err)
+		t.Fatalf("Execute() error = %v, want nil (a completed job ends normally)", err)
 	}
 
 	if generated != 0 || published != 0 {
-		t.Errorf("完了済みなのに実行している: generate=%d publish=%d", generated, published)
+		t.Errorf("ran although complete: generate=%d publish=%d", generated, published)
 	}
 	if notified != 0 {
-		t.Errorf("完了済みなのに再通知している: %d 回", notified)
+		t.Errorf("notified again although complete: %d times", notified)
 	}
 	if store.saved.State != jobstatus.StateSucceeded {
-		t.Errorf("State = %q, want succeeded（記録を書き換えない）", store.saved.State)
+		t.Errorf("State = %q, want succeeded (the record is not rewritten)", store.saved.State)
 	}
 }
 
-// 作り直しの投入は打ち切らないこと。
+// A regeneration enqueue is not cut off.
 //
-// 投入経路はどれも enqueue の前に queued を書くため、同じジョブ ID への 2 度目の
-// 依頼は succeeded ではなく queued として届きます。ここで打ち切ると、台本を直して
-// から合成し直す経路が動かなくなります。
+// Every enqueue path writes queued before the enqueue, so a second request for the same
+// job ID arrives as queued, not succeeded. Cutting it off here would break the path of fixing
+// the script and then re-synthesising.
 func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 	t.Parallel()
 
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
-			// 直前の generate は succeeded だったが、投入時に queued へ戻っている。
+			// The preceding generate was succeeded, but the enqueue put it back to queued.
 			JobID:     "job-1",
 			State:     jobstatus.StateQueued,
 			ScriptURI: "gs://bucket/voice/job-1/audio.json",
@@ -713,14 +713,14 @@ func TestPipelineExecute_RunsResubmittedJob(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if published != 1 {
-		t.Errorf("合成した回数 = %d, want 1（作り直しは打ち切らない）", published)
+		t.Errorf("synthesis count = %d, want 1 (a regeneration is not cut off)", published)
 	}
 }
 
-// 状態を読めないときは、判断を返して記録を書き換えないこと。
+// When the state cannot be read, the decision is returned and the record is not rewritten.
 //
-// ここで failed を書くと、succeeded だったかもしれない記録を上書きし、次の配信で
-// ガードが効かなくなります。防ぐはずの再実行をガード自身が招くことになります。
+// Writing failed here would overwrite a record that may have been succeeded, and on the next
+// delivery the guard would not work. The guard itself would cause the re-run it exists to prevent.
 func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 	t.Parallel()
 
@@ -756,28 +756,28 @@ func TestPipelineExecute_UnreadableStatusDoesNotOverwrite(t *testing.T) {
 	}
 
 	if generated != 0 {
-		t.Errorf("判断できないのに実行している: %d 回", generated)
+		t.Errorf("ran although it cannot decide: %d times", generated)
 	}
 	if store.saved.State != jobstatus.StateSucceeded {
-		t.Errorf("State = %q, want succeeded（読めないだけで記録を潰さない）", store.saved.State)
+		t.Errorf("State = %q, want succeeded (merely unreadable must not clobber the record)", store.saved.State)
 	}
-	// 実行は見送りますが、黙って返しません。キューの再試行が来なければジョブは queued の
-	// まま誰にも気付かれないので、記録を伴わない通知で人に投げ直しを促します（ワーカー規約 2.1）。
+	// The run is skipped, but not silently. If no queue retry comes, the job stays queued
+	// unnoticed, so a notification without a record prompts a person to resubmit (worker conventions 2.1).
 	if notifiedFailure != 1 {
-		t.Errorf("状態を読めなかったことを通知していない: %d 回", notifiedFailure)
+		t.Errorf("did not notify that the state could not be read: %d times", notifiedFailure)
 	}
 }
 
-// TestPipelineKeepsModeOnSynthesize は、二段で進めたジョブがモードを失わないことを
-// 検証します。
+// TestPipelineKeepsModeOnSynthesize verifies that a job that went in two stages does not lose
+// its mode.
 //
-// synthesize はモードを持ちません。台本がすでにある前提のコマンドだからです。
-// 画面から作ると必ず generate → synthesize と分かれるため、引き継ぎが無いと
-// 「画面から作ったジョブだけモードが空」という、記録として一番使えない形になります。
+// synthesize has no mode, because it is a command that assumes the script already exists.
+// Jobs made from the page always split into generate → synthesize, so without carrying it over
+// "only the jobs made from the page have an empty mode", the least useful shape for a record.
 func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 	t.Parallel()
 
-	// generate が書き、投入時に queued へ戻された状態を再現します。
+	// Reproduces the state generate wrote and the enqueue put back to queued.
 	store := &memoryStatusStore{
 		found: true,
 		saved: domain.JobStatus{
@@ -801,7 +801,7 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 		0,
 	)
 
-	// 合成のリクエストにモードは載りません。
+	// The synthesis request carries no mode.
 	err := p.Execute(context.Background(), domain.Request{
 		Command: domain.CommandSynthesize, JobID: "job-1",
 		OutputURI: "gs://bucket/voice/job-1/audio.wav",
@@ -814,11 +814,11 @@ func TestPipelineKeepsModeOnSynthesize(t *testing.T) {
 		t.Fatalf("State = %q, want succeeded", store.saved.State)
 	}
 	if store.saved.Mode != "tech_duet" {
-		t.Errorf("Mode = %q, want tech_duet（合成で失われています）", store.saved.Mode)
+		t.Errorf("Mode = %q, want tech_duet (lost in synthesis)", store.saved.Mode)
 	}
 }
 
-// TestPipelineRecordsMode は、生成のときにモードが状態へ載ることを検証します。
+// TestPipelineRecordsMode verifies that generation puts the mode on the state.
 func TestPipelineRecordsMode(t *testing.T) {
 	t.Parallel()
 
@@ -848,11 +848,11 @@ func TestPipelineRecordsMode(t *testing.T) {
 	}
 }
 
-// TestExecuteClassifiesRetry は、Execute が返す失敗の仕分けを固定します。
+// TestExecuteClassifiesRetry pins how Execute classifies the failures it returns.
 //
-// 取り違えるとどちらの向きでも静かに壊れます。恒久を再試行に回すと同じ通知が
-// 2 通届き、一時的なものを恒久扱いにすると、再配信で直ったはずのジョブが
-// 成功扱いで打ち切られて二度と実行されません。
+// A mix-up breaks quietly in either direction. Sending a permanent failure to retry delivers the
+// same notification twice; treating a transient one as permanent cuts off, as if successful, a job
+// that redelivery would have fixed, and it never runs again.
 func TestExecuteClassifiesRetry(t *testing.T) {
 	t.Parallel()
 
@@ -862,25 +862,25 @@ func TestExecuteClassifiesRetry(t *testing.T) {
 		loadScript    domain.Script
 		wantPermanent bool
 	}{
-		"出力先が無い": {
+		"no output": {
 			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", Command: domain.CommandSynthesize},
 			wantPermanent: true,
 		},
-		"command が不正": {
+		"invalid command": {
 			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: "nope"},
 			wantPermanent: true,
 		},
-		"台本が無い": {
+		"no script": {
 			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
-			loadErr:       fmt.Errorf("台本がまだありません: %w", domain.ErrScriptNotFound),
+			loadErr:       fmt.Errorf("no script yet: %w", domain.ErrScriptNotFound),
 			wantPermanent: true,
 		},
-		"台本が空": {
+		"empty script": {
 			req:           domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
 			loadScript:    domain.Script{},
 			wantPermanent: true,
 		},
-		"台本を読めない（一時障害）": {
+		"script unreadable (transient failure)": {
 			req:     domain.Request{JobID: "voice-20260830-090000-aaaaaaaaaaaa", OutputURI: "gs://b/o.wav", Command: domain.CommandSynthesize},
 			loadErr: errors.New("googleapi: Error 503: backend error"),
 		},

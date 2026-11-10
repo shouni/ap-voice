@@ -6,60 +6,60 @@ import (
 	"strings"
 )
 
-// scriptExt は台本 JSON の拡張子です。音声と同じ名前で拡張子だけ違えます。
+// scriptExt is the script JSON's extension. It shares the audio's name and differs only in extension.
 const scriptExt = ".json"
 
-// StorageLayout は、成果物のオブジェクト名を1箇所に集めます。
+// StorageLayout gathers the artifacts' object names in one place.
 //
-// 成果物はジョブ ID ごとのプレフィックス配下へまとめます。バケット直下に散らばっていると、
-// 削除のたびに「このジョブが何を作ったか」を人が数え上げることになります。
-// プレフィックスにまとめておけば、消す側は中身を知らないまま一覧して消せます。
+// Artifacts are grouped under a prefix per job ID. Scattered at the bucket root, every deletion
+// would require a person to enumerate "what this job produced".
+// Grouped under a prefix, the deleting side can list and delete without knowing the contents.
 type StorageLayout struct{}
 
-// NewStorageLayout は StorageLayout を構築します。
+// NewStorageLayout builds a StorageLayout.
 func NewStorageLayout() StorageLayout {
 	return StorageLayout{}
 }
 
-// VoicePrefix は、音声ジョブが並ぶオブジェクトプレフィックスを返します。
+// VoicePrefix returns the object prefix under which voice jobs are listed.
 func (l StorageLayout) VoicePrefix() string {
 	return "voice/"
 }
 
-// VoiceJobPrefix は、1 つのジョブの成果物を収めるプレフィックスを返します。
+// VoiceJobPrefix returns the prefix that holds one job's artifacts.
 func (l StorageLayout) VoiceJobPrefix(jobID string) string {
 	return fmt.Sprintf("%s%s/", l.VoicePrefix(), jobID)
 }
 
-// AudioPath は、WAV の相対オブジェクトパスを返します。
+// AudioPath returns the WAV's relative object path.
 func (l StorageLayout) AudioPath(jobID string) string {
 	return l.VoiceJobPrefix(jobID) + "audio.wav"
 }
 
-// ScriptPath は、台本 JSON の相対オブジェクトパスを返します。
+// ScriptPath returns the script JSON's relative object path.
 //
-// 台本は成果物であると同時に入力です。generate はこれだけを書き、
-// synthesize はこれを読んで音声を作ります。
+// The script is both an artifact and an input. generate writes only this, and
+// synthesize reads it to produce the audio.
 func (l StorageLayout) ScriptPath(jobID string) string {
 	return l.ScriptURIFor(l.AudioPath(jobID))
 }
 
-// ScriptURIFor は、音声の出力先から台本の出力先を導きます。
+// ScriptURIFor derives the script's output location from the audio's.
 //
-// 導出の規則をここ 1 箇所に置きます。台本の書き込み側は音声の URI しか
-// 受け取らないため、拡張子を .json に替える計算がかつてアダプター側にもありました。
-// 同じ規則が 2 箇所にあると、片方だけ変えたときに「保存はできるが誰も読まない場所」
-// という気付きにくい壊れ方をします。
+// The derivation rule lives here alone. The script writer receives only the audio URI,
+// so the adapter once had its own computation that swapped the extension for .json.
+// With the same rule in two places, changing only one breaks things in a hard-to-notice way:
+// "a place that can be written but that nobody reads".
 func (l StorageLayout) ScriptURIFor(audioURI string) string {
 	return strings.TrimSuffix(audioURI, path.Ext(audioURI)) + scriptExt
 }
 
-// AudioURI は、WAV の完全な出力先 URI を返します。
+// AudioURI returns the WAV's full output URI.
 func (l StorageLayout) AudioURI(bucket, jobID string) string {
 	return l.uri(bucket, l.AudioPath(jobID))
 }
 
-// ScriptURI は、台本 JSON の完全な出力先 URI を返します。
+// ScriptURI returns the script JSON's full output URI.
 func (l StorageLayout) ScriptURI(bucket, jobID string) string {
 	return l.uri(bucket, l.ScriptPath(jobID))
 }

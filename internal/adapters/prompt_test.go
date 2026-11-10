@@ -7,12 +7,11 @@ import (
 	"github.com/shouni/ap-voice/assets"
 )
 
-// TestPromptAdapterBuildsEveryMode は、同梱するすべてのモードが実際に組み立てられることを
-// 検証します。
+// TestPromptAdapterBuildsEveryMode verifies that every bundled mode actually builds.
 //
-// 部品の参照は実行時にしか解決されません。{{template "_clarity" .}} の綴りを 1 文字
-// 間違えても go build は通り、そのモードを選んだ人が生成を走らせるまで誰も気付けません。
-// モードを足す側から見ると、テストを書かなくてもここで拾われるのが要点です。
+// References to partials are resolved only at run time. Misspell {{template "_clarity" .}} by one
+// character and go build still passes; nobody notices until someone picks that mode and runs a generation.
+// For whoever adds a mode, the point is that it is caught here without writing a test.
 func TestPromptAdapterBuildsEveryMode(t *testing.T) {
 	t.Parallel()
 
@@ -25,14 +24,14 @@ func TestPromptAdapterBuildsEveryMode(t *testing.T) {
 		t.Fatalf("LoadModes() error = %v", err)
 	}
 	if len(modes) == 0 {
-		t.Fatal("モードが 1 つも読み込まれていません")
+		t.Fatal("no modes were loaded")
 	}
 
 	const (
 		text  = "これは組み立ての検証に使う元文章です。"
 		title = "テスト楽曲"
 	)
-	// レシピ入力のモードは素のテキストではデコードで落ちるため、最小のレシピを渡します。
+	// Recipe-input modes fail to decode plain text, so they are given a minimal recipe.
 	recipe := `{"title":"` + title + `"}`
 
 	for _, mode := range modes {
@@ -41,7 +40,7 @@ func TestPromptAdapterBuildsEveryMode(t *testing.T) {
 
 			input, want := text, text
 			if mode.NeedsRecipe() {
-				// レシピのモードは _input を使わず、項目を展開して埋め込みます。
+				// Recipe modes do not use _input; they expand the fields and embed them.
 				input, want = recipe, title
 			}
 
@@ -50,17 +49,17 @@ func TestPromptAdapterBuildsEveryMode(t *testing.T) {
 				t.Fatalf("Generate(%q) error = %v", mode.Key, err)
 			}
 			if !strings.Contains(got, want) {
-				t.Errorf("%s: 入力がプロンプトに入っていません", mode.Key)
+				t.Errorf("%s: the input is not in the prompt", mode.Key)
 			}
-			// 展開されなかったテンプレート記法は Build がエラーにしないため、
-			// 書き損じが素通りしないようここで見ます。
+			// Build does not fail on template syntax that was not expanded,
+			// so it is checked here to keep a typo from slipping through.
 			if strings.Contains(got, "{{") {
-				t.Errorf("%s: テンプレート記法が展開されずに残っています", mode.Key)
+				t.Errorf("%s: template syntax was left unexpanded", mode.Key)
 			}
-			// すべてのモードが _writing を通ることの確認です。style の固定は
-			// 1 モードでも抜けると、そのモードだけ指示が届かない状態になります。
+			// Checks that every mode goes through _writing. If even one mode misses the style pin,
+			// that mode alone would not receive the instruction.
 			if !strings.Contains(got, "ノーマル") {
-				t.Errorf("%s: 表記の共通ルールが入っていません", mode.Key)
+				t.Errorf("%s: the shared writing rules are missing", mode.Key)
 			}
 		})
 	}

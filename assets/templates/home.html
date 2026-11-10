@@ -11,9 +11,9 @@
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
-  {{/* タブは入力の型で分かれています。**タブごとに別のフォーム**にしてあるので、
-       生成モードの選択肢はサーバ側で出し分け済みです。JavaScript で <select> を
-       組み替えると、どのモードがどの入力を取るかの根拠が画面側に移ります。 */}}
+  {{/* The tabs are split by input type. **Each tab is a separate form**, so
+       the server has already chosen which generation modes to offer. Rearranging the <select> in
+       JavaScript would move the basis for which mode takes which input onto the page. */}}
   <ul class="nav nav-tabs app-tabs mb-4" id="createTabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link {{ if ne .ActiveTab "recipe" }}{{ if ne .ActiveTab "script" }}active{{ end }}{{ end }}"
@@ -36,7 +36,7 @@
   </ul>
 
   <div class="tab-content">
-    {{/* --- 入力ソース：文書から台本を書かせる --- */}}
+    {{/* --- Input source: have a script written from a document --- */}}
     <div class="tab-pane fade {{ if ne .ActiveTab "recipe" }}{{ if ne .ActiveTab "script" }}show active{{ end }}{{ end }}"
          id="tab-input" role="tabpanel">
       <form method="post" action="/jobs" class="card p-4 shadow-sm">
@@ -52,8 +52,8 @@
 
         <div class="mb-3">
           <label class="form-label fw-semibold" for="mode_input">生成モード</label>
-          {{/* 表示名も説明も prompts/<key>.md の front matter から来ます。値として送るのは
-               キーのままで、これがそのまま worker が読むファイル名になります。 */}}
+          {{/* Both the display name and the description come from the front matter of prompts/<key>.md. The value
+               sent stays the key, which is exactly the file name the worker reads. */}}
           <select class="form-select" id="mode_input" name="mode">
             {{ range .TextModes }}<option value="{{ .Key }}"
                     data-direction="{{ .Direction }}"
@@ -74,7 +74,7 @@
       </form>
     </div>
 
-    {{/* --- 楽曲レシピ：music.Recipe から宣伝ナレーションを書かせる --- */}}
+    {{/* --- Music recipe: have a promotional narration written from a music.Recipe --- */}}
     <div class="tab-pane fade {{ if eq .ActiveTab "recipe" }}show active{{ end }}" id="tab-recipe" role="tabpanel">
       <form method="post" action="/jobs" class="card p-4 shadow-sm">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
@@ -112,7 +112,7 @@
       </form>
     </div>
 
-    {{/* --- 台本JSON：書き上がった台本をそのまま合成する --- */}}
+    {{/* --- Script JSON: synthesise a finished script as is --- */}}
     <div class="tab-pane fade {{ if eq .ActiveTab "script" }}show active{{ end }}" id="tab-script" role="tabpanel">
       <form method="post" action="/jobs" class="card p-4 shadow-sm">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
@@ -147,7 +147,7 @@
     出力先は入力しません。ジョブ ID ごとのプレフィックスに成果物がまとまります。
   </div>
 
-  {{/* command はボタンが決めます。 */}}
+  {{/* The button decides the command. */}}
   <div class="d-grid gap-2">
     <button class="btn btn-primary btn-lg" type="submit" name="command" value="generate">
       台本を作成

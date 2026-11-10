@@ -10,38 +10,38 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// 読みの確認は、人と機械の両方が使います。画面は編集中の表をそのまま送り、
-// 機械は持っている台本を送ります。対応するページを持たないので URL は 1 本ですが、
-// 機械専用ではないため /api の下には置きません。
+// Reading checks are used by both people and machines. The page sends the table being edited as is,
+// and a machine sends the script it has. There is no matching page, so there is one URL, but
+// it is not machine-only, so it does not sit under /api.
 
-// readingRequest は POST /reading/preview の要求です。
+// readingRequest is the request of POST /reading/preview.
 type readingRequest struct {
-	// Lines は確かめたい行です。台本をそのまま渡せる形にしてあります。
+	// Lines are the lines to check. The shape accepts a script as is.
 	Lines []domain.ScriptLine `json:"lines"`
 }
 
-// readingLine は 1 行分の読みです。
+// readingLine is the reading of one line.
 type readingLine struct {
 	Text string `json:"text"`
-	// Reading は合成時に実際に読まれるカタカナです。
+	// Reading is the katakana actually read at synthesis.
 	Reading string `json:"reading"`
-	// Changed は、変換で表記が変わったかどうかです。確かめる価値がある行の目印で、
-	// カタカナだけの行は変換しても変わらないため false になります。
+	// Changed reports whether conversion changed the spelling. It marks the lines worth checking;
+	// a katakana-only line is unchanged by conversion, so it is false.
 	Changed bool `json:"changed"`
 }
 
-// readingResponse は POST /reading/preview の応答です。
+// readingResponse is the response of POST /reading/preview.
 type readingResponse struct {
 	Lines []readingLine `json:"lines"`
 }
 
-// PreviewReading は、合成したらどう読まれるかを行ごとに返します。合成はしません。
+// PreviewReading returns, per line, how it would be read if synthesised. It does not synthesise.
 //
-// 読みは自明ではありません。「田中」「同姓同名」のような語がどう読まれるかは、
-// 合成して聴くまで分かりませんでした。台本の長さぶんの合成時間を使ってから
-// 気付くことになるため、その前に確かめられるようにします。
+// Readings are not obvious. How words like 「田中」 or 「同姓同名」 are read could not be
+// known until synthesised and heard. Since that would be noticed only after spending the script's
+// length in synthesis time, this lets it be checked beforehand.
 //
-// 意図と違う読みになる語は、その部分をカタカナで書けば直せます。
+// A word read other than intended can be fixed by writing that part in katakana.
 func (h *Handler) PreviewReading(w http.ResponseWriter, r *http.Request) {
 	var body readingRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

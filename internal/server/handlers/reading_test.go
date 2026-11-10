@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// TestPreviewReadingMarksChangedLines は、変換で表記が変わった行に印が付くことを
-// 検証します。
+// TestPreviewReadingMarksChangedLines verifies that lines whose spelling changed in conversion
+// are marked.
 //
-// 確かめる価値がある行の目印です。台本が 30 行あっても、変わったのが 2 行なら
-// そこだけ読めば済みます。印が無いと全行を目で追うことになります。
+// The mark points at the lines worth checking. Even with 30 lines in a script, if only 2 changed,
+// reading those is enough. Without the mark every line has to be read by eye.
 func TestPreviewReadingMarksChangedLines(t *testing.T) {
 	t.Parallel()
 
@@ -26,24 +26,24 @@ func TestPreviewReadingMarksChangedLines(t *testing.T) {
 
 	var got readingResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("応答のデコードに失敗しました: %v", err)
+		t.Fatalf("failed to decode the response: %v", err)
 	}
 	if len(got.Lines) != 2 {
-		t.Fatalf("行数 = %d, want 2", len(got.Lines))
+		t.Fatalf("line count = %d, want 2", len(got.Lines))
 	}
 	if got.Lines[0].Reading != "スイメン" || !got.Lines[0].Changed {
-		t.Errorf("変わった行に印がありません: %+v", got.Lines[0])
+		t.Errorf("changed line is not marked: %+v", got.Lines[0])
 	}
 	if got.Lines[1].Changed {
-		t.Errorf("変わっていない行に印が付いています: %+v", got.Lines[1])
+		t.Errorf("unchanged line is marked: %+v", got.Lines[1])
 	}
-	// 元のテキストも返します。並べて読めないと、どこが変わったか分かりません。
+	// The original text is returned too. Without it side by side, you cannot see what changed.
 	if got.Lines[0].Text != "水面" {
-		t.Errorf("元のテキストが欠けています: %+v", got.Lines[0])
+		t.Errorf("original text is missing: %+v", got.Lines[0])
 	}
 }
 
-// TestPreviewReadingRejectsEmptyAndOversized は、入力の境界を検証します。
+// TestPreviewReadingRejectsEmptyAndOversized verifies the input boundaries.
 func TestPreviewReadingRejectsEmptyAndOversized(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +51,7 @@ func TestPreviewReadingRejectsEmptyAndOversized(t *testing.T) {
 	h.reading = fakeReading{}
 
 	if rec := postJSON(t, h.PreviewReading, "/preview-reading", `{"lines":[]}`); rec.Code != http.StatusBadRequest {
-		t.Errorf("空: status = %d, want 400", rec.Code)
+		t.Errorf("empty: status = %d, want 400", rec.Code)
 	}
 
 	var b strings.Builder
@@ -64,6 +64,6 @@ func TestPreviewReadingRejectsEmptyAndOversized(t *testing.T) {
 	}
 	b.WriteString(`]}`)
 	if rec := postJSON(t, h.PreviewReading, "/preview-reading", b.String()); rec.Code != http.StatusBadRequest {
-		t.Errorf("上限超過: status = %d, want 400", rec.Code)
+		t.Errorf("over the limit: status = %d, want 400", rec.Code)
 	}
 }

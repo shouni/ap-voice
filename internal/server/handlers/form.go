@@ -12,47 +12,47 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// 投入フォームのタブです。入力の型ごとに分かれています。
+// The submission form's tabs, split by input type.
 //
-// 1 枚のフォームに全部載せていた頃は、素のテキストを入れたまま楽曲紹介モードを
-// 選べてしまい、選んだ時点では何も起こらず、生成に入ってからデコードで落ちていました。
-// 入力の型が違うものは、同じ画面に並べても選び分けられません。
+// When everything sat on one form, the music promotion mode could be chosen with plain text entered;
+// nothing happened on selection, and it failed at decoding once generation started.
+// Things with different input types cannot be told apart when placed on the same page.
 const (
-	// tabInput は入力ソース（Web URL / gs:// の文書）から台本を書かせるタブです。
+	// tabInput is the tab that has a script written from an input source (a web URL / gs:// document).
 	tabInput = "input"
-	// tabRecipe は楽曲レシピから宣伝ナレーションを書かせるタブです。
+	// tabRecipe is the tab that has a promotional narration written from a music recipe.
 	tabRecipe = "recipe"
-	// tabScript は完成済みの台本 JSON をそのまま合成するタブです。Gemini を通しません。
+	// tabScript is the tab that synthesises a finished script JSON as is. It does not go through Gemini.
 	tabScript = "script"
 )
 
-// formView はフォーム画面に渡す値です。
+// formView is the value passed to the form page.
 type formView struct {
 	baseView
-	// TextModes と RecipeModes は、front matter の input で分けたモードです。
-	// タブごとに別の <select> を描きます。1 つの select を JavaScript で
-	// 組み替えると、選択肢の出し分けの根拠が画面側に移ってしまいます。
+	// TextModes and RecipeModes are the modes split by the front matter's input.
+	// Each tab renders its own <select>. Rearranging a single select in JavaScript
+	// would move the basis for which options to show onto the page.
 	TextModes   []assets.Mode
 	RecipeModes []assets.Mode
 	Models      []string
 	Message     string
 	Error       string
 	Form        domain.Request
-	// ActiveTab は再描画時に開くタブです。投入したタブを開き直します。
-	// 常に先頭を開くと、結果の文言だけが見えて入力内容が隠れたタブに残ります。
+	// ActiveTab is the tab opened on re-render. The tab that was submitted is reopened.
+	// Always opening the first one would show only the result message and leave the input on a hidden tab.
 	ActiveTab string
-	// MusicJobID と ScriptJSON は、入力ソース以外のタブの入力の残りです。
-	// domain.Request には収まらない（URI に変換済み／台本そのもの）ため別に持ちます。
+	// MusicJobID and ScriptJSON are what remains of the input on the tabs other than the input source.
+	// They do not fit in domain.Request (already converted to a URI / the script itself), so they are kept separately.
 	MusicJobID string
 	ScriptJSON string
 }
 
-// Home は投入フォームを表示します。
+// Home shows the submission form.
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	h.render(w, http.StatusOK, h.formView(r, domain.Request{Command: domain.CommandGenerate}, tabInput))
 }
 
-// formView は、タブごとのモード一覧を詰めた描画用の値を作ります。
+// formView builds the render value filled with each tab's modes.
 func (h *Handler) formView(r *http.Request, form domain.Request, activeTab string) formView {
 	return formView{
 		baseView:    h.base(r),
@@ -64,11 +64,11 @@ func (h *Handler) formView(r *http.Request, form domain.Request, activeTab strin
 	}
 }
 
-// createJobForm は、フォームの内容を検証し、Worker 面へ実行を引き渡します
-// （POST /jobs をフォームから呼んだとき）。
+// createJobForm validates the form and hands the run to the worker side
+// (when POST /jobs is called from the form).
 //
-// ここでは合成を待ちません。分単位かかるため、リクエストの中で完了させられないためです。
-// 結果は Slack 通知と出力先で受け取ります。
+// It does not wait for synthesis here. It takes minutes, so it cannot complete within the request.
+// The result arrives as a Slack notification and at the output location.
 func (h *Handler) createJobForm(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, domain.Request{}, tabInput, "フォームの解析に失敗しました")
@@ -85,8 +85,8 @@ func (h *Handler) createJobForm(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// enqueueFromInput は「入力ソース」タブの投入です。Web URL / gs:// の文書を
-// Gemini に読ませて台本を書かせます。
+// enqueueFromInput is the submission from the 「入力ソース」 tab. It has Gemini read a web URL / gs://
+// document and write the script.
 func (h *Handler) enqueueFromInput(w http.ResponseWriter, r *http.Request) {
 	command, ok := h.generateCommand(w, r, tabInput)
 	if !ok {
@@ -95,10 +95,10 @@ func (h *Handler) enqueueFromInput(w http.ResponseWriter, r *http.Request) {
 	h.enqueueGenerate(w, r, command, strings.TrimSpace(r.FormValue("input_uri")), tabInput, "")
 }
 
-// enqueueFromRecipe は「楽曲レシピ」タブの投入です。
+// enqueueFromRecipe is the submission from the 「楽曲レシピ」 tab.
 //
-// 入力ソースの代わりに楽曲生成サービスのジョブ ID を受け取ります。
-// gs:// のパスを貼らせるより短く、打ち間違えれば ID の形で弾けます。
+// Instead of an input source it takes a job ID from the music generation service.
+// It is shorter than pasting a gs:// path, and a typo is rejected by the ID's shape.
 func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 	command, ok := h.generateCommand(w, r, tabRecipe)
 	if !ok {
@@ -114,17 +114,17 @@ func (h *Handler) enqueueFromRecipe(w http.ResponseWriter, r *http.Request) {
 	h.enqueueGenerate(w, r, command, inputURI, tabRecipe, musicJobID)
 }
 
-// recipeInputURI は、楽曲生成サービスのジョブ ID から楽曲レシピの場所を組み立てます。
+// recipeInputURI builds the music recipe's location from a music generation service job ID.
 //
-// 動画生成サービスと同じ規則です（gs://<musicBucket>/music/<jobID>/recipe.json）。
-// 下書き（drafts/）は見ません — 宣伝ナレーションは公開した曲に付けるものだからです。
+// It is the same rule as the video generation service's (gs://<musicBucket>/music/<jobID>/recipe.json).
+// Drafts (drafts/) are not looked at — promotional narration belongs to published songs.
 func (h *Handler) recipeInputURI(musicJobID string) (string, error) {
 	if musicJobID == "" {
 		return "", fmt.Errorf("楽曲のジョブIDを入力してください")
 	}
-	// Validate はパスとして安全かだけを見ます。形式は見ません—
-	// "not-a-job-id" も通ってしまい、存在しない場所を指すジョブが投入されます。
-	// SortKey は時刻を取り出せない ID で空を返すので、形の確認に使えます。
+	// Validate only checks that it is safe as a path, not its format —
+	// "not-a-job-id" would pass too, and a job pointing at a location that does not exist would be enqueued.
+	// SortKey returns empty for an ID it cannot extract a time from, so it serves as a shape check.
 	if err := jobid.Validate(musicJobID); err != nil {
 		return "", fmt.Errorf("楽曲のジョブIDに使えない文字が含まれています: %w", err)
 	}
@@ -137,11 +137,11 @@ func (h *Handler) recipeInputURI(musicJobID string) (string, error) {
 	return fmt.Sprintf("gs://%s/music/%s/recipe.json", strings.TrimSpace(h.musicBucket), musicJobID), nil
 }
 
-// generateCommand は、生成系タブのボタンが送った command を確かめます。
+// generateCommand checks the command sent by a generation tab's button.
 //
-// この画面から選べる command は限られます。台本 JSON タブ以外に synthesize を
-// 渡す口は無く、受け付ける値をここで明示しておくと、画面から来るものと
-// API から来るものの境界がはっきりします。
+// The commands this page can choose are limited. No tab but the script JSON tab can pass synthesize,
+// and stating the accepted values here makes the boundary between what comes from the page and
+// what comes from the API clear.
 func (h *Handler) generateCommand(w http.ResponseWriter, r *http.Request, tab string) (domain.Command, bool) {
 	command := domain.Command(r.FormValue("command"))
 	if command != domain.CommandGenerate && command != domain.CommandGenerateAndSynthesize {
@@ -151,10 +151,10 @@ func (h *Handler) generateCommand(w http.ResponseWriter, r *http.Request, tab st
 	return command, true
 }
 
-// enqueueGenerate は、生成系タブの共通の投入経路です。
+// enqueueGenerate is the shared submission path of the generation tabs.
 func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, command domain.Command, inputURI, tab, musicJobID string) {
-	// 出力先はフォームから受け取りません。ジョブ ID から導くことで、1 ジョブの
-	// 成果物が必ず 1 つのプレフィックスにまとまり、あとから一覧・削除できます。
+	// The output location is not taken from the form. Deriving it from the job ID guarantees one job's
+	// artifacts are gathered under one prefix, so they can be listed and deleted later.
 	jobID, err := jobid.New(jobIDPrefix)
 	if err != nil {
 		h.renderError(w, r, http.StatusInternalServerError, domain.Request{}, tab, "ジョブIDの発行に失敗しました")
@@ -170,8 +170,8 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 		AIModel:   r.FormValue("ai_model"),
 	}
 
-	// worker 側でも Execute の冒頭で検証しますが、投入前に弾けば
-	// 「タスクにはなったが必ず失敗する」状態を作らずに済みます（submit の中です）。
+	// The worker also validates at the top of Execute, but rejecting before the enqueue avoids
+	// "it became a task but will always fail" (this happens inside submit).
 	status, err := h.submit(r.Context(), req)
 	if err != nil {
 		h.renderError(w, r, status, req, tab, err.Error())
@@ -179,20 +179,20 @@ func (h *Handler) enqueueGenerate(w http.ResponseWriter, r *http.Request, comman
 	}
 	acceptedAt(w, jobID)
 
-	// 投入した内容をそのまま残します。同じソースからモードを変えて
-	// もう1本作るのが普通の使い方で、空に戻すと URL を貼り直すことになります。
-	// ジョブ ID と出力先は毎回発行し直すため、残っていても次の投入には影響しません。
+	// What was submitted is kept as is. Making another one from the same source with a different mode
+	// is the usual use, and clearing it would mean pasting the URL again.
+	// The job ID and output location are issued afresh every time, so leaving them does not affect the next submission.
 	view := h.formView(r, req, tab)
 	view.MusicJobID = musicJobID
 	view.Message = acceptedMessage(command, req.JobID)
 	h.render(w, http.StatusAccepted, view)
 }
 
-// enqueueFromScript は「台本 JSON」タブの投入です。
+// enqueueFromScript is the submission from the 「台本 JSON」 tab.
 //
-// Gemini を通しません。貼られた台本をそのまま合成します。ジョブ ID を発行して
-// その場所へ保存するので、既存ジョブの差し替えと同じ経路が新規作成になります
-// （保存先はジョブ ID から決まり、ジョブが既にあるかどうかは問いません）。
+// It does not go through Gemini; it synthesises the pasted script as is. It mints a job ID and
+// saves to that location, so the path for replacing an existing job's script becomes the creation
+// (the location follows from the job ID, whether or not the job already exists).
 func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimSpace(r.FormValue("script_json"))
 	if raw == "" {
@@ -206,7 +206,7 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 話者とスタイルは API と同じ検証を通します（validateScript）。
+	// Speakers and styles go through the same validation as the API (validateScript).
 	cleaned, err := h.validateScript(script)
 	if err != nil {
 		h.renderScriptError(w, r, http.StatusBadRequest, raw, err.Error())
@@ -236,16 +236,16 @@ func (h *Handler) enqueueFromScript(w http.ResponseWriter, r *http.Request) {
 	}
 	acceptedAt(w, jobID)
 
-	// 貼った JSON は残しません。投入した台本は履歴の詳細で編集できるため、
-	// 同じものを貼ったまま二重に投入できる状態のほうが危険です。
+	// The pasted JSON is not kept. A submitted script can be edited from the history detail page,
+	// and leaving the same one pasted, ready to submit twice, is the greater danger.
 	view := h.formView(r, domain.Request{Command: domain.CommandGenerate}, tabScript)
 	view.Message = fmt.Sprintf("音声の作成を受け付けました（%s）。完了すると通知が届きます。", jobID)
 	h.render(w, http.StatusAccepted, view)
 }
 
-// acceptedMessage は、受け付けた処理に応じた案内文を返します。
-// どちらを押したかが分かる文面にします。まとめて作った場合は音声まで待つため、
-// 「履歴に並びます」だけでは、次に何を待てばよいのか分かりません。
+// acceptedMessage returns guidance matching the accepted action.
+// The wording says which button was pressed. When both are made together the wait lasts until
+// the audio, so "it will appear in the history" alone does not say what to wait for next.
 func acceptedMessage(command domain.Command, jobID string) string {
 	if command == domain.CommandGenerateAndSynthesize {
 		return fmt.Sprintf("台本と音声の作成を受け付けました（%s）。完了すると通知が届きます。", jobID)
@@ -253,7 +253,7 @@ func acceptedMessage(command domain.Command, jobID string) string {
 	return fmt.Sprintf("台本の作成を受け付けました（%s）。完了すると履歴に並びます。", jobID)
 }
 
-// renderError は、生成系タブの失敗を、そのタブを開いた状態で描き直します。
+// renderError re-renders a generation tab's failure with that tab open.
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, form domain.Request, tab, msg string) {
 	view := h.formView(r, form, tab)
 	view.MusicJobID = strings.TrimSpace(r.FormValue("music_job_id"))
@@ -261,8 +261,8 @@ func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int
 	h.render(w, status, view)
 }
 
-// renderScriptError は、台本 JSON タブの失敗を、貼った JSON を残したまま描き直します。
-// ここでは残します。直して出し直すのが普通で、消えると貼り直しになります。
+// renderScriptError re-renders a script JSON tab failure, keeping the pasted JSON.
+// It is kept here. Fixing and resubmitting is the usual course, and losing it means pasting again.
 func (h *Handler) renderScriptError(w http.ResponseWriter, r *http.Request, status int, raw, msg string) {
 	view := h.formView(r, domain.Request{Command: domain.CommandGenerate}, tabScript)
 	view.ScriptJSON = raw

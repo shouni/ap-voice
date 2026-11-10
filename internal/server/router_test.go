@@ -16,7 +16,7 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// stubExecutor は worker.Handler に渡す最小の実行器です。
+// stubExecutor is the minimal executor passed to worker.Handler.
 type stubExecutor struct{ called bool }
 
 func (s *stubExecutor) Execute(_ context.Context, _ domain.Request) error {
@@ -32,8 +32,8 @@ func do(t *testing.T, h http.Handler, method, path string) int {
 	return rec.Code
 }
 
-// ヘルスチェックは役割に関わらず必要です。Cloud Run の起動確認に使うため、
-// ハンドラーが1つも組み立てられていなくても応答できなければなりません。
+// The health check is needed regardless of role. Cloud Run uses it to confirm startup,
+// so it must answer even when no handler at all has been built.
 func TestRouter_HealthAlwaysServed(t *testing.T) {
 	for _, h := range []*builder.AppHandlers{nil, {}} {
 		if got := do(t, NewRouter(h, ""), http.MethodGet, "/health"); got != http.StatusOK {
@@ -42,9 +42,9 @@ func TestRouter_HealthAlwaysServed(t *testing.T) {
 	}
 }
 
-// SERVER_ROLE=web のプロセスでは TaskAuth も Worker も nil になるため、
-// /tasks/generate はルートごと登録されません。IAM や ingress の設定漏れがあっても、
-// 公開側のプロセスに Worker の入口が存在しないことをここで固定します。
+// In a SERVER_ROLE=web process both TaskAuth and Worker are nil, so
+// /tasks/generate is not registered at all. Even with an IAM or ingress misconfiguration,
+// this pins that the public-facing process has no worker entry point.
 func TestRouter_WorkerRouteAbsentWithoutTaskAuth(t *testing.T) {
 	r := NewRouter(&builder.AppHandlers{}, "")
 
@@ -53,8 +53,8 @@ func TestRouter_WorkerRouteAbsentWithoutTaskAuth(t *testing.T) {
 	}
 }
 
-// SERVER_ROLE=worker のプロセスには投入フォームがありません。
-// 非公開サービスに認証なしの画面が生えないことをここで固定します。
+// A SERVER_ROLE=worker process has no submission form.
+// This pins that no unauthenticated page sprouts on the private service.
 func TestRouter_WebRouteAbsentWithoutWebHandler(t *testing.T) {
 	r := NewRouter(&builder.AppHandlers{}, "")
 
@@ -68,9 +68,9 @@ func TestRouter_WebRouteAbsentWithoutWebHandler(t *testing.T) {
 	}
 }
 
-// Worker 面ではルートが登録され、かつ OIDC トークンが無いリクエストは
-// 検証ミドルウェアが弾きます。404 でないこと（=登録されていること）と、
-// 200 でないこと（=素通りしないこと）の両方を見ます。
+// On the worker side the route is registered, and a request without an OIDC token is
+// rejected by the verification middleware. It checks both not-404 (= registered) and
+// not-200 (= not let through).
 func TestRouter_WorkerRouteGuardedByTaskAuth(t *testing.T) {
 	exec := &stubExecutor{}
 	r := NewRouter(&builder.AppHandlers{
@@ -81,17 +81,17 @@ func TestRouter_WorkerRouteGuardedByTaskAuth(t *testing.T) {
 
 	got := do(t, r, http.MethodPost, "/tasks/generate")
 	if got == http.StatusNotFound {
-		t.Fatal("POST /tasks/generate が登録されていない")
+		t.Fatal("POST /tasks/generate is not registered")
 	}
 	if got == http.StatusOK {
-		t.Fatalf("POST /tasks/generate = %d: 認証なしで通った", got)
+		t.Fatalf("POST /tasks/generate = %d: passed without authentication", got)
 	}
 	if exec.called {
-		t.Fatal("認証を通らずに実行器が呼ばれた")
+		t.Fatal("the executor was called without passing authentication")
 	}
 }
 
-// CSP が全レスポンスに付き、script-src が緩められていないこと。
+// A CSP is on every response and script-src is not loosened.
 func TestResponsesCarryContentSecurityPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -101,29 +101,29 @@ func TestResponsesCarryContentSecurityPolicy(t *testing.T) {
 
 	policy := rec.Header().Get("Content-Security-Policy")
 	if policy == "" {
-		t.Fatal("Content-Security-Policy が付いていない")
+		t.Fatal("no Content-Security-Policy")
 	}
 	for _, want := range []string{"default-src 'self'", "script-src 'self'", "object-src 'none'", "frame-ancestors 'none'"} {
 		if !strings.Contains(policy, want) {
-			t.Errorf("CSP に %q が無い: %s", want, policy)
+			t.Errorf("CSP lacks %q: %s", want, policy)
 		}
 	}
-	// script-src の 'unsafe-inline' は、インラインスクリプトを外した意味を消します
-	// （assets の TestTemplatesHaveNoInlineScripts が対になっています）。
+	// 'unsafe-inline' in script-src would undo the point of removing inline scripts
+	// (paired with TestTemplatesHaveNoInlineScripts in assets).
 	scriptSrc := cspDirective(policy, "script-src")
 	if scriptSrc == "" {
-		t.Fatalf("script-src が無い: %s", policy)
+		t.Fatalf("no script-src: %s", policy)
 	}
 	if strings.Contains(scriptSrc, "unsafe-inline") || strings.Contains(scriptSrc, "unsafe-eval") {
-		t.Errorf("script-src が緩められています: %s", scriptSrc)
+		t.Errorf("script-src is loosened: %s", scriptSrc)
 	}
-	// 音声は署名付き URL へ 302 するため、media-src が送り先を許す必要があります。
+	// Audio 302s to a signed URL, so media-src has to allow the destination.
 	if !strings.Contains(cspDirective(policy, "media-src"), "https://storage.googleapis.com") {
-		t.Errorf("media-src が署名付き URL のホストを許していない: %s", policy)
+		t.Errorf("media-src does not allow the signed URL's host: %s", policy)
 	}
 }
 
-// cspDirective は CSP から 1 ディレクティブ分を取り出します。無ければ空文字を返します。
+// cspDirective extracts one directive from a CSP. It returns an empty string if absent.
 func cspDirective(policy, name string) string {
 	for directive := range strings.SplitSeq(policy, ";") {
 		directive = strings.TrimSpace(directive)
@@ -134,8 +134,8 @@ func cspDirective(policy, name string) string {
 	return ""
 }
 
-// 圧縮が効いていること。画面は日本語 UTF-8（1 文字 3 バイト）でよく縮むのに、
-// これまで無圧縮で配信していました。
+// Compression is in effect. The pages are Japanese UTF-8 (3 bytes per character) and compress well,
+// yet they used to be served uncompressed.
 func TestCompressibleResponsesAreCompressed(t *testing.T) {
 	t.Parallel()
 
@@ -158,18 +158,18 @@ func TestCompressibleResponsesAreCompressed(t *testing.T) {
 
 	body, err := io.ReadAll(reader)
 	if err != nil {
-		t.Fatalf("解凍できない: %v", err)
+		t.Fatalf("cannot decompress: %v", err)
 	}
 	if !strings.Contains(string(body), "Bootstrap") {
-		t.Error("解凍した中身が Bootstrap の CSS でない")
+		t.Error("the decompressed body is not Bootstrap's CSS")
 	}
 	if len(body) <= rec.Body.Len() {
-		t.Errorf("圧縮後 %d バイトが元の %d バイトを下回っていない", rec.Body.Len(), len(body))
+		t.Errorf("compressed %d bytes is not below the original %d bytes", rec.Body.Len(), len(body))
 	}
 }
 
-// CSP 以外の防御ヘッダーも全レスポンスに付くこと。どれも 1 行で入る割に、
-// 抜けても画面は正常に見えるため気付けません。
+// Defensive headers other than the CSP are on every response too. Each is one line, yet
+// the page looks normal without it, so a missing one goes unnoticed.
 func TestResponsesCarrySecurityHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -187,17 +187,17 @@ func TestResponsesCarrySecurityHeaders(t *testing.T) {
 			t.Errorf("%s = %q, want %q", name, got, value)
 		}
 	}
-	// autoplay は塞ぎません（メディア再生が壊れます）。
+	// autoplay is not blocked (it would break media playback).
 	policy := rec.Header().Get("Permissions-Policy")
 	if policy == "" {
-		t.Error("Permissions-Policy が付いていない")
+		t.Error("no Permissions-Policy")
 	}
 	if strings.Contains(policy, "autoplay") {
-		t.Errorf("Permissions-Policy が autoplay を塞いでいます: %s", policy)
+		t.Errorf("Permissions-Policy blocks autoplay: %s", policy)
 	}
 }
 
-// mustOIDC は、テスト用に構成済みの検証器を作ります（New は設定が欠けるとエラーを返します）。
+// mustOIDC builds a verifier configured for tests (New returns an error when settings are missing).
 func mustOIDC(t *testing.T, audience string, allowed []string) *oidc.Verifier {
 	t.Helper()
 	v, err := oidc.New(audience, allowed)

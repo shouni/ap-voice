@@ -14,11 +14,11 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 )
 
-// Script は、保存済みの台本を返します。
+// Script returns the stored script.
 //
-// どちらの読者にも JSON を返しますが、人にはファイルとして保存させます。
-// 画面から開いたときにブラウザが本文を表示してしまうと、確認はできても
-// 手元に残せません。
+// Both kinds of reader get JSON, but a person is made to save it as a file.
+// If the browser displayed the body when opened from the page, it could be checked but
+// not kept locally.
 func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.jobID(w, r)
 	if !ok {
@@ -31,24 +31,24 @@ func (h *Handler) Script(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, r, http.StatusNotFound, "台本が見つかりません")
 		return
 	case err != nil:
-		// 読めなかっただけの場合を 404 に混ぜません。混ぜると、GCS の障害中は
-		// すべてのジョブが「台本が無い」ように見え、呼び出し側が静かに受け入れます。
+		// A merely unreadable script is not folded into 404. Otherwise, during a GCS outage every job
+		// would look like it "has no script", and the caller would quietly accept that.
 		respond.ServerError(w, r, http.StatusBadGateway, err, "台本の取得に失敗しました", "job_id", jobID)
 		return
 	}
 
 	if !respond.WantsJSON(w, r) {
-		// jobid.Validate を通った ID だけがここに来るため、ファイル名に使えます。
+		// Only IDs that passed jobid.Validate reach here, so it can be used as a file name.
 		w.Header().Set("Content-Disposition", `attachment; filename="`+jobID+`.json"`)
 	}
 	respond.JSON(w, r, http.StatusOK, script)
 }
 
-// ScriptUpdate は、台本を差し替えます（PUT /jobs/{jobID}/script）。合成はしません。
+// ScriptUpdate replaces the script (PUT /jobs/{jobID}/script). It does not synthesise.
 //
-// 保存と合成を分けているのは、クライアントが何度か直してから 1 度だけ
-// 合成できるようにするためです。画面はその 2 つを 1 つのボタンにまとめていますが、
-// 機械には分かれている方が使いやすくなります。
+// Saving and synthesis are separate so that a client can fix the script a few times and then
+// synthesise once. The page combines the two into one button, but for machines
+// having them separate is easier to use.
 func (h *Handler) ScriptUpdate(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.apiJobID(w, r)
 	if !ok {
@@ -61,7 +61,7 @@ func (h *Handler) ScriptUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 画面と同じ検証です（validateScript）。
+	// The same validation as the page (validateScript).
 	cleaned, err := h.validateScript(script)
 	if err != nil {
 		respond.ErrorJSON(w, r, http.StatusBadRequest, err.Error())
@@ -75,7 +75,7 @@ func (h *Handler) ScriptUpdate(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, r, http.StatusOK, cleaned)
 }
 
-// synthesizeSaved は、保存済みの台本から音声を作ります（POST /jobs/{jobID}/synthesize を JSON で呼んだとき）。
+// synthesizeSaved makes audio from the stored script (when POST /jobs/{jobID}/synthesize is called with JSON).
 func (h *Handler) synthesizeSaved(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.apiJobID(w, r)
 	if !ok {
@@ -96,11 +96,11 @@ func (h *Handler) synthesizeSaved(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, r, status, apiAccepted{Status: string(jobstatus.StateQueued), JobID: jobID, Command: string(domain.CommandSynthesize)})
 }
 
-// validateScript は、台本の各行が実在する話者・スタイルであることを確かめ、
-// 本文が空の行を落とした台本を返します。
+// validateScript checks that every line of the script uses an existing speaker and style, and
+// returns the script with empty-text lines dropped.
 //
-// フォームと API の共通の入口です。片方だけに書くと、もう片方から
-// 実在しない組み合わせが保存できてしまいます。
+// It is the shared entry point for the form and the API. Written for only one of them, the other
+// could store non-existent pairs.
 func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	if len(script.Lines) == 0 {
 		return domain.Script{}, errors.New("台本が空です")
@@ -113,7 +113,7 @@ func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	for i, line := range script.Lines {
 		text := strings.TrimSpace(line.Text)
 		if text == "" {
-			// 空の行は落とします。行を消す手段でもあります。
+			// Empty lines are dropped. It is also the way to delete a line.
 			continue
 		}
 		valid, ok := h.speakers.StylesFor(line.Speaker)
@@ -132,10 +132,10 @@ func (h *Handler) validateScript(script domain.Script) (domain.Script, error) {
 	return domain.Script{Title: strings.TrimSpace(script.Title), Lines: lines}, nil
 }
 
-// stylesBySpeaker は、話者名からその話者が持つスタイル名への対応を組み立てます。
+// stylesBySpeaker builds the mapping from speaker name to that speaker's style names.
 //
-// 呼ぶのは NewHandler だけです。話者一覧は起動から変わらないので、編集画面と
-// /speakers はその結果（h.styles / h.stylesJSON）を使い回します。
+// Only NewHandler calls it. The speaker roster does not change after startup, so the editor and
+// /speakers reuse its result (h.styles / h.stylesJSON).
 func stylesBySpeaker(speakers *speaker.Registry) map[string][]string {
 	names := speakers.SpeakerNames()
 	out := make(map[string][]string, len(names))
@@ -147,11 +147,11 @@ func stylesBySpeaker(speakers *speaker.Registry) map[string][]string {
 	return out
 }
 
-// Synthesize は、台本から音声を作ります（POST /jobs/{jobID}/synthesize）。
+// Synthesize makes audio from the script (POST /jobs/{jobID}/synthesize).
 //
-// フォームは編集中の台本を本文に載せてくるので、保存してから合成します。JSON
-// （本文なし）は保存済みの台本をそのまま合成します。機械は PUT /jobs/{jobID}/script で
-// 何度か直してから 1 度だけここを呼び、画面は 1 つのボタンで両方を済ませます。
+// The form carries the script being edited in the body, so it is saved before synthesis. JSON
+// (no body) synthesises the stored script as is. Machines fix it a few times with PUT /jobs/{jobID}/script
+// and then call this once; the page does both with one button.
 func (h *Handler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	if isFormBody(r) {
 		h.synthesizeFromForm(w, r)
@@ -160,11 +160,11 @@ func (h *Handler) Synthesize(w http.ResponseWriter, r *http.Request) {
 	h.synthesizeSaved(w, r)
 }
 
-// synthesizeFromForm は、編集された台本を保存し、続けて音声の作成を指示します
-// （POST /jobs/{jobID}/synthesize をフォームから呼んだとき）。
+// synthesizeFromForm saves the edited script and then requests the audio
+// (when POST /jobs/{jobID}/synthesize is called from the form).
 //
-// 保存が先で、タスクへ渡すのはジョブ ID だけです（理由は domain.Request.JobID）。
-// Worker 側は「保存済み台本を読む」既存の経路をそのまま使います。
+// Saving comes first, and only the job ID goes to the task (see domain.Request.JobID).
+// The worker uses its existing "read the stored script" path as is.
 func (h *Handler) synthesizeFromForm(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.jobID(w, r)
 	if !ok {
@@ -202,10 +202,10 @@ func (h *Handler) synthesizeFromForm(w http.ResponseWriter, r *http.Request) {
 	h.renderDetail(w, r, jobID, status, "台本を保存し、音声の作成を受け付けました。完了すると通知が届きます。", "")
 }
 
-// scriptFromForm は、送られてきた行をドメインの台本へ組み立てます。
+// scriptFromForm assembles the submitted lines into the domain script.
 //
-// 組み立てるだけで、実在するかの確認は validateScript が行います。
-// API と同じ関数を通すため、どちらか一方だけが緩くなることがありません。
+// It only assembles; validateScript checks that they exist.
+// It goes through the same function as the API, so neither one can be looser than the other.
 func (h *Handler) scriptFromForm(r *http.Request) (domain.Script, error) {
 	speakers := r.Form["speaker"]
 	styles := r.Form["style"]
