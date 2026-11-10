@@ -7,9 +7,9 @@
   {{ with .Message }}<div class="alert alert-success">{{ . }}</div>{{ end }}
   {{ with .Error }}<div class="alert alert-danger">{{ . }}</div>{{ end }}
 
-  {{/* 記録された状態です。台本があるジョブでも出します — 合成だけ失敗した場合は
-       台本が残るので、成果物を見ただけでは「台本で終わったジョブ」と区別が付きません。
-       失敗の理由が人の目に触れるのは、Slack 通知を除けばここだけです。 */}}
+  {{/* The recorded state. Shown even for jobs that have a script — when only synthesis failed,
+       the script remains, so the artifacts alone cannot tell it from "a job that ended at the script".
+       Apart from the Slack notification, this is the only place a person sees why it failed. */}}
   {{ if eq .State "failed" }}
     <div class="alert alert-danger">
       <div class="fw-semibold">このジョブは失敗しました。</div>
@@ -22,16 +22,16 @@
   {{ end }}
 
   {{ if .HasAudio }}
-    {{/* src は 302 で署名付き URL へ飛びます。バイト列はアプリが配信しません。 */}}
+    {{/* src 302s to a signed URL. The app does not serve the bytes. */}}
     <audio controls src="/jobs/{{ .JobID }}/audio" class="w-100 mb-4" preload="metadata"></audio>
   {{ end }}
 
-  {{/* 台本は読むだけでなく直せます。直せることが、分けた工程の理由です —
-       1 行の読みを直すために生成からやり直すと、直したかった行以外まで変わります。
+  {{/* The script can be fixed, not just read. Being fixable is why the steps were split —
+       redoing generation to fix one line's reading would change more than the line you meant to fix.
 
-       台本がまだ無いジョブでも、この画面は開きます。生成の途中と生成に失敗した
-       ジョブの通常の姿だからです。開けないと、削除もここからしかできない以上、
-       履歴に残ったまま消せなくなります。 */}}
+       This page opens even for a job with no script yet, because that is the normal shape of a job
+       mid-generation or one whose generation failed. If it did not open, since deletion is only possible
+       from here, the job would stay in the history undeletable. */}}
   {{ if .HasScript }}
   <form method="post" action="/jobs/{{ .JobID }}/synthesize" id="script-form"
         data-max-lines="{{ .MaxLines }}">
@@ -45,13 +45,13 @@
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-2">
-      {{/* 行数は追加・削除で動くので、画面側が書き換えられるよう印を付けます。 */}}
+      {{/* The line count changes with adding and removing, so it is marked for the page to rewrite. */}}
       <h2 class="h6 mb-0">台本（<span class="js-line-count">{{ len .Script.Lines }}</span> 行）</h2>
 
-      {{/* 読みは自明ではありません（「水面」は ミナモ ではなく スイメン）。
-           合成してから気付くと、台本ぶんの合成時間がそのまま無駄になります。
-           サーバーは合成の直前と同じ変換を通すので、ここに出るものが実際に読まれるものです。
-           意図と違う語は、その部分をカタカナで書き直せば直せます。 */}}
+      {{/* Readings are not obvious (「水面」 reads スイメン, not ミナモ).
+           Noticing after synthesis wastes the script's whole synthesis time.
+           The server runs the same conversion as just before synthesis, so what appears here is what will actually be read.
+           A word read other than intended can be fixed by rewriting that part in katakana. */}}
       <button class="btn btn-outline-secondary btn-sm js-preview-reading" type="button"
               data-endpoint="/reading/preview">読みを確認</button>
       <span class="form-text m-0 js-reading-status" role="status" aria-live="polite"></span>
@@ -61,8 +61,8 @@
       スタイルの選択肢は話者に応じて変わります。
     </div>
 
-    {{/* 3 列とも最低幅を持つため、狭い画面では表がはみ出します。
-         包んでおくと、ページ全体ではなく表の中だけが横に動きます。 */}}
+    {{/* All three columns have a minimum width, so on a narrow screen the table overflows.
+         Wrapped, only the table scrolls sideways rather than the whole page. */}}
     <div class="table-responsive">
     <table class="table table-sm align-middle script-table">
       <thead>
@@ -78,20 +78,20 @@
               </select>
             </td>
             <td class="style">
-              {{/* 初期表示は保存済みの値だけを入れ、読み込み後に JS が話者ぶんへ広げます。
-                   ここで全スタイルを出すと、話者が持たない組み合わせを選べてしまいます。 */}}
+              {{/* Initially only the stored value goes in; after loading, JS expands it to the speaker's set.
+                   Listing every style here would allow pairs the speaker does not have. */}}
               <select class="form-select form-select-sm js-style" name="style" data-selected="{{ .Style }}">
                 <option value="{{ .Style }}" selected>{{ .Style }}</option>
               </select>
             </td>
             <td>
               <textarea class="form-control form-control-sm js-text" name="text" rows="2">{{ .Text }}</textarea>
-              {{/* 読みの差し込み先です。押されるまでは空で、行の高さも変わりません。 */}}
+              {{/* Where the reading is inserted. Empty until pressed, so the row height does not change. */}}
               <div class="form-text js-reading"></div>
             </td>
-            {{/* 行の操作です。話す順序は台本そのものなので、入れ替えるのに
-                 本文を切り貼りさせる必要はありません。追加した行は
-                 直前の行の話者を引き継ぎます（続けて同じ話者が話すことが多いため）。 */}}
+            {{/* Row operations. The speaking order is the script itself, so reordering
+                 should not require cutting and pasting text. An added row
+                 inherits the previous row's speaker (the same speaker often continues). */}}
             <td class="text-nowrap align-top">
               <div class="btn-group btn-group-sm" role="group" aria-label="行の操作">
                 <button type="button" class="btn btn-outline-secondary js-move-up" title="上へ" aria-label="上へ">
@@ -122,36 +122,36 @@
     </p>
   {{ end }}
 
-  {{/* 何を読ませたかは記録にあります。貼り直させる理由がないので、そのまま
-       作り直せるようにします。持ち込みの台本には入力ソースが無いため出ません。 */}}
+  {{/* What was read is in the record. There is no reason to make anyone paste it again, so it can be
+       regenerated as is. A supplied script has no input source, so this does not appear. */}}
   {{ with .InputURI }}
     <p class="text-secondary small mb-0">入力ソース: <code class="text-break">{{ . }}</code></p>
   {{ end }}
 
-  {{/* 操作はまとめて末尾に置きます。姉妹サービスの詳細画面と同じで、戻るを左、
-       実行と削除を右に寄せます。台本を読んでから押すものなので、表の手前に
-       置くと確認前に押せてしまいます。 */}}
+  {{/* Actions are gathered at the end. As on the sibling services' detail pages, back is on the left
+       and run and delete are on the right. They are pressed after reading the script, so placing them
+       before the table would let them be pressed before checking. */}}
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 bg-light p-3 border-top mt-4">
     <a class="btn btn-link text-secondary text-decoration-none" href="/jobs">← 履歴一覧へ戻る</a>
 
     <div class="d-flex gap-2 flex-wrap justify-content-end">
-      {{/* 台本に関わる操作は、台本があるときだけ出します。削除だけは常に出します —
-           台本を書く前に失敗したジョブこそ、消したいジョブだからです。 */}}
+      {{/* Script actions appear only when there is a script. Delete always appears —
+           a job that failed before writing a script is exactly the job to delete. */}}
       {{ if .HasScript }}
-      {{/* 落ちてくるのは保存済みの台本です。表を編集しただけの内容はまだ GCS に無いので、
-           手元に残したい変更があるなら先に保存してください。 */}}
+      {{/* What downloads is the stored script. Edits made only in the table are not in GCS yet, so
+           save first if there are changes you want to keep. */}}
       <a class="btn btn-outline-secondary" href="/jobs/{{ .JobID }}/script">台本JSONをダウンロード</a>
 
-      {{/* 保存と合成は 1 つの操作です。編集していなければ同じ内容を書き戻すだけなので、
-           「保存せず合成だけ」というボタンを別に置いても同じ音声しか作れません。 */}}
+      {{/* Saving and synthesis are one action. Without edits it just writes the same content back, so
+           a separate "synthesise without saving" button could only make the same audio. */}}
       <button class="btn btn-primary" type="submit" form="script-form">
         {{ if .HasAudio }}保存して音声を作り直す{{ else }}保存して音声を作成{{ end }}
       </button>
       {{ end }}
 
-      {{/* 作り直しは入力ソースが記録にあるときだけ出します。台本を上書きするので
-           確認を挟み、音声があるときは古いまま残ることも伝えます（generate は
-           台本までで、音声は作りません）。 */}}
+      {{/* Regenerate appears only when the input source is recorded. It overwrites the script, so
+           it asks for confirmation and, when there is audio, says it stays as is (generate
+           stops at the script and makes no audio). */}}
       {{ if .InputURI }}
       <form method="post" action="/jobs/{{ .JobID }}/regenerate"
             data-confirm="同じ入力から台本を作り直します。{{ if .HasScript }}いまの台本は上書きされます。{{ end }}{{ if .HasAudio }}音声は作り直されないため、古いまま残ります。{{ end }}よろしいですか？">
@@ -160,9 +160,9 @@
       </form>
       {{ end }}
 
-      {{/* 削除は確認を挟みます。成果物はプレフィックスごと消えます。
-           フォームは DELETE を出せないので、app.js の App.deleteResource が fetch で送ります
-           （CSRF はヘッダ、成功したら一覧へ）。 */}}
+      {{/* Delete asks for confirmation. The artifacts go with the whole prefix.
+           A form cannot send DELETE, so App.deleteResource in app.js sends it with fetch
+           (CSRF in a header, back to the listing on success). */}}
       <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
       <button class="btn btn-outline-danger" type="button" id="delete-job-btn"
               data-url="/jobs/{{ .JobID }}" data-redirect="/jobs"
@@ -170,12 +170,12 @@
     </div>
   </div>
 </main>
-{{/* 実行中のジョブだけ、状態が変わったかを見張ります。終わっているジョブでは
-     data-state が終了状態なので、画面側は何もしません（開くたびの 1 往復を
-     増やさないため、判断は画面側ではなくこの値で決まります）。 */}}
+{{/* Only a running job is watched for state changes. For a finished job
+     data-state is a terminal state, so the page does nothing (to avoid adding a round trip
+     on every open, the decision is made by this value, not by the page). */}}
 <div id="job-state" data-endpoint="/jobs/{{ .JobID }}" data-state="{{ .State }}" hidden></div>
-{{/* 話者ごとのスタイル対応表は data 属性で渡します。インラインスクリプトにすると
-     CSP の script-src を 'self' だけにできません。空のときは {} を入れて、
-     画面側が JSON.parse に失敗しないようにします。 */}}
+{{/* The per-speaker style table is passed in a data attribute. An inline script would
+     keep the CSP's script-src from being just 'self'. When empty it holds {}, so
+     the page does not fail JSON.parse. */}}
 <div id="voice-styles" data-styles="{{ if .StylesJSON }}{{ .StylesJSON }}{{ else }}{}{{ end }}" hidden></div>
 {{ end }}

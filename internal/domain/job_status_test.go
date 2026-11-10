@@ -6,13 +6,13 @@ import (
 	"github.com/shouni/gcp-kit/jobstatus"
 )
 
-// TestCarryFromKeepsWhatARebuildCannotKnow は、後から組み立て直しても分からない
-// 値が引き継がれることを検証します。
+// TestCarryFromKeepsWhatARebuildCannotKnow verifies that values a later rebuild cannot know
+// are carried over.
 //
-// 記録は状態が変わるたびにリクエストから組み立て直されます。synthesize は
-// モードも入力ソースもモデルも持たない（台本が既にある前提のコマンドです）ので、
-// 引き継がないと generate → synthesize と 2 段で進めたジョブだけが、
-// 「何をどう作ったか」を running を書いた時点で失います。
+// The record is rebuilt from the request at every state change. synthesize carries no mode,
+// input source or model (it is a command that assumes the script already exists), so without
+// carrying them over, only jobs that went generate → synthesize in two stages would lose
+// "what was made and how" the moment running is written.
 func TestCarryFromKeepsWhatARebuildCannotKnow(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +24,7 @@ func TestCarryFromKeepsWhatARebuildCannotKnow(t *testing.T) {
 		AIModel:   "gemini-test",
 	}
 
-	// synthesize の組み立てです。どれも持ちません。
+	// The synthesize construction. It carries none of them.
 	next := NewJobStatus(Request{
 		Command:   CommandSynthesize,
 		JobID:     "job-1",
@@ -36,20 +36,20 @@ func TestCarryFromKeepsWhatARebuildCannotKnow(t *testing.T) {
 		t.Errorf("Mode = %q, want %q", next.Mode, prev.Mode)
 	}
 	if next.InputURI != prev.InputURI {
-		t.Errorf("InputURI = %q, 作り直しの手がかりが消えます", next.InputURI)
+		t.Errorf("InputURI = %q, the handle for remaking it is lost", next.InputURI)
 	}
 	if next.AIModel != prev.AIModel {
 		t.Errorf("AIModel = %q, want %q", next.AIModel, prev.AIModel)
 	}
 	if next.AudioURI != prev.AudioURI || next.ScriptURI != prev.ScriptURI {
-		t.Errorf("成果物の在り処が消えました: %+v", next)
+		t.Errorf("the location of the artifacts was lost: %+v", next)
 	}
 }
 
-// TestCarryFromDoesNotOverwriteWhatIsKnownNow は、今回分かった値が古い記録で
-// 上書きされないことを検証します。
+// TestCarryFromDoesNotOverwriteWhatIsKnownNow verifies that values learned this time are not
+// overwritten by the old record.
 //
-// 合成し直しで在り処が変わったのに前回の値へ戻されては困ります。
+// If re-synthesis moved the location, it must not be put back to the previous value.
 func TestCarryFromDoesNotOverwriteWhatIsKnownNow(t *testing.T) {
 	t.Parallel()
 
@@ -67,12 +67,12 @@ func TestCarryFromDoesNotOverwriteWhatIsKnownNow(t *testing.T) {
 	})
 
 	if next.InputURI != "https://example.com/new" || next.Mode != "news_anchor" || next.AIModel != "gemini-new" {
-		t.Errorf("今回の値が古い記録で上書きされています: %+v", next)
+		t.Errorf("this run's values were overwritten by the old record: %+v", next)
 	}
 }
 
-// TestCarryFromTolerAtesNoPreviousRecord は、前回の記録が無くても落ちないことを
-// 検証します。最初の投入がこれです。
+// TestCarryFromTolerAtesNoPreviousRecord verifies that it does not fail without a previous
+// record. The first enqueue is exactly that case.
 func TestCarryFromToleratesNoPreviousRecord(t *testing.T) {
 	t.Parallel()
 
@@ -80,6 +80,6 @@ func TestCarryFromToleratesNoPreviousRecord(t *testing.T) {
 	next.CarryFrom(nil)
 
 	if next.JobID != "job-1" || next.State != jobstatus.StateQueued {
-		t.Errorf("記録が壊れました: %+v", next)
+		t.Errorf("the record was broken: %+v", next)
 	}
 }

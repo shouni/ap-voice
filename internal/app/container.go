@@ -1,4 +1,4 @@
-// Package app は、アプリケーションの依存関係を組み立てて保持する DI コンテナを提供します。
+// Package app provides the DI container that assembles and holds the application's dependencies.
 package app
 
 import (
@@ -17,47 +17,47 @@ import (
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
-// Container はアプリケーションの依存関係（DIコンテナ）を保持します。
+// Container holds the application's dependencies (the DI container).
 type Container struct {
 	Config *config.Config
 	// I/O and Storage
-	// Storage は GCS クライアントの寿命を持ちます。go-web-reader のように
-	// ファクトリそのものを要求する相手へ渡すために保持しています。
+	// Storage owns the GCS client's lifetime. It is kept to hand to parties that want
+	// the factory itself, such as go-web-reader.
 	Storage remoteio.Factory
-	// Store は Storage から取り出した読み書きの窓口です。
+	// Store is the read/write window taken from Storage.
 	Store remoteio.Store
-	// Speakers は使用する話者・スタイルの一覧です。assets/speakers.json を
-	// 解釈したもので、レスポンススキーマの構築と合成の両方がここを見ます。
+	// Speakers is the roster of speakers and styles in use. It is assets/speakers.json
+	// interpreted, and both the response schema construction and synthesis read it.
 	Speakers *speaker.Registry
-	// Prompt は埋め込みプロンプトの組み立てです。生成する段（worker）と、
-	// 本文を見せるカタログ（web）の両方が使います。role=both では 2 度組み立てて
-	// いたので、コンテナが 1 つ持ちます。同じ組み立てを通すことは、画面に出る
-	// ものと Gemini へ渡るものを一致させる条件でもあります。
+	// Prompt assembles the embedded prompts. Both the generating step (worker) and the
+	// catalogue that shows the text (web) use it. role=both used to build it twice,
+	// so the container holds one. Going through the same assembly is also what makes
+	// what the page shows match what reaches Gemini.
 	Prompt *adapters.PromptAdapter
-	// TaskQueue は Web 面が実行を Worker 面へ渡す口です。Worker 面では nil です。
+	// TaskQueue is how the web side hands runs to the worker side. It is nil on the worker side.
 	TaskQueue domain.TaskQueue
-	// SessionStore はログインセッションの保存先です。
+	// SessionStore is where login sessions are stored.
 	SessionStore session.Store
-	// Repository は成果物の読み出しです。履歴の表示と、保存済み台本からの合成に使います。
+	// Repository reads the artifacts. It backs the history pages and synthesis from a stored script.
 	Repository *repository.Repository
 	// External Adapters
 	HTTPClient httpkit.HTTPClient
 	Notifier   domain.Notifier
-	// JobStatus はジョブの進行状況を記録します。Web 面が queued を、
-	// Worker 面が running / succeeded / failed を書きます。
+	// JobStatus records job progress. The web side writes queued, and
+	// the worker side writes running / succeeded / failed.
 	JobStatus *jobstatus.Recorder[domain.JobStatus]
 	// Business Logic
 	Pipeline domain.Pipeline
-	// Closers は、組み立て時に開いた資源です。Container.Close がまとめて閉じます。
-	// Close が個々のフィールドを見ないのは、資源が増えたときに builder が append
-	// するだけで済ませるためです。
+	// Closers are the resources opened during assembly. Container.Close closes them all.
+	// Close does not look at individual fields so that, when a resource is added, the builder
+	// only has to append it.
 	Closers []io.Closer
 }
 
-// Close は、Container が保持するすべての外部接続リソースを安全に解放します。
+// Close safely releases every external resource the Container holds.
 //
-// エラーを返さないのは、呼び出し元が server.Run の defer 1 箇所きりで、返したところで
-// slog.Error 以外の行き先が無いためです。
+// It returns no error because its only caller is the single defer in server.Run, and a returned
+// error would have nowhere to go but slog.Error.
 func (c *Container) Close() {
 	for _, closer := range c.Closers {
 		if closer == nil {

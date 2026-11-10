@@ -6,73 +6,73 @@ import (
 	"strings"
 )
 
-// Command は、1件のリクエストにどこまでやらせるかを表します。
+// Command says how far one request should go.
 //
-// 台本生成と音声合成を別の入口にしているのは、台本が「成果物であると同時に入力でもある」
-// ためです。読みや話者を直して合成だけやり直したいことは普通に起こり、1つの入口しか
-// 無いと、そのたびに Gemini の生成からやり直すことになります。費用も待ち時間も無駄に
-// なるうえ、出力が前回と変わってしまって「直したかった1行」以外まで別物になります。
+// Script generation and speech synthesis are separate entry points because the script is "both an
+// artifact and an input". Wanting to fix a reading or a speaker and redo only the synthesis is common;
+// with a single entry point every such fix would restart from Gemini's generation. That wastes cost and
+// waiting time, and the output changes from last time, so more than "the one line to fix" becomes different.
 type Command string
 
 const (
-	// CommandGenerate は、入力ソースから台本を生成して保存します。音声は作りません。
-	// 台本を確認・修正してから合成へ進めるようにするためです。
+	// CommandGenerate generates a script from an input source and stores it. It makes no audio,
+	// so that the script can be checked and corrected before synthesis.
 	CommandGenerate Command = "generate"
-	// CommandSynthesize は、保存済みの台本から音声を作ります。台本は JobID で指します。
-	// Gemini は呼ばれません。
+	// CommandSynthesize makes audio from a stored script. The script is named by JobID.
+	// Gemini is not called.
 	CommandSynthesize Command = "synthesize"
-	// CommandGenerateAndSynthesize は、台本を作ってそのまま音声まで作ります。
+	// CommandGenerateAndSynthesize writes the script and goes straight on to the audio.
 	//
-	// 確認を省く選択です。台本を直せるようになった今、確認を挟むかどうかは
-	// 利用者が決められます。短いモード（ニュース、楽曲紹介）のように直す前提が
-	// 薄いものでは、履歴を開いてもう一度押す手間の方が大きくなります。
+	// It is the choice to skip the check. Now that scripts can be edited, the user decides whether
+	// to put a check in between. For short modes (news, music promotion) where a fix is unlikely,
+	// opening the history and pressing again costs more than it saves.
 	//
-	// 分岐は増えません。resolveScript は「synthesize 以外」を生成扱いにし、
-	// publish は「generate 以外」を音声まで作る扱いにするため、この値は
-	// 両方の望ましい側へ落ちます。
+	// It adds no branches. resolveScript treats "anything but synthesize" as generation, and
+	// publish treats "anything but generate" as going on to audio, so this value falls on the
+	// desired side of both.
 	CommandGenerateAndSynthesize Command = "generate_and_synthesize"
 )
 
-// ErrUnknownCommand は、未知の Command が指定されたことを表します。
+// ErrUnknownCommand means an unknown Command was given.
 var ErrUnknownCommand = errors.New("domain: unknown command")
 
-// Request はパイプライン実行に必要な入力パラメータを保持するモデルです。
-// Cloud Tasks のペイロード（JSON）としてそのまま流れるため、タグが投入側との契約になります。
+// Request is the model holding the input parameters a pipeline run needs.
+// It flows as the Cloud Tasks payload (JSON) as is, so its tags are the contract with the enqueuer.
 type Request struct {
-	// Command は実行する処理です。省略できません。
+	// Command is what to run. It cannot be omitted.
 	//
-	// generate は台本まで、synthesize は音声までを担当します。分けているのは、
-	// 台本が成果物であると同時に入力でもあるためです。読みや話者を直してから
-	// 合成できるようにすると、直したい 1 行のために生成をやり直さずに済みます。
+	// generate covers up to the script, synthesize up to the audio. They are split because the
+	// script is both an artifact and an input. Allowing synthesis after fixing a reading or a speaker
+	// means one line to fix does not require regenerating.
 	//
-	// 空を generate とみなさないのは、台本を持ち込んだ呼び出し側が command を
-	// 書き忘れた場合に、その台本が黙って捨てられて Gemini の生成が走ってしまう
-	// ためです（POST /jobs は JSON の script を保存してからここへ渡します）。
-	// 課金と出力の両方が変わる取り違えを、既定値で吸収する価値はありません。
+	// Empty is not taken as generate because, if a caller that supplied a script forgot to write
+	// command, the script would be silently discarded and a Gemini generation would run
+	// (POST /jobs saves the JSON script before passing it here).
+	// A mix-up that changes both the billing and the output is not worth absorbing with a default.
 	Command Command `json:"command"`
 
-	// JobID は 1 回の実行を識別します。成果物の置き場もこの ID から決まります。
-	// 発行するのは投入側（Web 面）で、Worker 面はログと通知で使うだけです。
+	// JobID identifies one run. The artifacts' location is derived from it too.
+	// The enqueuing side (web) issues it; the worker side only uses it in logs and notifications.
 	//
-	// synthesize では台本の在り処でもあります。台本そのものはここに載りません—
-	// 長い台本は Cloud Tasks の 1MB 上限に当たりうるので、投入側が先に保存して
-	// ID だけを渡します。持ち込みの台本（POST /jobs の JSON の script、画面の
-	// 「台本 JSON」タブ）も同じ経路で、保存してからこの ID で指します。
+	// For synthesize it is also where the script is. The script itself does not ride here —
+	// a long script could hit Cloud Tasks' 1MB limit, so the enqueuer saves it first and passes
+	// only the ID. A supplied script (the JSON script of POST /jobs, the page's
+	// 「台本 JSON」 tab) takes the same path: it is saved, then named by this ID.
 	JobID string `json:"job_id,omitempty"`
 
-	// InputURI は generate の入力ソース（Web URL / gs://）です。
+	// InputURI is generate's input source (a web URL / gs://).
 	InputURI string `json:"input_uri,omitempty"`
-	// OutputURI は WAV の出力先です。台本は同名の .json として隣に置かれます。
+	// OutputURI is where the WAV goes. The script sits next to it as a .json of the same name.
 	OutputURI string `json:"output_uri"`
-	// Mode は generate の台本形式（solo / dialogue / duet）です。
+	// Mode is generate's script format (solo / dialogue / duet).
 	Mode string `json:"mode,omitempty"`
-	// AIModel は generate に使う Gemini モデル名です。空なら GEMINI_MODELS の先頭を使います。
+	// AIModel is the Gemini model used for generate. Empty means the head of GEMINI_MODELS.
 	AIModel string `json:"ai_model,omitempty"`
 }
 
-// Validate は、Command と、その Command に必要なフィールドが揃っているかを確かめます。
+// Validate checks the Command and that the fields that Command needs are present.
 //
-// 揃っていない入力は何度実行しても同じように失敗するため、パイプラインへ渡す前に弾きます。
+// Incomplete input fails the same way however many times it runs, so it is rejected before reaching the pipeline.
 func (r Request) Validate() error {
 	if strings.TrimSpace(r.OutputURI) == "" {
 		return errors.New("出力先(output_uri)が指定されていません")
@@ -84,7 +84,7 @@ func (r Request) Validate() error {
 			return errors.New("入力ソース(input_uri)が指定されていません")
 		}
 	case CommandSynthesize:
-		// 台本は保存済みのものを JobID で指します。ペイロードには載りません。
+		// The script is the stored one, named by JobID. It does not ride in the payload.
 		if strings.TrimSpace(r.JobID) == "" {
 			return errors.New("台本が特定できません。保存済み台本の job_id を指定してください")
 		}

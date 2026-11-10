@@ -10,14 +10,14 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// samplePlaceholder は、詳細でプロンプトを組み立てるときの仮の入力です。
-// 実物の記事を入れる必要はありません。見せたいのは差し込み位置と指示文だからです。
+// samplePlaceholder is the stand-in input used when the detail page assembles a prompt.
+// No real article is needed: what is shown is where the input goes and the instructions.
 const samplePlaceholder = "（ここに入力ソースの本文が入ります）"
 
-// sampleRecipe は、入力の型が違うモードを組み立てるための仮のレシピです。
+// sampleRecipe is a stand-in recipe for building modes whose input type differs.
 //
-// 楽曲紹介だけは楽曲レシピ（music.Recipe）を読みます。素のテキストを渡すと
-// デコードで落ちるため、形の合う値を用意します。
+// Only the music promotion mode reads a music recipe (music.Recipe). Plain text would fail
+// to decode, so a value of the right shape is provided.
 const sampleRecipe = `{
   "title": "（曲名）", "theme": "（テーマ）", "mood": "（ムード）", "tempo": 120,
   "key": "C major", "instruments": ["（編成）"],
@@ -25,31 +25,31 @@ const sampleRecipe = `{
   "lyrics": {"hook": "（フック）", "narrative": "（物語）", "keywords": ["（キーワード）"], "lyrics": "（歌詞）"}
 }`
 
-// modesView はモード一覧に渡す値です。
+// modesView is the value passed to the mode listing.
 type modesView struct {
 	baseView
 	Modes []assets.Mode
 }
 
-// modeDetailView は 1 モードの詳細に渡す値です。
+// modeDetailView is the value passed to one mode's detail.
 type modeDetailView struct {
 	baseView
 	Mode assets.Mode
-	// Prompt は組み立て済みの本文です。失敗した場合は空になり、Error が入ります。
+	// Prompt is the assembled text. On failure it is empty and Error is set.
 	Prompt string
 	Error  string
 }
 
-// ModeDetail は、1 モードのプロンプト本文を見せます。
+// ModeDetail shows one mode's prompt text.
 //
-// 生成側と同じ組み立てを通します。共通部品も展開されるので、ここに見えている
-// ものがそのまま Gemini へ渡ります。出力が期待と違ったとき、指示文のどこが
-// そう言わせたのかを追うための画面です。
+// It goes through the same assembly as generation. Partials are expanded too, so what is
+// shown here is exactly what reaches Gemini. It is the page for tracing which part of the
+// instructions made the output differ from what was expected.
 func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "mode")
 
-	// 一覧に載っているキーだけを受け付けます。未知のキーは Generate が
-	// ErrUnknownMode で弾きますが、そこまで行くと 500 相当の見え方になります。
+	// Only keys in the listing are accepted. Generate rejects an unknown key with
+	// ErrUnknownMode, but by then it looks like a 500.
 	mode, ok := h.findMode(key)
 	if !ok {
 		http.Error(w, "そのモードはありません", http.StatusNotFound)
@@ -58,16 +58,16 @@ func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 
 	view := modeDetailView{baseView: h.base(r), Mode: mode}
 
-	// 入力の型は front matter が持っています。以前は素のテキストで試して
-	// 失敗したらレシピで試し直していましたが、当てずっぽうだと本当の失敗も
-	// 「型が違っただけ」に見えて隠れます。どちらを渡すかは最初から分かります。
+	// The input type is in the front matter. It used to try plain text and, on failure,
+	// retry with a recipe, but guessing makes a real failure look like
+	// "just the wrong type" and hides it. Which one to pass is known from the start.
 	sample := samplePlaceholder
 	if mode.NeedsRecipe() {
 		sample = sampleRecipe
 	}
 	prompt, err := h.renderer.Generate(key, sample)
 	if err != nil {
-		slog.WarnContext(r.Context(), "プロンプトの組み立てに失敗しました", "mode", key, "error", err)
+		slog.WarnContext(r.Context(), "failed to assemble the prompt", "mode", key, "error", err)
 		view.Error = err.Error()
 	}
 	view.Prompt = prompt
@@ -75,7 +75,7 @@ func (h *Handler) ModeDetail(w http.ResponseWriter, r *http.Request) {
 	h.renderTemplate(w, http.StatusOK, "mode_detail.html", &view)
 }
 
-// findMode は、キーに対応するモードを探します。
+// findMode finds the mode for a key.
 func (h *Handler) findMode(key string) (assets.Mode, bool) {
 	for _, mode := range h.modes {
 		if mode.Key == key {
@@ -85,7 +85,7 @@ func (h *Handler) findMode(key string) (assets.Mode, bool) {
 	return assets.Mode{}, false
 }
 
-// Modes は、選べる指示モードを返します。
+// Modes returns the instruction modes that can be chosen.
 func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
 	if respond.WantsJSON(w, r) {
 		modes := make([]apiMode, 0, len(h.modes))
@@ -101,7 +101,7 @@ func (h *Handler) Modes(w http.ResponseWriter, r *http.Request) {
 	h.renderTemplate(w, http.StatusOK, "modes.html", &modesView{baseView: h.base(r), Modes: h.modes})
 }
 
-// apiMode は、モード一覧の 1 件です。
+// apiMode is one entry of the mode listing.
 type apiMode struct {
 	Key       string `json:"key"`
 	Label     string `json:"label"`

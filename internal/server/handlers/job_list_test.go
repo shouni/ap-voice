@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// TestJobsCapsPerPage は、?per_page= が上限で頭打ちになることを検証します。
+// TestJobsCapsPerPage verifies that ?per_page= is capped at the bound.
 //
-// 上限が無かった頃は ?per_page=100000 がそのまま 1 クエリになり、呼び出し側の
-// 打ち間違いを倉庫が引き受けていました。画面は既定しか使わないので、
-// これが効くのは機械から叩く経路だけです。
+// Before there was a bound, ?per_page=100000 became one query as is, and the store absorbed
+// the caller's typo. The pages use only the default, so
+// this matters only on the machine path.
 func TestJobListCapsPerPage(t *testing.T) {
 	t.Parallel()
 
@@ -21,8 +21,8 @@ func TestJobListCapsPerPage(t *testing.T) {
 		{query: "", want: historyPerPage},
 		{query: "?per_page=10", want: 10},
 		{query: "?per_page=100000", want: maxPerPage},
-		// 0 以下は指定が無いのと同じ扱いです（実物は 0 以下を「全件」と読むため、
-		// 素通しすると上限を外す抜け道になります）。
+		// Zero or less is treated as not given (the real store reads zero or less as "everything",
+		// so passing it through would be a loophole around the cap).
 		{query: "?per_page=0", want: historyPerPage},
 		{query: "?per_page=-1", want: historyPerPage},
 	}
@@ -45,10 +45,10 @@ func TestJobListCapsPerPage(t *testing.T) {
 	}
 }
 
-// TestJobsFiltersByState は、?state= が絞り込みとして渡ることを検証します。
+// TestJobsFiltersByState verifies that ?state= is passed on as a filter.
 //
-// 記録には状態が入っているのに、一覧は全件しか出せませんでした。「失敗した
-// ジョブだけ」を見るのに、人が目で探すことになります。
+// The records held the state, yet the listing could only show everything. Seeing "only the failed
+// jobs" meant a person searching by eye.
 func TestJobListFiltersByState(t *testing.T) {
 	t.Parallel()
 
@@ -60,7 +60,7 @@ func TestJobListFiltersByState(t *testing.T) {
 		{query: "", wantStatus: http.StatusOK, wantOpts: 0},
 		{query: "?state=failed", wantStatus: http.StatusOK, wantOpts: 1},
 		{query: "?state=running", wantStatus: http.StatusOK, wantOpts: 1},
-		// 打ち間違いを黙って全件にしません。「失敗は無い」と読めてしまいます。
+		// A typo is not silently turned into everything. It would read as "there are no failures".
 		{query: "?state=broken", wantStatus: http.StatusBadRequest, wantOpts: 0},
 	}
 
@@ -80,7 +80,7 @@ func TestJobListFiltersByState(t *testing.T) {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
 			if repo.opts != tt.wantOpts {
-				t.Errorf("絞り込みの数 = %d, want %d", repo.opts, tt.wantOpts)
+				t.Errorf("filter count = %d, want %d", repo.opts, tt.wantOpts)
 			}
 		})
 	}

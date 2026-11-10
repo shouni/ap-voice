@@ -20,46 +20,46 @@ import (
 
 const defaultSessionName = "ap-voice-session"
 
-// AppHandlers は生成されたすべての HTTP ハンドラーを保持する構造体です。
-// server パッケージはこの構造体を受け取ってルーティングを行います。
+// AppHandlers holds every HTTP handler that was built.
+// The server package receives it and sets up routing.
 type AppHandlers struct {
-	// Auth は Google OAuth のログインとセッションを扱います。Web 面だけが持ちます。
+	// Auth handles Google OAuth login and sessions. Only the web side has it.
 	Auth *session.Handler
-	// Web は投入フォームと実行受付です。
+	// Web is the submission form and the intake of runs.
 	Web *handlers.Handler
-	// Worker は Cloud Tasks から届いた domain.Request を実行します。
-	// ペイロードのデコードとリトライ可否の判断は gcp-kit/worker が持つため、
-	// このアプリ側に HTTP を意識したコードは要りません。
+	// Worker runs the domain.Request delivered by Cloud Tasks.
+	// gcp-kit/worker owns decoding the payload and deciding whether to retry, so
+	// this app needs no HTTP-aware code for it.
 	Worker *worker.Handler[domain.Request]
-	// TaskAuth は Cloud Tasks からの OIDC を検証します。OAuth 設定を必要としないため、
-	// Web 面を持たない Worker プロセスでも構築できます。
+	// TaskAuth verifies the OIDC token from Cloud Tasks. It needs no OAuth settings, so
+	// it can be built even in a worker process that has no web side.
 	TaskAuth *oidc.Verifier
-	// M2M は、ブラウザではなく機械（MCP サーバーなど）からの OIDC を検証します。
-	// 未設定でも nil にはしません。検証が常に失敗する verifier を渡しておくと、
-	// auth.Protected はセッション認証へ落として動き続けます。
+	// M2M verifies OIDC from machines (the MCP server and so on) rather than browsers.
+	// It is not nil even when unset. Given a verifier that always fails,
+	// auth.Protected falls back to session authentication and keeps working.
 	M2M auth.Authenticator
 }
 
-// Validate は、組み立て結果が役割として筋の通った形になっていることを確かめます。
+// Validate checks that the assembled handlers make sense for the role.
 //
-// TaskAuth と Worker は「Cloud Tasks の検証」と「その先の処理」で対になっており、
-// 片方だけが nil なのは DI の不整合です。router.go は nil を見てルート登録を省くため、
-// 放置すると /tasks/generate が黙って 404 になるだけで、原因が設定なのか実装なのか
-// リクエストからは区別できません。ルーターが 404 を返す前に起動を失敗させます。
+// TaskAuth and Worker pair up as "verifying Cloud Tasks" and "what comes after it";
+// only one of them being nil is a DI inconsistency. router.go skips registering nil routes, so
+// left alone /tasks/generate would just silently 404, and the request could not tell whether
+// the cause is configuration or code. Startup fails before the router can return a 404.
 func (h *AppHandlers) Validate() error {
 	if (h.TaskAuth == nil) != (h.Worker == nil) {
-		return errors.New("TaskAuth と Worker は同時に構成する必要があります")
+		return errors.New("TaskAuth and Worker must be configured together")
 	}
-	// Web と Auth も対です。Auth が無いとフォームが認証なしで公開されます。
+	// Web and Auth are a pair too. Without Auth the form would be public without authentication.
 	if (h.Auth == nil) != (h.Web == nil) {
-		return errors.New("認証ハンドラーと Web ハンドラーは同時に構成する必要があります")
+		return errors.New("the auth handler and the web handler must be configured together")
 	}
 	return nil
 }
 
-// BuildHandlers は各ハンドラーの依存関係を SERVER_ROLE に応じて組み立て、
-// AppHandlers 構造体を返します。担当しない面のハンドラーは nil のままにし、
-// router 側でルート登録ごと省かれるようにします。
+// BuildHandlers assembles each handler's dependencies according to SERVER_ROLE and returns
+// the AppHandlers. Handlers for sides this process does not serve stay nil, so
+// the router skips registering their routes altogether.
 func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 	h := &AppHandlers{}
 	role := appCtx.Config.Server.Role
@@ -71,11 +71,11 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 	}
 
 	if role.ServesWorker() {
-		// audience と許可する caller SA の両方が揃わないと検証は常に失敗する
-		// （fail-closed）ため、起動時に構成を確かめておきます。
+		// Verification always fails (fail-closed) unless both the audience and the allowed caller SAs
+		// are present, so the configuration is checked at startup.
 		taskAuth, err := oidc.New(appCtx.Config.Tasks.TaskAudienceURL, appCtx.Config.Tasks.AllowedServiceAccounts)
 		if err != nil {
-			return nil, fmt.Errorf("タスク受信の OIDC 検証を構成できません: TASK_AUDIENCE_URL と ALLOWED_TASK_SERVICE_ACCOUNTS が必要です: %w", err)
+			return nil, fmt.Errorf("cannot configure OIDC verification for incoming tasks; TASK_AUDIENCE_URL and ALLOWED_TASK_SERVICE_ACCOUNTS are required: %w", err)
 		}
 		h.TaskAuth = taskAuth
 		h.Worker = worker.NewHandler[domain.Request](appCtx.Pipeline)
@@ -88,24 +88,24 @@ func BuildHandlers(appCtx *app.Container) (*AppHandlers, error) {
 	return h, nil
 }
 
-// buildWebHandlers は Web 面（OAuth と投入フォーム）のハンドラーを組み立てます。
+// buildWebHandlers builds the web side's handlers (OAuth and the submission form).
 func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 	authHandler, err := createAuthHandler(appCtx.Config, appCtx.SessionStore)
 	if err != nil {
-		return fmt.Errorf("認証ハンドラーの初期化に失敗しました: %w", err)
+		return fmt.Errorf("failed to initialize the auth handler: %w", err)
 	}
 
 	tmpl, err := assets.ParsePages()
 	if err != nil {
-		return fmt.Errorf("テンプレートの読み込みに失敗しました: %w", err)
+		return fmt.Errorf("failed to load the templates: %w", err)
 	}
 
-	// フォームの選択肢は生成時と同じ埋め込みから取ります。別の一覧を持つと、
-	// 画面に出したモードが worker に無い、という食い違いが起こり得ます。
-	// 表示名と説明も同じファイルの front matter から来ます。
+	// The form's options come from the same embedding as generation. With a separate list,
+	// a mode shown on the page might not exist on the worker.
+	// Display names and descriptions come from the same files' front matter too.
 	modes, err := assets.LoadModes()
 	if err != nil {
-		return fmt.Errorf("生成モードの読み込みに失敗しました: %w", err)
+		return fmt.Errorf("failed to load the generation modes: %w", err)
 	}
 
 	webHandler, err := handlers.NewHandler(handlers.HandlerOptions{
@@ -118,23 +118,23 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 		Repo:        appCtx.Repository,
 		Signer:      appCtx.Store,
 		Speakers:    appCtx.Speakers,
-		// カタログでプロンプト本文を見せるのに、生成側と同じ組み立てを渡します。
-		// 別に持つと、画面に出るものと実際に渡すものがずれます。
+		// To show the prompt text in the catalogue, it is given the same assembly as generation.
+		// A separate one would let what the page shows drift from what is actually sent.
 		Renderer:  appCtx.Prompt,
 		Reading:   adapters.NewReadingAdapter(),
 		JobStatus: appCtx.JobStatus,
 	})
 	if err != nil {
-		return fmt.Errorf("投入フォームのハンドラー初期化に失敗しました: %w", err)
+		return fmt.Errorf("failed to initialize the submission form handler: %w", err)
 	}
 
-	// audience は自分自身の公開 URL です。呼び出し側は「この URL 宛て」の
-	// トークンを取るため、ここがずれると全て 401 になります。
-	// 機械からの呼び出しは任意です。未設定なら方式ごと外し、auth.Protected に
-	// 飛ばさせます（nil の Authenticator は走査されません）。
+	// The audience is this service's own public URL. Callers fetch a token "addressed to this URL",
+	// so if it drifts, everything becomes 401.
+	// Machine calls are optional. When unset, the method is dropped altogether and auth.Protected
+	// skips it (a nil Authenticator is not iterated).
 	var m2m auth.Authenticator
 	if v, err := oidc.New(appCtx.Config.Server.ServiceURL, appCtx.Config.Auth.AllowedM2MServiceAccounts); err != nil {
-		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS が未設定のため、API は機械からの呼び出しを受け付けません。", "reason", err)
+		slog.Info("ALLOWED_M2M_SERVICE_ACCOUNTS is unset, so the API does not accept machine calls", "reason", err)
 	} else {
 		m2m = v
 	}
@@ -145,7 +145,7 @@ func buildWebHandlers(appCtx *app.Container, h *AppHandlers) error {
 	return nil
 }
 
-// createAuthHandler は、Google OAuth の認証ハンドラーを初期化します。
+// createAuthHandler initialises the Google OAuth authentication handler.
 func createAuthHandler(cfg *config.Config, store session.Store) (*session.Handler, error) {
 	return session.New(session.Config{
 		ClientID:       cfg.Auth.GoogleClientID,
@@ -156,9 +156,9 @@ func createAuthHandler(cfg *config.Config, store session.Store) (*session.Handle
 		AllowedEmails:  cfg.Auth.AllowedEmails,
 		AllowedDomains: cfg.Auth.AllowedDomains,
 	},
-		// このアプリだけ /auth/logout を公開しています。prompt を渡さないと、
-		// ログアウト直後にログイン画面へ送られた時点で Google が何も聞かずに承認を返し、
-		// 利用者は元のログイン状態に戻ります（共用端末で「ログアウト」が効きません）。
+		// Only this app exposes /auth/logout. Without passing prompt, right after logging out and
+		// being sent to the login page, Google approves without asking anything and
+		// the user is back in their previous session (on a shared device "log out" does not work).
 		session.WithPrompt(session.PromptSelectAccount),
 	)
 }

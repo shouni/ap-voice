@@ -1,8 +1,8 @@
-// 全画面共通のユーティリティと振る舞いです。layout.html が defer で最初に読み込むため
-// （defer は記述順を保つ）、ここで定義したものはページ個別のスクリプトから同期的に使えます。
+// Utilities and behaviour shared by every page. layout.html loads this first with defer
+// (defer keeps document order), so what is defined here can be used synchronously by the page scripts.
 //
-// ここに置くのは、どの画面にもありうるものだけです。画面が 1 つしか使わないものは
-// ページ個別のスクリプトへ置いてください（対応は handlers の pageScripts）。
+// Only what any page might have belongs here. Something only one page uses goes in
+// that page's script (the mapping is pageScripts in handlers).
 window.App = window.App || {};
 
 (() => {
@@ -10,17 +10,17 @@ window.App = window.App || {};
 
     const App = window.App;
 
-    // csrfToken は、画面に埋まっているトークンを返します。
+    // csrfToken returns the token embedded in the page.
     //
-    // 1 つの画面に複数のフォームがありますが、値はセッションから来る同じものなので
-    // 最初に見つかったもので足ります。フォームの id を JS 側が知る必要はありません。
+    // A page has several forms, but the value comes from the session and is the same, so
+    // the first one found is enough. The JS need not know the forms' ids.
     App.csrfToken = () => document.querySelector('input[name="csrf_token"]')?.value || '';
 
-    // 送信前の確認は data-confirm で宣言します。onsubmit 属性のままだと CSP の
-    // script-src に 'unsafe-inline' が必要になり、インラインスクリプト禁止が無意味になります。
+    // Confirmation before submit is declared with data-confirm. An onsubmit attribute would need
+    // 'unsafe-inline' in the CSP's script-src, making the ban on inline scripts meaningless.
     //
-    // 画面ごとに書かないのは、取り返しの付かない操作が増えるたびに同じ数行を写すことに
-    // なるからです。宣言はテンプレート側の属性 1 つで済みます。
+    // It is not written per page because every new irreversible operation would copy the same few
+    // lines. The declaration is a single attribute in the template.
     document.addEventListener('submit', (event) => {
         const form = event.target.closest('form[data-confirm]');
         if (form && !window.confirm(form.dataset.confirm)) {
@@ -28,10 +28,10 @@ window.App = window.App || {};
         }
     });
 
-    // deleteResource は、確認を挟んで DELETE を送り、成功したら遷移します。
+    // deleteResource asks for confirmation, sends DELETE, and navigates on success.
     //
-    // HTML のフォームは DELETE を出せないため、削除だけは fetch です。画面用に
-    // POST …/delete を別に持つと同じ削除が 2 本になり、認可やログの入口が分かれます。
+    // HTML forms cannot send DELETE, so deletion alone uses fetch. Having a separate
+    // POST …/delete for the page would make two of the same deletion, splitting the entry points for authorization and logging.
     App.deleteResource = async ({url, confirmMessage, redirect, failureMessage = '削除に失敗しました。'}) => {
         if (!window.confirm(confirmMessage)) {
             return false;
@@ -57,7 +57,7 @@ window.App = window.App || {};
         }
     };
 
-    // data-url を持つ削除ボタンは、宣言だけで動きます（テンプレート側は属性 3 つ）。
+    // A delete button with data-url works by declaration alone (three attributes in the template).
     document.addEventListener('click', (event) => {
         const button = event.target.closest('button[data-url][data-confirm]');
         if (!button) return;

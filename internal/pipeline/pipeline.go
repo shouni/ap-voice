@@ -11,24 +11,24 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// Runner は、台本生成と音声合成のワーカー本体です。
+// Runner is the worker that generates scripts and synthesises audio.
 //
-// ジョブの一生（再配信ガード → 検証 → 実行 → 結末の記録）は gcp-kit/worker.Lifecycle が
-// 持ち、ここはそれぞれの中身だけを渡します（public-docs のワーカー規約）。
+// A job's life (redelivery guard → validation → execution → recording the outcome) is owned by
+// gcp-kit/worker.Lifecycle; this only supplies what goes in each stage (public-docs worker conventions).
 type Runner struct {
-	// generate は台本を作る工程、publish は保存と合成の工程です。
+	// generate is the step that writes the script, publish the step that stores and synthesises.
 	generate Step
 	publish  Step
 	notifier domain.Notifier
-	// scripts は保存済み台本の読み出しです。synthesize の LoadScriptStep が使います。
+	// scripts reads stored scripts. synthesize's LoadScriptStep uses it.
 	scripts domain.ScriptStore
-	// status はジョブの進行状況です。nil でも動きます（記録しないだけ）。
+	// status is the job's progress. It works when nil (it just records nothing).
 	status *jobstatus.Recorder[domain.JobStatus]
-	// timeout はジョブ 1 件の実行時間の上限です。0 以下は無制限を意味します。
+	// timeout is the cap on one job's run time. Zero or less means unlimited.
 	timeout time.Duration
 }
 
-// NewRunner は、Runner を生成します。
+// NewRunner creates a Runner.
 func NewRunner(generate, publish Step, notifier domain.Notifier, scripts domain.ScriptStore, status *jobstatus.Recorder[domain.JobStatus], timeout time.Duration) *Runner {
 	return &Runner{
 		generate: generate,
@@ -40,8 +40,8 @@ func NewRunner(generate, publish Step, notifier domain.Notifier, scripts domain.
 	}
 }
 
-// planner は、コマンドから工程列を決める Planner です。テストが Runner を
-// 構造体リテラルで組むので、構築時ではなく呼ばれるたびに組みます。
+// planner is the Planner that maps a command to steps. Tests build the Runner as a
+// struct literal, so it is built on every call rather than at construction.
 func (p *Runner) planner() Planner {
 	return DefaultPlanner{
 		Generate: p.generate,
@@ -50,25 +50,25 @@ func (p *Runner) planner() Planner {
 	}
 }
 
-// runResult は、実行本体が結末の記録へ渡すものです。
+// runResult is what the execution hands to the outcome recording.
 type runResult struct {
 	script    domain.Script
 	publicURL string
 }
 
-// Execute は worker.TaskExecutor を満たします。
+// Execute satisfies worker.TaskExecutor.
 func (p *Runner) Execute(ctx context.Context, req domain.Request) error {
 	return p.lifecycle().Execute(ctx, req)
 }
 
-// lifecycle は、ジョブの一生の各段にこのアプリの中身を当てはめます。
+// lifecycle fills each stage of a job's life with this app's logic.
 func (p *Runner) lifecycle() worker.Lifecycle[domain.Request, runResult] {
 	return worker.Lifecycle[domain.Request, runResult]{
 		Labels: func(req domain.Request) map[string]string {
 			return map[string]string{"job_id": req.JobID, "command": string(req.Command)}
 		},
 		Begin: p.begin,
-		// 依頼そのものが不正なら、配り直しても同じ行で落ちます（Lifecycle が Permanent に包みます）。
+		// If the request itself is invalid, redelivery fails on the same line (Lifecycle wraps it in Permanent).
 		Validate: func(req domain.Request) error { return req.Validate() },
 		Run:      p.run,
 		Finish:   p.finish,
@@ -76,14 +76,14 @@ func (p *Runner) lifecycle() worker.Lifecycle[domain.Request, runResult] {
 	}
 }
 
-// begin は、そのジョブが既に完了していれば true を返し、未完了なら処理開始を記録して
-// false を返します。判定と記録を前回の記録の 1 回の読みで行うので、間に別の配信が
-// 割り込む隙がありません。試行回数はここで 1 つ進みます（2 以上なら再配信されたということです）。
+// begin returns true if the job is already complete; otherwise it records the start and
+// returns false. Deciding and recording use a single read of the previous record, so no other
+// delivery can slip in between. The attempt count advances by one here (2 or more means it was redelivered).
 //
-// 状態を読めなかった場合はエラーを返し、記録もしません。「未完了」に倒すと完了済みの
-// ジョブを作り直してこのガードが防ぐはずの時間を自分で使い、「完了済み」に倒すと未完了の
-// ジョブがタスクごと ACK されて二度と実行されません。どちらへも倒さず、失敗を人に
-// 知らせてから判断を呼び出し側へ返します。
+// If the state cannot be read, it returns an error and records nothing. Falling to "incomplete"
+// would remake a finished job and spend the very time this guard exists to save; falling to "complete"
+// would ACK an unfinished job with its task so it never runs again. It falls to neither: it tells a
+// person about the failure and returns the decision to the caller.
 func (p *Runner) begin(ctx context.Context, req domain.Request) (bool, error) {
 	if p.status == nil || req.JobID == "" {
 		return false, nil
@@ -95,14 +95,14 @@ func (p *Runner) begin(ctx context.Context, req domain.Request) (bool, error) {
 			next.CarryFrom(prev)
 		})
 	if err != nil {
-		err = fmt.Errorf("ジョブ状態を読めないため実行を見送ります (%s): %w", req.JobID, err)
+		err = fmt.Errorf("skipping the run because the job state cannot be read (%s): %w", req.JobID, err)
 		p.notifyFailure(ctx, req, err)
 		return false, err
 	}
 	return done, nil
 }
 
-// run は、Command に対応する工程列を順に実行します。
+// run executes the steps for the Command in order.
 func (p *Runner) run(ctx context.Context, req domain.Request) (runResult, error) {
 	steps, err := p.planner().Plan(req)
 	if err != nil {
@@ -118,14 +118,14 @@ func (p *Runner) run(ctx context.Context, req domain.Request) (runResult, error)
 	return runResult{script: sc.Script, publicURL: sc.PublicURL}, nil
 }
 
-// finish は、結末を記録して通知します。成功も失敗も同じ経路で、記録 → 通知の順です。
-// 呼び出し元の context からは Lifecycle が切り離してくれます。
+// finish records the outcome and notifies. Success and failure take the same path: record, then notify.
+// Lifecycle detaches it from the caller's context.
 func (p *Runner) finish(ctx context.Context, req domain.Request, result runResult, cause error) error {
 	if cause != nil {
 		p.record(ctx, req, jobstatus.StateFailed, func(next, prev *domain.JobStatus) {
 			next.Error = cause.Error()
-			// 前回までの成果物は残ります。合成に失敗しても台本は既に
-			// 保存されているので、在り処を消すと詳細画面からやり直せません。
+			// Earlier artifacts remain. Even when synthesis fails, the script is already
+			// stored, so clearing the location would make it impossible to retry from the detail page.
 			next.CarryFrom(prev)
 		})
 		p.notifyFailure(ctx, req, cause)
@@ -136,9 +136,9 @@ func (p *Runner) finish(ctx context.Context, req domain.Request, result runResul
 		next.Title = result.script.Title
 		next.CarryFrom(prev)
 
-		// 成果物の在り処を状態に載せます。「できた」だけでは、投入した側が
-		// 音声へ辿り着けません。台本はどの経路でも保存され、音声は publish が
-		// 作ったときだけです（generate は台本までで終わります）。
+		// The artifact locations go on the state. "Done" alone does not let the enqueuer
+		// reach the audio. The script is stored on every path, the audio only when publish
+		// made it (generate ends at the script).
 		layout := domain.NewStorageLayout()
 		next.ScriptURI = layout.ScriptURIFor(req.OutputURI)
 		if req.Command != domain.CommandGenerate {
@@ -149,8 +149,8 @@ func (p *Runner) finish(ctx context.Context, req domain.Request, result runResul
 	return nil
 }
 
-// record は、ジョブの状態を書きます。記録の失敗で処理は止めません—
-// 状態は進行を知るためのもので、成果物より重くはありません。
+// record writes the job state. A failed write does not stop processing —
+// the state is for following progress and weighs less than the artifacts.
 func (p *Runner) record(ctx context.Context, req domain.Request, state jobstatus.State, apply ...func(next, prev *domain.JobStatus)) {
 	if p.status == nil || req.JobID == "" {
 		return

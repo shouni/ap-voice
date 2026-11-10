@@ -17,46 +17,46 @@ import (
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
-// テンプレートは実行時にしか評価されないため、参照している値の名前が変わっても
-// コンパイルは通ります。画面を開くまで壊れたと分からないのがテンプレートの弱点で、
-// ナビの重複や CSRF の hidden 欠落は実際にデプロイ後に見つかりました。
+// Templates are evaluated only at run time, so the code still compiles when the name of a value
+// they reference changes. Not knowing it is broken until the page is opened is their weak spot;
+// a duplicated nav and a missing CSRF hidden field were actually found after deploying.
 //
-// ここでは builder と同じ組み立て方で読み、ハンドラーが渡すのと同じ型を流します。
-// map で流すと存在しないキーが "<no value>" になって素通りするため、
-// 必ず本物の View 構造体を使います。それがフィールド名の改名を検知する条件です。
+// Here they are read the same way the builder does, and the same types the handlers pass are fed in.
+// Fed a map, a missing key becomes "<no value>" and slips through, so
+// the real View structs are always used. That is what makes a renamed field detectable.
 
-// parseTemplates は builder/handlers.go と同じ手順でテンプレートを読みます。
-// 画面ごとに独立したセットになります（キーは "history.html" などのファイル名）。
+// parseTemplates reads the templates the same way builder/handlers.go does.
+// Each page becomes an independent set (keyed by file name, such as "history.html").
 func parseTemplates(t *testing.T) map[string]*template.Template {
 	t.Helper()
 
 	pages, err := assets.ParsePages()
 	if err != nil {
-		t.Fatalf("テンプレートの読み込みに失敗しました: %v", err)
+		t.Fatalf("failed to load the templates: %v", err)
 	}
 	return pages
 }
 
-// testBaseView は全画面共通の値です。ナビが .Path と .DefaultModel を見ます。
+// testBaseView holds the values every page shares. The nav reads .Path and .DefaultModel.
 func testBaseView(path string) baseView {
 	return baseView{CSRFToken: "test-csrf-token", Path: path, DefaultModel: "gemini-test"}
 }
 
-// testModes はフォームに出すモードです。表示名を持つものと持たないものを 1 つずつ
-// 混ぜて、front matter が無いプロンプトでも選択肢が消えないことを見ます。
+// testModes are the modes shown on the form. One with a display name and one without are mixed
+// in, to check that a prompt without front matter does not drop out of the options.
 func testModes() []assets.Mode {
 	return []assets.Mode{
 		{Key: "promo",
 			Label:     "楽曲紹介（春日部つむぎ × ずんだもん）",
 			Direction: "楽曲レシピから作る宣伝ナレーション",
 			UseWhen:   "recipe.json のとき",
-			// 入力の型がタブを決めます。promo だけがレシピ入力です。
+			// The input type decides the tab. Only promo takes a recipe.
 			Input: assets.InputRecipe},
 		{Key: "solo"},
 	}
 }
 
-// TestTemplatesRender は、3 画面が実際の View 構造体で描画できることを検証します。
+// TestTemplatesRender verifies that the 3 pages render with the real View structs.
 func TestTemplatesRender(t *testing.T) {
 	t.Parallel()
 
@@ -71,15 +71,15 @@ func TestTemplatesRender(t *testing.T) {
 		name     string
 		template string
 		view     any
-		// want は必ず出ていてほしい断片です。描画できるだけでは、値が
-		// 抜け落ちた画面を通してしまいます。
+		// want are fragments that must appear. Merely rendering would let a page
+		// with missing values through.
 		want []string
-		// notWant は出てはいけない断片です。存在しないフォームを指すボタンは
-		// 描画としては成功するので、出ていないことを言わないと拾えません。
+		// notWant are fragments that must not appear. A button pointing at a form that does not exist
+		// renders successfully, so it is caught only by saying it must be absent.
 		notWant []string
 	}{
 		{
-			name:     "投入フォーム",
+			name:     "submission form",
 			template: "home.html",
 			view: formView{
 				baseView:    testBaseView("/"),
@@ -87,8 +87,8 @@ func TestTemplatesRender(t *testing.T) {
 				RecipeModes: assets.FilterModes(testModes(), assets.InputRecipe),
 				Models:      []string{"gemini-test"},
 				Message:     "受け付けました",
-				// 投入後の再描画では入力内容が残ります。空に戻すと
-				// 同じソースから作り直すのに URL を貼り直すことになります。
+				// On re-render after submission the input stays. Clearing it would mean pasting
+				// the URL again to make another one from the same source.
 				Form: domain.Request{
 					Command:  domain.CommandGenerate,
 					InputURI: "gs://bucket/recipe.json",
@@ -99,17 +99,17 @@ func TestTemplatesRender(t *testing.T) {
 			want: []string{
 				`value="test-csrf-token"`,
 				`value="gs://bucket/recipe.json"`,
-				// 選択肢の表示名と説明は front matter 由来です。
+				// The options' display names and descriptions come from the front matter.
 				"楽曲紹介",
 				`data-usewhen="recipe.json のとき"`,
-				// 表示名が無いモードはキーで出ます（説明の書き忘れで消えない）。
+				// A mode without a display name shows by its key (a forgotten description does not make it vanish).
 				">solo<",
 				`value="gemini-test" selected`,
 				"受け付けました",
 			},
 		},
 		{
-			name:     "履歴一覧",
+			name:     "history listing",
 			template: "history.html",
 			view: historyView{
 				baseView: testBaseView("/jobs"),
@@ -118,29 +118,29 @@ func TestTemplatesRender(t *testing.T) {
 				Jobs: []repository.Job{
 					{ID: "voice-1", Title: "一覧のタイトル", CreatedAt: time.Now(), HasAudio: true,
 						State: jobstatus.StateSucceeded},
-					// 台本が読めなかった場合はジョブ ID が題名に入ります。
+					// When the script could not be read, the job ID goes in the title.
 					{ID: "voice-2", Title: "voice-2", CreatedAt: time.Now(), HasAudio: false,
 						State: jobstatus.StateFailed},
-					// 実行中は「台本のみ」と見分けが付かなければなりません。
+					// A running job must be distinguishable from "script only".
 					{ID: "voice-3", Title: "実行中のジョブ", CreatedAt: time.Now(),
 						State: jobstatus.StateRunning},
 				},
 			},
 			want: []string{
 				"一覧のタイトル", "voice-2",
-				// 絞り込みはページ送りへ持ち回します。外れると 2 ページ目で全件に戻り、
-				// 絞ったはずの一覧が黙って広がります。
+				// The filter carries over to the pager. If it dropped, page 2 would go back to everything,
+				// and a filtered listing would silently widen.
 				`href="/jobs?page=1&amp;state=failed"`,
 				`href="/jobs?state=failed"`,
-				// 状態は成果物の有無より先に出ます。待てば出るのか、
-				// 消してやり直すのかが一覧で分かる必要があります。
+				// The state comes before artifact presence. The listing has to show whether to wait
+				// or to delete and retry.
 				">音声あり<", ">失敗<", ">実行中<",
-				// ページ送りは 2 ページ以上のときだけ出ます。
+				// The pager appears only with 2 or more pages.
 				`href="/jobs?page=3&amp;state=failed"`, "全 120 件",
 			},
 		},
 		{
-			name:     "詳細（音声あり）",
+			name:     "detail (with audio)",
 			template: "detail.html",
 			view: detailView{
 				baseView:   testBaseView("/jobs/voice-1"),
@@ -158,29 +158,29 @@ func TestTemplatesRender(t *testing.T) {
 				"このジョブを削除",
 				"履歴一覧へ戻る",
 				`src="/jobs/voice-1/audio"`,
-				// 台本は読むだけでなく直せます。
+				// The script can be fixed, not just read.
 				`action="/jobs/voice-1/synthesize"`,
 				`name="title"`,
 				`<textarea class="form-control form-control-sm js-text" name="text"`,
 				`<option value="四国めたん"`,
-				// 保存済みのスタイルは選ばれた状態で戻ること。
+				// The stored style comes back selected.
 				`data-selected="ノーマル"`,
 				"こんにちはなのだ",
-				// 読みの確認は、直している最中に使えなければ意味がありません。
-				// 送り先はルーターが登録しているパスと一致している必要があります。
+				// Reading checks are pointless unless usable while editing.
+				// The target must match the path the router registers.
 				`data-endpoint="/reading/preview"`,
 				"js-reading",
-				// 実行中のジョブを見張る先も同じで、ルーターの登録と一致が要ります。
+				// The same goes for watching a running job; it must match the router's registration.
 				`data-endpoint="/jobs/voice-1"`,
 				`data-state="succeeded"`,
-				// 行の操作。順序は台本そのものなので、本文の切り貼りでは直せません。
+				// Line operations. The order is the script itself, so cutting and pasting text cannot fix it.
 				"js-move-up", "js-move-down", "js-add-row", "js-remove-row",
-				// 行数の上限はサーバーの値を渡します（画面側に写さないため）。
+				// The line cap is passed from the server (so it is not copied into the page).
 				`data-max-lines="200"`,
 			},
 		},
 		{
-			name:     "詳細（音声なし）",
+			name:     "detail (no audio)",
 			template: "detail.html",
 			view: detailView{
 				baseView:  testBaseView("/jobs/voice-2"),
@@ -191,14 +191,14 @@ func TestTemplatesRender(t *testing.T) {
 				Speakers:  []string{"ずんだもん"},
 			},
 			want: []string{"保存して音声を作成"},
-			// 入力ソースの記録が無いジョブ（持ち込みの台本）では、作り直しは
-			// 押しても必ず失敗するのでボタンごと出しません。
+			// For a job with no recorded input source (a supplied script), regenerating
+			// always fails, so the button is not shown at all.
 			notWant: []string{"同じ入力で台本を作り直す"},
 		},
 		{
-			// 台本を書く前に失敗したジョブです。この画面が開かないと、履歴に
-			// 並んだまま消せません（削除はここからしかできません）。
-			name:     "詳細（台本なし・失敗）",
+			// A job that failed before writing a script. If this page did not open, it would sit in the
+			// history undeletable (deletion is possible only from here).
+			name:     "detail (no script, failed)",
 			template: "detail.html",
 			view: detailView{
 				baseView: testBaseView("/jobs/voice-3"),
@@ -210,17 +210,17 @@ func TestTemplatesRender(t *testing.T) {
 			},
 			want: []string{
 				"このジョブは失敗しました",
-				// 失敗の理由が人の目に触れるのは、Slack 通知を除けばここだけです。
+				// Apart from the Slack notification, this is the only place a person sees why it failed.
 				"AIモデルが空のスクリプトを返しました",
 				"台本はまだありません",
 				"このジョブを削除",
-				// 何を読ませたかは記録にあります。貼り直させる理由がありません。
+				// What was read is in the record. There is no reason to make anyone paste it again.
 				"同じ入力で台本を作り直す",
 				`action="/jobs/voice-3/regenerate"`,
 				"https://example.com/article",
 			},
-			// 直す台本が無いので、保存も合成も読みの確認もできません。ボタンだけ残すと、
-			// 押しても何も起きない（指す先のフォームや行が無い）ものが並びます。
+			// There is no script to fix, so neither saving, synthesis nor reading checks are possible. Leaving the
+			// buttons would line up things that do nothing when pressed (the form or rows they point at are missing).
 			notWant: []string{"保存して音声", "台本JSONをダウンロード", "読みを確認"},
 		},
 	}
@@ -233,35 +233,35 @@ func TestTemplatesRender(t *testing.T) {
 
 			var buf strings.Builder
 			if err := renderInto(&buf, tmpl, tt.template, tt.view); err != nil {
-				t.Fatalf("%s の描画に失敗しました: %v", tt.template, err)
+				t.Fatalf("failed to render %s: %v", tt.template, err)
 			}
 
 			got := buf.String()
 			for _, want := range tt.want {
 				if !strings.Contains(got, want) {
-					t.Errorf("%s に %q が含まれていません", tt.template, want)
+					t.Errorf("%s does not contain %q", tt.template, want)
 				}
 			}
 			for _, notWant := range tt.notWant {
 				if strings.Contains(got, notWant) {
-					t.Errorf("%s に %q が残っています", tt.template, notWant)
+					t.Errorf("%s still contains %q", tt.template, notWant)
 				}
 			}
 		})
 	}
 }
 
-// optionPattern は、指定した value を持つ <option> の開始タグを取り出します。
-// 属性は複数行に分かれて出るため、行をまたいで拾います。
+// optionPattern extracts the opening tag of the <option> with the given value.
+// The attributes are split across lines, so it matches across lines.
 func optionPattern(value string) *regexp.Regexp {
 	return regexp.MustCompile(`(?s)<option value="` + regexp.QuoteMeta(value) + `".*?>`)
 }
 
-// TestFormKeepsSelectedMode は、投入済みのモードが選択された状態で戻ることを検証します。
+// TestFormKeepsSelectedMode verifies that the submitted mode comes back selected.
 //
-// 選択肢の中身が front matter 由来になったことで、value（キー）と表示名が別物に
-// なりました。selected が付くのはキーの一致で決まるので、表示名を変えても
-// 選択状態が外れないことをここで押さえます。
+// Now that the options come from the front matter, the value (key) and the display name are
+// different things. selected is decided by matching the key, so this pins that changing the
+// display name does not drop the selection.
 func TestFormKeepsSelectedMode(t *testing.T) {
 	t.Parallel()
 
@@ -276,23 +276,23 @@ func TestFormKeepsSelectedMode(t *testing.T) {
 		Form:        domain.Request{Command: domain.CommandGenerate, Mode: "promo"},
 	})
 	if err != nil {
-		t.Fatalf("home.html の描画に失敗しました: %v", err)
+		t.Fatalf("failed to render home.html: %v", err)
 	}
 
 	got := buf.String()
 	if tag := optionPattern("promo").FindString(got); !strings.Contains(tag, "selected") {
-		t.Errorf("promo が選択されていません: %q", tag)
+		t.Errorf("promo is not selected: %q", tag)
 	}
 	if tag := optionPattern("solo").FindString(got); strings.Contains(tag, "selected") {
-		t.Errorf("solo まで選択されています: %q", tag)
+		t.Errorf("solo is selected too: %q", tag)
 	}
 }
 
-// TestTemplatesIncludeCSRFTokenInForms は、POST するフォームすべてに
-// CSRF トークンの hidden があることを検証します。
+// TestTemplatesIncludeCSRFTokenInForms verifies that every form that POSTs has a CSRF
+// token hidden field.
 //
-// 1 つでも欠けるとその操作だけが「不正なCSRFトークン」で弾かれ、しかも
-// 画面は正常に見えるため気付きにくい。実際に投入フォームで踏みました。
+// Missing even one makes only that operation get rejected with 「不正なCSRFトークン」, and the
+// page looks normal, so it is hard to notice. It actually happened on the submission form.
 func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 	t.Parallel()
 
@@ -322,22 +322,22 @@ func TestTemplatesIncludeCSRFTokenInForms(t *testing.T) {
 
 			var buf strings.Builder
 			if err := renderInto(&buf, tmpl, name, view); err != nil {
-				t.Fatalf("%s の描画に失敗しました: %v", name, err)
+				t.Fatalf("failed to render %s: %v", name, err)
 			}
 
 			got := buf.String()
-			// method="post" の数だけ hidden が要ります。fetch で DELETE を送る削除ボタンの
-			// ぶんが 1 つ余ることはあります（フォームの外に置いた hidden を読むため）。
+			// One hidden field is needed per method="post". There may be one extra for the delete button
+			// that sends DELETE through fetch (it reads a hidden field placed outside the forms).
 			if forms, tokens := strings.Count(got, `method="post"`), strings.Count(got, `name="csrf_token"`); tokens < forms {
-				t.Errorf("%s: POST フォーム %d 件に対し csrf_token は %d 件です", name, forms, tokens)
+				t.Errorf("%s: %d POST forms but %d csrf_token fields", name, forms, tokens)
 			}
 		})
 	}
 }
 
-// TestNavHighlightsCurrentPage は、ナビの現在地が .Path で切り替わることを検証します。
-// ナビは 3 画面で共有しており、以前は各ファイルに写していたため
-// ホームだけ履歴リンクが欠けるという食い違いが起きました。
+// TestNavHighlightsCurrentPage verifies that the nav's current location switches with .Path.
+// The nav is shared by 3 pages; it used to be copied into each file,
+// which led to the home page alone missing the history link.
 func TestNavHighlightsCurrentPage(t *testing.T) {
 	t.Parallel()
 
@@ -349,29 +349,29 @@ func TestNavHighlightsCurrentPage(t *testing.T) {
 
 			var buf strings.Builder
 			if err := tmpl["home.html"].ExecuteTemplate(&buf, "nav", testBaseView(path)); err != nil {
-				t.Fatalf("ナビの描画に失敗しました: %v", err)
+				t.Fatalf("failed to render the nav: %v", err)
 			}
 
 			got := buf.String()
-			// どの画面からでも両方のリンクが出ていること。
+			// Both links appear from every page.
 			if !strings.Contains(got, `href="/"`) || !strings.Contains(got, `href="/jobs"`) {
-				t.Errorf("ナビにリンクが揃っていません: %s", got)
+				t.Errorf("the nav is missing links: %s", got)
 			}
 			if want := `href="` + path + `"`; !strings.Contains(got, `aria-current="page" `+want) {
-				t.Errorf("現在地 %s が強調されていません", path)
+				t.Errorf("current location %s is not highlighted", path)
 			}
 		})
 	}
 }
 
-// TestDetailAlwaysEmitsParsableStyles は、話者→スタイルの対応表が空でも
-// 画面側が JSON.parse に失敗しないことを検証します。
+// TestDetailAlwaysEmitsParsableStyles verifies that the page does not fail JSON.parse even when the
+// speaker → style table is empty.
 //
-// 以前はインラインスクリプトで `window.apVoiceStyles = {{ .StylesJSON }};` と埋めており、
-// 値が空だと `= ;` になってその行だけでなく以降の読み込みごと壊れていました。
-// CSP の script-src を 'self' だけにするためインラインをやめ、data 属性へ移しています
-// （template.JS は </script> を素通しするので、属性コンテキストの方が安全でもあります）。
-// 壊れ方は変わりましたが、「空でも妥当な値を吐く」という守るべき性質は同じです。
+// It used to be embedded with an inline script, `window.apVoiceStyles = {{ .StylesJSON }};`,
+// and an empty value gave `= ;`, breaking not just that line but all loading after it.
+// To limit the CSP's script-src to 'self', the inline script was dropped for a data attribute
+// (template.JS passes </script> through, so the attribute context is also safer).
+// The failure mode changed, but the property to keep is the same: "emit a valid value even when empty".
 func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 	t.Parallel()
 
@@ -382,7 +382,7 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 		view detailView
 	}{
 		{
-			name: "対応表がある",
+			name: "table present",
 			view: detailView{
 				baseView:   testBaseView("/jobs/voice-1"),
 				JobID:      "voice-1",
@@ -391,8 +391,8 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 			},
 		},
 		{
-			// 何らかの理由で対応表を組めなかった場合です。画面は開けるべきです。
-			name: "対応表が空",
+			// The table could not be built for some reason. The page should still open.
+			name: "table empty",
 			view: detailView{
 				baseView: testBaseView("/jobs/voice-1"),
 				JobID:    "voice-1",
@@ -407,27 +407,27 @@ func TestDetailAlwaysEmitsParsableStyles(t *testing.T) {
 
 			var buf strings.Builder
 			if err := renderInto(&buf, tmpl, "detail.html", tt.view); err != nil {
-				t.Fatalf("描画に失敗しました: %v", err)
+				t.Fatalf("render failed: %v", err)
 			}
 			match := regexp.MustCompile(`data-styles="([^"]*)"`).FindStringSubmatch(buf.String())
 			if match == nil {
-				t.Fatal("data-styles が出ていません（画面側が対応表を読めません）")
+				t.Fatal("no data-styles (the page cannot read the table)")
 			}
-			// 属性値は HTML エスケープされて出るので、読み戻してから解析します。
+			// Attribute values come out HTML-escaped, so they are read back before parsing.
 			var styles map[string][]string
 			if err := json.Unmarshal([]byte(html.UnescapeString(match[1])), &styles); err != nil {
-				t.Errorf("data-styles が JSON として読めません: %v (値: %s)", err, match[1])
+				t.Errorf("data-styles is not readable as JSON: %v (value: %s)", err, match[1])
 			}
 		})
 	}
 }
 
-// renderInto は 1 画面を buf へ描きます。失敗の扱いは呼び出し側に任せるため、
-// executePage と違って t.Fatalf せずエラーを返します。
+// renderInto renders one page into buf. Unlike executePage it does not t.Fatalf but returns the
+// error, leaving how to handle failure to the caller.
 func renderInto(buf *strings.Builder, pages map[string]*template.Template, name string, view any) error {
 	tmpl, ok := pages[name]
 	if !ok {
-		return fmt.Errorf("画面テンプレートが見つかりません: %s", name)
+		return fmt.Errorf("page template not found: %s", name)
 	}
 	return tmpl.ExecuteTemplate(buf, assets.PageTemplate, view)
 }

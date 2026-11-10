@@ -1,4 +1,4 @@
-// ap-voice は、ドキュメントをナレーション音声へ変換するオーケストレータサービスです。
+// ap-voice is an orchestrator service that turns documents into narration audio.
 package main
 
 import (
@@ -15,13 +15,13 @@ import (
 	"github.com/shouni/ap-voice/internal/server"
 )
 
-// logLevelEnvKey はログ出力レベルを指定する環境変数名です。
+// logLevelEnvKey is the name of the environment variable that sets the log level.
 const logLevelEnvKey = "LOG_LEVEL"
 
 func main() {
-	// ロガーの設定（LOG_LEVEL 対応・Cloud Logging 互換の構造化ログ）。
-	// 出力フォーマットは cloudlog、context 属性の付与は slogctx が担い、
-	// 両者の組み立てだけをアプリ側で行う。
+	// Set up the logger (honours LOG_LEVEL; structured logs compatible with Cloud Logging).
+	// cloudlog owns the output format and slogctx attaches context attributes;
+	// the app only puts the two together.
 	level := slogctx.ParseLevel(os.Getenv(logLevelEnvKey))
 	slog.SetDefault(slog.New(cloudlog.NewHandler(os.Stdout, level)))
 
@@ -30,15 +30,15 @@ func main() {
 	}
 }
 
-// run はアプリケーションの初期化とサーバー起動を行います。defer によるクリーンアップが
-// os.Exit で無視されないよう、終了コードの決定は main 側に委ねます。
+// run initialises the application and starts the server. The exit code is left to main
+// so that the deferred cleanups are not skipped by os.Exit.
 func run() error {
-	// シグナルに反応するコンテキストの作成
-	// これにより、SIGINT/SIGTERM受信時に ctx.Done() が閉じる
+	// Create a context that reacts to signals.
+	// With it, ctx.Done() closes on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 設定のロードとバリデーション
+	// Load and validate the configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		slog.Error("Config load failed", "error", err)
@@ -49,7 +49,7 @@ func run() error {
 		return err
 	}
 
-	// サーバーの実行
+	// Run the server
 	if err := server.Run(ctx, cfg); err != nil {
 		slog.Error("Application failed", "error", err)
 		return err

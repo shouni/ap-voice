@@ -13,11 +13,11 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 )
 
-// defaultTestModel は GEMINI_MODELS の先頭に相当する既定モデルです。
+// defaultTestModel is the default model, standing in for the head of GEMINI_MODELS.
 const defaultTestModel = "default-model"
 
-// testSpeakersJSON は /speakers 応答の形をした架空の一覧です。
-// スキーマの enum を組むためだけに使うので、実在のキャラクターは要りません。
+// testSpeakersJSON is a fictional roster shaped like a /speakers response.
+// It is used only to build the schema's enums, so no real characters are needed.
 const testSpeakersJSON = `[
 	{"name":"話者アルファ","styles":[
 		{"name":"標準","id":1,"type":"talk"},
@@ -84,7 +84,7 @@ func TestScriptStepRun(t *testing.T) {
 		AIModel:  "gemini-2.5-flash",
 	}
 
-	t.Run("正常系: 読み込みからJSONデコードまで通ること", func(t *testing.T) {
+	t.Run("ok: from reading through JSON decoding", func(t *testing.T) {
 		t.Parallel()
 
 		reader := &closeTrackingReader{reader: strings.NewReader("  これは十分に長い入力テキストです。  ")}
@@ -143,7 +143,7 @@ func TestScriptStepRun(t *testing.T) {
 		want := []domain.ScriptLine{
 			{Speaker: "ずんだもん", Style: "ノーマル", Text: "こんにちはなのだ"},
 		}
-		// タイトルは履歴の一覧に出すため、台本と同じ生成で受け取ります。
+		// The title is shown in the history listing, so it comes from the same generation as the script.
 		if got.Title != "テスト台本" {
 			t.Errorf("Title = %q, want テスト台本", got.Title)
 		}
@@ -158,9 +158,9 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	// 構造化出力でも、モデルはコードフェンスや前置きを付けて返すことがあります。
-	// 生の Text を直接 json.Unmarshal していたときは、ここで数分かけた生成が失われていました。
-	t.Run("正常系: コードフェンス付きの応答も読めること", func(t *testing.T) {
+	// Even with structured output, the model sometimes returns code fences or a preamble.
+	// When the raw Text went straight into json.Unmarshal, minutes of generation were lost here.
+	t.Run("ok: reads a response wrapped in code fences", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewScriptStep(
@@ -184,7 +184,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: InputURI が空ならエラーになること", func(t *testing.T) {
+	t.Run("error: empty InputURI is an error", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewScriptStep(
@@ -201,7 +201,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 読み込み失敗を返すこと", func(t *testing.T) {
+	t.Run("error: returns the read failure", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("open failed")
@@ -223,7 +223,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 入力が短すぎるとエラーになること", func(t *testing.T) {
+	t.Run("error: input that is too short is an error", func(t *testing.T) {
 		t.Parallel()
 
 		short := strings.Repeat("a", minInputContentLength-1)
@@ -245,7 +245,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: プロンプト生成失敗を返すこと", func(t *testing.T) {
+	t.Run("error: returns the prompt build failure", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("prompt failed")
@@ -271,7 +271,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: AI生成失敗を返すこと", func(t *testing.T) {
+	t.Run("error: returns the AI generation failure", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("ai failed")
@@ -301,7 +301,7 @@ func TestScriptStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 不正なJSON応答はエラーになること", func(t *testing.T) {
+	t.Run("error: an invalid JSON response is an error", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewScriptStep(
@@ -331,9 +331,9 @@ func TestScriptStepRun(t *testing.T) {
 	})
 }
 
-// TestScriptStepExecuteRejectsEmptyScript は、AI が空の台本を返したら工程が失敗する
-// ことを確かめます。空のまま先へ進めると、保存だけ成功して喋る行の無いジョブが
-// 「成功」として記録されます。
+// TestScriptStepExecuteRejectsEmptyScript checks that the step fails when the AI returns an empty
+// script. Carrying on with it empty would record as "succeeded" a job that stored a script
+// with nothing to say.
 func TestScriptStepExecuteRejectsEmptyScript(t *testing.T) {
 	t.Parallel()
 

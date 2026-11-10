@@ -1,7 +1,7 @@
 {{ define "nav" }}
-{{/* ナビは3画面で共有します。以前は各ファイルに写していたため、
-     ホームだけ履歴リンクが欠けるという食い違いが起きました。
-     現在地の強調は .Path で行い、リンクの追加はここ 1 箇所で済みます。 */}}
+{{/* The nav is shared by 3 pages. It used to be copied into each file,
+     which led to the home page alone missing the history link.
+     The current location is highlighted with .Path, and links are added in this one place. */}}
 <nav class="navbar navbar-expand-lg mb-4 shadow-sm navbar-dark">
   <div class="container">
     <a class="navbar-brand text-white fw-bold" href="/">✍️ AP Voice</a>
@@ -23,19 +23,19 @@
              {{ if eq .Path "/modes" }}aria-current="page" {{ end }}href="/modes"><i class="bi bi-sliders me-1" aria-hidden="true"></i>Modes</a>
         </li>
       </ul>
-      {{/* 既定モデルは設定（GEMINI_MODELS）から出します。モデル ID は Google の都合で
-           変わるため、ここに文言で書くと必ず古くなります。 */}}
+      {{/* The default model comes from configuration (GEMINI_MODELS). Model IDs change on Google's
+           schedule, so writing one here would inevitably go stale. */}}
       {{ with .DefaultModel }}
         <span class="navbar-text text-white-50 small text-truncate">{{ . }}</span>
       {{ end }}
-      {{/* ログアウトのリンクは、いまのところ置いていません。/auth/logout が消せるのは
-           アプリのセッション Cookie だけで、Google 側のセッションは残ります。
-           以前はそのせいで、直後に飛ぶ /auth/login で Google が何も尋ねずに承認を返し、
-           0.5 秒で入り直した状態になっていました（押しても何も起きないように見えます）。
-           いまは session.WithPrompt(PromptSelectAccount) を渡しているため、そこで
-           アカウント選択が必ず挟まります。**置いていないのは決めていないだけで、
-           動かないからではありません。** 姉妹サービスは
-           そもそも /auth/logout をマウントしていません。 */}}
+      {{/* There is no logout link for now. /auth/logout can clear only
+           the app's session cookie; the Google session remains.
+           That used to make /auth/login, reached right after, get approved by Google without asking,
+           logging back in within 0.5 seconds (it looked as if pressing did nothing).
+           Now session.WithPrompt(PromptSelectAccount) is passed, so
+           account selection always comes in between. **It is absent only because it has not been decided,
+           not because it does not work.** The sibling services
+           do not mount /auth/logout at all. */}}
     </div>
   </div>
 </nav>

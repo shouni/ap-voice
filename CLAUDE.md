@@ -477,4 +477,17 @@ pinned version before assuming a signature.
 
 ## Conventions
 
-- **Error text**: sentinel errors are English with a package prefix (`review: diff is empty`) so a deeply wrapped error still names its origin; the context added by `fmt.Errorf` wrapping is Japanese. Existing English wrap text is not being retrofitted — apply the rule to code you touch.
+- **Language.** Code comments, doc comments, error and log messages, and test assertion messages
+  and subtest names are English (moved 2026-11-10; do not mix Japanese back in). Error strings follow
+  Go style: lowercase, no trailing punctuation (ST1005).
+- **What stays Japanese**: end-user UI text (template text, JS UI strings, messages the handlers
+  render or return to the owner's UI and API callers — `respond.*`, `http.Error`, `renderDetail` /
+  `renderError`, and the `Request.Validate` / `validateScript` / `recipeInputURI` errors that reach
+  a 400), Slack notification text, prompts and everything sent to Gemini (`assets/prompts/*.md`, the
+  `Description`s in `pipeline/schema.go`), and narration data (speaker and style names such as
+  ずんだもん / ノーマル, script lines, readings, text sent to VOICEVOX). Test fixtures and strings
+  compared at run time stay as they are too.
+- **Sentinel errors** are English with a package prefix (`domain: unknown command`) so a deeply
+  wrapped error still names its origin.
+- **READMEs**: `README.md` is English and `README.ja.md` is its Japanese version. Change them
+  together.

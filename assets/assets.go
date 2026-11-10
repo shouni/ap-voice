@@ -1,43 +1,43 @@
-// Package assets は、プロンプト・話者一覧・HTML テンプレートを埋め込みリソースとして提供します。
+// Package assets provides the prompts, the speaker roster and the HTML templates as embedded resources.
 package assets
 
 import "embed"
 
-// promptDir はプロンプトの置き場です。ファイル名がそのままモード名になります
-// （prompts/tech_duet.md → mode="tech_duet"）。接頭辞はジャンルで、一覧が
-// ジャンルごとに固まって並ぶためのものです（入力の型は front matter が持ちます）。
+// promptDir is where the prompts live. The file name is the mode name
+// (prompts/tech_duet.md → mode="tech_duet"). The prefix is the genre, so that the listing
+// groups modes by genre (the input type lives in the front matter).
 const promptDir = "prompts"
 
-// PromptFiles は埋め込まれたプロンプトファイル群です。
+// PromptFiles is the set of embedded prompt files.
 //
 //go:embed prompts/*.md
 var PromptFiles embed.FS
 
-// SpeakersJSON は VOICEVOX エンジンの /speakers 応答をそのまま保存したものです。
+// SpeakersJSON is the VOICEVOX engine's /speakers response saved as is.
 //
-// どの話者を使うかはアプリの方針なので、go-voicevox ではなくここが持ちます。
-// ライブラリは応答の構造を解釈するだけで、一覧を同梱しません。
+// Which speakers to use is the app's policy, so it lives here rather than in go-voicevox.
+// The library only interprets the response's structure and ships no roster.
 //
-// 更新は取得し直して置き換えるだけです。手で書き写さないので、エンジンが増やしたスタイルを
-// 取りこぼすことがありません。整形して保存するのは、エンジン更新時の差分を読めるようにするためです。
+// Updating it is just fetching it again and replacing the file. Nothing is copied by hand, so no style
+// the engine adds can be missed. It is saved pretty-printed so that the diff on an engine update is readable.
 //
 //	curl -s "$VOICEVOX_API_URL/speakers" |
 //	  python3 -c 'import json,sys; json.dump(json.load(sys.stdin), sys.stdout, ensure_ascii=False, indent=2)' \
 //	  > assets/speakers.json
 //
-// ここから読むのは語彙（誰がどのスタイルを持つか）だけです。スタイル ID は使いません—
-// エンジンのビルドで変わるため、go-voicevox が起動時に実物へ問い合わせます。
+// Only the vocabulary (who has which style) is read from here. Style IDs are not used —
+// they change between engine builds, so go-voicevox asks the real engine at startup.
 //
 //go:embed speakers.json
 var SpeakersJSON []byte
 
-// Templates は Web 面の HTML テンプレートです。
+// Templates are the web side's HTML templates.
 //
 //go:embed templates/*.html templates/partials/*.html
 var Templates embed.FS
 
-// StaticFiles は Web 面の静的ファイルです。ディレクトリごと埋め込むので、
-// ファイルを足せば配信は自動で効きます。
+// StaticFiles are the web side's static files. The directory is embedded as a whole,
+// so adding a file is enough for it to be served.
 //
 //go:embed static
 var StaticFiles embed.FS

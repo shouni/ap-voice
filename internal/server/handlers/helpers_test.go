@@ -18,11 +18,11 @@ import (
 	"github.com/shouni/go-voicevox/speaker"
 )
 
-// browserAccept は、ブラウザが実際に送る Accept です。
-// application/json を含まないので、表現は HTML 側に倒れます。
+// browserAccept is the Accept header a browser actually sends.
+// It does not include application/json, so the representation falls to HTML.
 const browserAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
-// requestWithJobID は、jobID を埋めたリクエストを組み立てます。
+// requestWithJobID builds a request with jobID filled in.
 func requestWithJobID(method, target, accept, jobID string) *http.Request {
 	req := httptest.NewRequest(method, target, nil)
 	req.Header.Set("Accept", accept)
@@ -31,7 +31,7 @@ func requestWithJobID(method, target, accept, jobID string) *http.Request {
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 }
 
-// listingRepo は、要求されたページ幅と絞り込みを覚えておくフェイクです。
+// listingRepo is a fake that remembers the requested page size and filter.
 type listingRepo struct {
 	ScriptRepository
 	perPage int
@@ -44,7 +44,7 @@ func (r *listingRepo) List(_ context.Context, _, perPage int, opts ...jobstatus.
 	return nil, jobstatus.PageMeta{}, nil
 }
 
-// savingRepo は、保存された台本を覚えておくフェイクです。
+// savingRepo is a fake that remembers the stored script.
 type savingRepo struct {
 	ScriptRepository
 	saved domain.Script
@@ -57,7 +57,7 @@ func (r *savingRepo) SaveScript(_ context.Context, _ string, script domain.Scrip
 	return nil
 }
 
-// apiHandler は、実物の話者一覧を積んだ API 用の Handler を返します。
+// apiHandler returns an API Handler loaded with the real speaker roster.
 func apiHandler(t *testing.T, repo ScriptRepository) *Handler {
 	t.Helper()
 
@@ -68,15 +68,15 @@ func apiHandler(t *testing.T, repo ScriptRepository) *Handler {
 	return &Handler{speakers: registry, repo: repo, layout: domain.NewStorageLayout(), bucket: "test"}
 }
 
-// recordingStore は、保存の順序を記録する jobstatus.StatusStore です。
+// recordingStore is a jobstatus.StatusStore that records the order of saves.
 type recordingStore struct {
 	order *[]string
-	// saved は最後に書かれた状態です。中身まで見たいテストだけが渡します。
+	// saved is the last state written. Only tests that want to inspect it pass one.
 	saved *domain.JobStatus
 }
 
 func (s recordingStore) Get(context.Context, string) (domain.JobStatus, error) {
-	return domain.JobStatus{}, errors.New("記録がありません")
+	return domain.JobStatus{}, errors.New("no record")
 }
 
 func (s recordingStore) Save(_ context.Context, _ string, status domain.JobStatus) error {
@@ -87,7 +87,7 @@ func (s recordingStore) Save(_ context.Context, _ string, status domain.JobStatu
 	return nil
 }
 
-// recordingQueue は、投入の順序を記録する TaskQueue です。
+// recordingQueue is a TaskQueue that records the order of enqueues.
 type recordingQueue struct {
 	order *[]string
 }
@@ -97,7 +97,7 @@ func (q recordingQueue) Enqueue(context.Context, domain.Request) error {
 	return nil
 }
 
-// audioRepo は音声の有無を差し替えられるフェイクです。
+// audioRepo is a fake whose audio presence can be swapped.
 type audioRepo struct {
 	ScriptRepository
 	hasAudio bool
@@ -105,7 +105,7 @@ type audioRepo struct {
 
 func (r audioRepo) HasAudio(context.Context, string) (bool, error) { return r.hasAudio, nil }
 
-// stubSigner は署名付き URL を組み立てたことにするフェイクです。
+// stubSigner is a fake that pretends to have built a signed URL.
 type stubSigner struct{ calls int }
 
 func (s *stubSigner) SignURL(_ context.Context, path, _ string, _ time.Duration) (string, error) {
@@ -113,7 +113,7 @@ func (s *stubSigner) SignURL(_ context.Context, path, _ string, _ time.Duration)
 	return "https://storage.googleapis.com/" + path + "?X-Goog-Signature=xxx", nil
 }
 
-// fakeReading は、変換したことにするフェイクです。実際の辞書は adapters 側で見ます。
+// fakeReading is a fake that pretends to convert. The real dictionary is tested in adapters.
 type fakeReading struct{ err error }
 
 func (f fakeReading) ConvertToReading(text string) (string, error) {
@@ -126,7 +126,7 @@ func (f fakeReading) ConvertToReading(text string) (string, error) {
 	return text, nil
 }
 
-// postJSON は JSON ボディの POST を呼びます。
+// postJSON calls a POST with a JSON body.
 func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -137,7 +137,7 @@ func postJSON(t *testing.T, h http.HandlerFunc, path, body string) *httptest.Res
 	return rec
 }
 
-// statusRepo は、ジョブ状態の読み出しだけを差し替えるフェイクです。
+// statusRepo is a fake that swaps only the job state read.
 type statusRepo struct {
 	ScriptRepository
 	status domain.JobStatus
@@ -148,7 +148,7 @@ func (r *statusRepo) Get(context.Context, string) (domain.JobStatus, error) {
 	return r.status, r.err
 }
 
-// savingStateRepo は、台本がまだ無いジョブに台本を保存できるフェイクです。
+// savingStateRepo is a fake that can store a script for a job that has none yet.
 type savingStateRepo struct {
 	stateOnlyRepo
 	saved domain.Script
@@ -161,8 +161,8 @@ func (r *savingStateRepo) SaveScript(_ context.Context, _ string, script domain.
 	return nil
 }
 
-// passthroughRenderer と passthroughReading は、選択肢の検証に関係しない依存を
-// 埋めるだけのものです（プロンプトと読みはここでは見ません）。
+// passthroughRenderer and passthroughReading only fill dependencies unrelated to
+// option validation (prompts and readings are not looked at here).
 type passthroughRenderer struct{}
 
 func (passthroughRenderer) Generate(_, content string) (string, error) { return content, nil }
@@ -171,10 +171,10 @@ type passthroughReading struct{}
 
 func (passthroughReading) ConvertToReading(text string) (string, error) { return text, nil }
 
-// builtHandler は、実物の NewHandler を通した Handler を返します。
+// builtHandler returns a Handler built through the real NewHandler.
 //
-// 他のテストのように構造体を直に組むと、構築時にしか行わない組み立て
-// （話者ごとのスタイル表）が空のまま通ってしまいます。
+// Assembling the struct directly, as other tests do, would let the construction-only
+// assembly (the per-speaker style table) pass through empty.
 func builtHandler(t *testing.T) *Handler {
 	t.Helper()
 
@@ -204,7 +204,7 @@ func builtHandler(t *testing.T) *Handler {
 	return h
 }
 
-// storedScriptRepo は、保存済みの台本を返すフェイクです。
+// storedScriptRepo is a fake that returns a stored script.
 type storedScriptRepo struct {
 	ScriptRepository
 	script domain.Script
@@ -214,15 +214,15 @@ func (r *storedScriptRepo) Load(_ context.Context, _ string) (domain.Script, err
 	return r.script, nil
 }
 
-// stateOnlyRepo は、台本がまだ無いジョブのフェイクです。
-// 生成が終わる前と、生成に失敗したジョブがこの姿になります。
+// stateOnlyRepo is a fake for a job that has no script yet.
+// Jobs look like this before generation finishes and after it fails.
 type stateOnlyRepo struct {
 	ScriptRepository
 	status domain.JobStatus
 }
 
 func (r *stateOnlyRepo) Load(context.Context, string) (domain.Script, error) {
-	return domain.Script{}, fmt.Errorf("台本がまだありません: %w", domain.ErrScriptNotFound)
+	return domain.Script{}, fmt.Errorf("no script yet: %w", domain.ErrScriptNotFound)
 }
 
 func (r *stateOnlyRepo) HasAudio(context.Context, string) (bool, error) { return false, nil }
@@ -231,7 +231,7 @@ func (r *stateOnlyRepo) Get(context.Context, string) (domain.JobStatus, error) {
 	return r.status, nil
 }
 
-// detailHandler は、画面を描けるだけの依存を積んだ Handler を返します。
+// detailHandler returns a Handler with just enough dependencies to render pages.
 func detailHandler(t *testing.T, repo ScriptRepository) *Handler {
 	t.Helper()
 
@@ -240,7 +240,7 @@ func detailHandler(t *testing.T, repo ScriptRepository) *Handler {
 	return h
 }
 
-// postWithJobID は、jobID を埋めた POST を組み立てます。
+// postWithJobID builds a POST with jobID filled in.
 func postWithJobID(jobID string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/jobs/"+jobID+"/regenerate", nil)
 	ctx := chi.NewRouteContext()

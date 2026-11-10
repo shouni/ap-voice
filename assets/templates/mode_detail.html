@@ -31,8 +31,8 @@
 
   <h2 class="h6 border-bottom pb-2 mb-2">プロンプト本文</h2>
   <p class="form-text mb-2">
-    {{/* 生成側と同じ組み立てを通しています。共通部品（_writing など）も展開済みなので、
-         ここに見えているものが実際に Gemini へ渡ります。 */}}
+    {{/* This goes through the same assembly as generation. Shared partials (_writing and so on) are expanded too, so
+         what is shown here is exactly what reaches Gemini. */}}
     共通部品を展開した、<strong>実際に渡る形</strong>です。入力の本文だけ差し替えてあります
     （{{ if .Mode.NeedsRecipe }}仮の楽曲レシピ{{ else }}仮の本文{{ end }}を差し込んでいます）。
   </p>
@@ -44,4 +44,4 @@
 </main>
 {{ end }}
 
-{{/* この画面は固有の JS を読み込みません。 */}}
+{{/* This page loads no JS of its own. */}}

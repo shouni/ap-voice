@@ -1,4 +1,4 @@
-// Package config は、環境変数からアプリケーション設定を読み込み検証します。
+// Package config loads and validates the application configuration from environment variables.
 package config
 
 import (
@@ -14,274 +14,274 @@ import (
 )
 
 const (
-	// DefaultHTTPTimeout は外部 HTTP 通信のタイムアウトのデフォルト値です。
-	// 縛るのは HTTP 1 往復で、セグメント 1 件ではありません（HTTPConfig 参照）。
+	// DefaultHTTPTimeout is the default timeout for outgoing HTTP calls.
+	// It bounds one HTTP round trip, not one segment (see HTTPConfig).
 	DefaultHTTPTimeout = 60 * time.Second
-	// DefaultMaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数の既定です。
-	// エンジンの vCPU 数に合わせています（下の VoicevoxConfig の実測を参照）。
+	// DefaultMaxParallelSegments is the default number of segments sent concurrently within one job.
+	// It matches the engine's vCPU count (see the measurements on VoicevoxConfig below).
 	DefaultMaxParallelSegments = 4
-	// DefaultSegmentRateLimit はセグメントの投入間隔の既定です。
+	// DefaultSegmentRateLimit is the default interval between segment submissions.
 	DefaultSegmentRateLimit = 100 * time.Millisecond
-	// DefaultSegmentTimeout はセグメント 1 件あたりの上限の既定です。
+	// DefaultSegmentTimeout is the default limit per segment.
 	DefaultSegmentTimeout = 120 * time.Second
-	// defaultLocationID は Cloud Tasks のリージョンの既定値です。
-	// フリート全体で asia-northeast1 を使っています。
+	// defaultLocationID is the default Cloud Tasks region.
+	// The whole fleet uses asia-northeast1.
 	defaultLocationID = "asia-northeast1"
 )
 
-// ServerConfig は HTTP サーバーの設定です。
+// ServerConfig is the HTTP server configuration.
 type ServerConfig struct {
 	ServiceURL string `env:"SERVICE_URL" envDefault:"http://localhost:8080"`
 	Port       string `env:"PORT" envDefault:"8080"`
-	// Role はこのプロセスが担う役割です。明示が必須で、未設定は起動時エラーになります。
-	// 正常停止の猶予はキットの既定（Cloud Run の SIGKILL 猶予に収まる値）に任せます。
+	// Role is the role this process plays. It must be explicit; unset is a startup error.
+	// The graceful shutdown period is left to the kit's default (a value within Cloud Run's SIGKILL grace).
 	Role serverrole.Role `env:"SERVER_ROLE"`
 }
 
-// TasksConfig は Cloud Tasks キューの設定と、受信時の OIDC 検証の設定です。
-// Cloud Tasks に閉じた設定であり、GCP 一般の設定でも HTTP サーバーの設定でもないため、
-// 兄弟アプリと同じくここに集約します。
+// TasksConfig is the Cloud Tasks queue configuration and the OIDC verification settings for receiving.
+// These settings are specific to Cloud Tasks, neither general GCP nor HTTP server settings, so
+// they are gathered here as in the sibling apps.
 type TasksConfig struct {
 	QueueID         string `env:"CLOUD_TASKS_QUEUE_ID"`
 	WorkerURL       string `env:"WORKER_URL"`
 	TaskAudienceURL string `env:"TASK_AUDIENCE_URL"`
-	// CallerServiceAccountEmail は、投入するタスクの oidcToken.serviceAccountEmail に
-	// 指定する caller SA です。トークンを生成して付与するのは Cloud Tasks であり、
-	// このプロセスが署名するわけではありません。投入側＝ Web 面だけの設定です。
+	// CallerServiceAccountEmail is the caller SA set as oidcToken.serviceAccountEmail on enqueued
+	// tasks. It is Cloud Tasks that mints and attaches the token;
+	// this process signs nothing. It is a setting for the enqueuing side, the web side, only.
 	CallerServiceAccountEmail string `env:"TASK_CALLER_SERVICE_ACCOUNT_EMAIL"`
-	// DispatchDeadline は、投入するタスクに載せる応答待ちの上限です。
+	// DispatchDeadline is the response-wait limit stamped on enqueued tasks.
 	//
-	// 「待つ時間」ではなくワーカーの実行時間の実効上限です。これを超えると
-	// ワーカーがまだ処理中でも Cloud Tasks が待受を打ち切ります。Cloud Run の timeout を
-	// いくら伸ばしてもこの上限は動きません。
+	// It is not "time spent waiting" but the effective cap on the worker's run time. Past it,
+	// Cloud Tasks stops waiting even while the worker is still processing. However far Cloud Run's
+	// timeout is raised, this cap does not move.
 	DispatchDeadline time.Duration `env:"TASK_DISPATCH_DEADLINE"`
-	// AllowedServiceAccounts は、worker が受け付ける caller SA の許可リスト（カンマ区切り）です。
-	// 受信側が許可すべきは自分自身ではなく投入側の SA で、web と worker で実行 SA を
-	// 分けているため、worker には「他人の SA」が並びます。
-	// 空だと検証器が fail-closed になるため、worker では必須です。
+	// AllowedServiceAccounts is the allowlist of caller SAs the worker accepts (comma-separated).
+	// The receiver must allow the enqueuer's SA, not its own, and web and worker run as different
+	// SAs, so the worker's list holds "someone else's SA".
+	// Empty, the verifier fails closed, so it is required on the worker.
 	AllowedServiceAccounts []string `env:"ALLOWED_TASK_SERVICE_ACCOUNTS"`
 }
 
-// GCPConfig は Google Cloud Platform の設定です。
+// GCPConfig is the Google Cloud Platform configuration.
 //
-// Gemini は Vertex AI 経由でのみ呼びます。API キー経路（GEMINI_API_KEY）は持ちません。
-// Cloud Run では実行 SA の roles/aiplatform.user で認証できるため、キーを配ると
-// 使われないシークレットへのアクセス権を配ることになるためです。ローカル実行では
-// ADC（gcloud auth application-default login）が要ります。
+// Gemini is called only through Vertex AI. There is no API key path (GEMINI_API_KEY).
+// On Cloud Run the runtime SA's roles/aiplatform.user authenticates, so handing out a key would
+// hand out access to a secret nobody uses. Local runs need
+// ADC (gcloud auth application-default login).
 type GCPConfig struct {
 	ProjectID string `env:"GCP_PROJECT_ID"`
-	// LocationID は Cloud Tasks のキューが存在するリージョンです（デプロイ設定が
-	// asia-northeast1 を渡します）。Vertex AI のエンドポイントとは別物で、そちらは
-	// adapters.defaultVertexLocationID に固定してあります。混同すると、キューを
-	// 見失うか Vertex が存在しないリージョンを指すかのどちらかになります。
+	// LocationID is the region where the Cloud Tasks queue lives (the deployment configuration
+	// passes asia-northeast1). It is separate from the Vertex AI endpoint, which is
+	// pinned in adapters.defaultVertexLocationID. Mixing them up either loses
+	// the queue or points Vertex at a region where it does not exist.
 	LocationID string `env:"GCP_LOCATION_ID"`
 }
 
-// AIConfig は AI モデルの設定です。
+// AIConfig is the AI model configuration.
 type AIConfig struct {
-	// モデル一覧はカンマ区切りで、先頭が既定モデルです。単数形は LoadConfig が
-	// 一覧の先頭から埋めるので、環境変数からは読みません。
+	// The model list is comma-separated and the first is the default model. LoadConfig fills the
+	// singular from the head of the list, so it is not read from the environment.
 	//
-	// 既定値は持ちません。モデル ID が古くなるのは Google のリリース周期であって
-	// このリポジトリの都合ではないため、既定値を置くと誰も気付かないまま古いモデルを
-	// 使い続けることになります。空なら ValidateEssentialConfig が起動時に落とします。
+	// There is no default. Model IDs age on Google's release cycle, not
+	// this repository's, so a default would keep an outdated model in use without anyone
+	// noticing. Empty, ValidateEssentialConfig fails startup.
 	GeminiModels []string `env:"GEMINI_MODELS"`
 	GeminiModel  string   `env:"-"`
 }
 
-// VoicevoxConfig は音声合成エンジンの設定です。
+// VoicevoxConfig is the speech synthesis engine configuration.
 //
-// 流量の3つはデプロイ先のエンジンの大きさで変わる値なので env に置きます。
-// エンジンが 4 vCPU / 3 GiB のサイドカーだという事実はこのリポジトリではなく
-// デプロイ設定が持っており、そこに合わせて絞るにはコードのビルドを挟みたくありません。
+// The three throughput values depend on the size of the deployed engine, so they live in env.
+// That the engine is a 4 vCPU / 3 GiB sidecar is a fact held by the deployment configuration,
+// not by this repository, and throttling to match it should not require a code build.
 //
-//	スループット = min(1/SegmentRateLimit, MaxParallelSegments ÷ 1セグメントの所要時間)
+//	throughput = min(1/SegmentRateLimit, MaxParallelSegments ÷ time per segment)
 //
-// 2026-08-14 の実測（12セグメント / 既定値のまま / 4 vCPU・3 GiB のサイドカー）
+// Measured on 2026-08-14 (12 segments / defaults unchanged / a 4 vCPU, 3 GiB sidecar)
 //
-//	所要      50.0 秒（12 件）      1 セグメントあたり 20〜25 秒
-//	実効      0.24 件/秒            レート制限が許すのは 2.0 件/秒
-//	CPU       2.31 / 5 vCPU        メモリ 0.94 / 4 GiB
+//	elapsed     50.0 s (12 segments)  20-25 s per segment
+//	effective   0.24 segments/s       the rate limit allows 2.0/s
+//	CPU         2.31 / 5 vCPU         memory 0.94 / 4 GiB
 //
-// 効いていたのは右項です。
+// The right-hand term was the one in effect.
 //
-// 2026-08-24 に Cloud Monitoring と Cloud Logging で並列数まで踏み込みました。
-// 進捗ログが 1 セグメントごとに文字数と所要時間を出しているので、実効並列度ごとに
-// 1 文字あたりの合成時間を出せます（バッチの実効並列は min(セグメント数, 8)）。
+// On 2026-08-24 this went down to the level of parallelism, with Cloud Monitoring and Cloud Logging.
+// The progress log prints the character count and duration of every segment, so the synthesis
+// time per character can be computed per effective parallelism (a batch's effective parallelism is min(segments, 8)).
 //
-//	実効並列   標本   ms/文字(中央値)   スループット
-//	約 4        7      233              17.2 文字/秒
-//	8         108      430              18.6 文字/秒
+//	parallelism  samples  ms/char (median)  throughput
+//	~4            7       233               17.2 chars/s
+//	8           108       430               18.6 chars/s
 //
-// スループットは横ばいで、1 件あたりの所要だけが倍になっています。430 が
-// 233 の約 2 倍で、並列比 8/4 と一致するのが飽和の署名です。CPU 使用率の
-// p99 が 3.7 / 5 vCPU（うちエンジンの割り当ては 4）であることとも合います。
-// 合成は CPU バウンドなので、4 vCPU は同時 4 本で使い切るという道理どおりです。
-// 既定を 8 から 4 に落としたのはこの実測によります。
+// Throughput is flat, and only the time per segment doubles. 430 being about twice
+// 233, matching the 8/4 parallelism ratio, is the signature of saturation. It also fits CPU
+// utilisation at p99 of 3.7 / 5 vCPU (4 of which are allocated to the engine).
+// Synthesis is CPU-bound, so 4 vCPUs are used up by 4 concurrent requests, as reason says.
+// The default was lowered from 8 to 4 on the strength of this measurement.
 //
-// 弱いところも書いておきます。低並列側は 7 標本しかありません（進捗ログが
-// 5 件ごと＋最終のみで、4 セグメントのバッチからは 1 件しか採れない）。加えて
-// 小さいバッチはコールドスタート直後の startup_cpu_boost に当たりえて、それだと
-// 低並列を実際より良く見せます。この偏りは 4 への変更と逆向きに効くので、
-// 所要時間が悪化したら env で 8 に戻して測り直してください。
+// The weak points are recorded too. The low-parallelism side has only 7 samples (the progress log
+// prints every 5 segments plus the last, so a 4-segment batch yields only one). In addition,
+// small batches may land on startup_cpu_boost right after a cold start, which would make
+// low parallelism look better than it is. That bias works against the change to 4, so
+// if durations get worse, set it back to 8 through env and measure again.
 //
-// 2026-08-24 に Cloud Logging の 90 日ぶん（29 バッチ）で裏を取りました。
-// go-voicevox がバッチ終了時に出す segment_duration_avg/min/max を、開始ログとの
-// 差分（実測の所要時間）と突き合わせたものです。
+// On 2026-08-24 this was confirmed against 90 days of Cloud Logging (29 batches),
+// comparing the segment_duration_avg/min/max go-voicevox logs at the end of a batch with the
+// difference from the start log (the measured duration).
 //
-//	バッチの規模    4 〜 60 セグメント
-//	1 セグメント    平均 2.0 〜 35.3 秒（最小は 1.0 秒）
-//	所要時間        ほぼ 波数 × セグメント平均 に乗る
+//	batch size    4-60 segments
+//	per segment   mean 2.0-35.3 s (minimum 1.0 s)
+//	duration      tracks waves × mean segment time closely
 //
-// 上の 1 件だけを見て「レート制限には 8 倍の余裕がある」と書いていましたが、
-// それは長い台本にしか当てはまりませんでした。旧既定の 500ms が律速に回るのは
-// 1 セグメントが 並列数 × 間隔 = 4 秒 を切ったときで、29 バッチ中 13 バッチに
-// 4 秒未満のセグメントがあり、4 バッチは平均が 4 秒未満（2.0 〜 3.2 秒）でした。
-// その 4 バッチ（いずれも 4 セグメント）は実測 4.5 〜 6.4 秒で、合成そのものは
-// 2.0 〜 3.2 秒です。短い台本ほど待ちの割合が大きいという、いちばん目につく
-// ところに効いていました。
+// From the single run above, this used to say "the rate limit has 8x headroom",
+// but that held only for long scripts. The old 500ms default becomes the bottleneck when
+// a segment takes less than parallelism × interval = 4 seconds; 13 of the 29 batches had
+// segments under 4 seconds, and in 4 batches the mean was under 4 seconds (2.0-3.2 s).
+// Those 4 batches (all 4 segments) measured 4.5-6.4 seconds, while synthesis itself was
+// 2.0-3.2 seconds. The shorter the script, the larger the share of waiting — it hit
+// exactly where it is most noticeable.
 type VoicevoxConfig struct {
-	// APIURL が空なら go-voicevox が http://localhost:50021 へ落とします。
-	// ローカル実行と Cloud Run のサイドカー構成のどちらもその値でよいため、
-	// モデル名と違って未設定を許します。
+	// When APIURL is empty, go-voicevox falls back to http://localhost:50021.
+	// That value suits both local runs and the Cloud Run sidecar setup, so
+	// unlike model names, unset is allowed.
 	APIURL string `env:"VOICEVOX_API_URL"`
 
-	// MaxParallelSegments は 1 ジョブ内で同時に投げるセグメント数です。
+	// MaxParallelSegments is the number of segments sent concurrently within one job.
 	//
-	// 上のスループットを実際に縛っているのはこちらです。既定はエンジンの
-	// vCPU 数と同じ 4 です。合成は CPU バウンドなので、4 vCPU なら同時 4 本で
-	// 使い切ります。それ以上はスループットを増やさず、1 件あたりの待ちを
-	// 伸ばすだけであることが実測に出ています（下記）。
+	// This is what actually bounds the throughput above. The default is 4, the same as the
+	// engine's vCPU count. Synthesis is CPU-bound, so 4 vCPUs are used up by 4 concurrent
+	// requests. Measurements show that more does not raise throughput and only lengthens
+	// the wait per segment (below).
 	//
-	// この値はアプリの都合であって、インフラの設定ではありません。エンジンの
-	// 大きさ（4 vCPU / 3 GiB）を決めるのはデプロイ設定ですが、それをどう食わせるかは
-	// 合成の戦略なのでここが持ちます。デプロイ設定はこの env を置いておらず、
-	// env が残っているのは戻すためです — 実測が覆ったら、再ビルドを挟まずに
-	// VOICEVOX_MAX_PARALLEL_SEGMENTS で上書きできます。
+	// This value is the app's concern, not an infrastructure setting. The deployment configuration
+	// decides the engine's size (4 vCPU / 3 GiB), but how to feed it is a synthesis strategy, so
+	// it lives here. The deployment configuration does not set this env;
+	// the env remains so it can be reverted — if measurements overturn it, it can be overridden with
+	// VOICEVOX_MAX_PARALLEL_SEGMENTS without a rebuild.
 	//
-	// ピークは台本の長さでは上がりません。同時に飛ぶ数はここで頭打ちなので、
-	// 12 行でも 200 行でもメモリの山は同じ高さで、変わるのは所要時間だけです。
+	// The peak does not rise with the script's length. The number in flight is capped here, so
+	// 12 lines or 200, the memory peak is the same height; only the duration changes.
 	MaxParallelSegments int `env:"VOICEVOX_MAX_PARALLEL_SEGMENTS"`
 
-	// SegmentRateLimit はセグメントの投入間隔です。
+	// SegmentRateLimit is the interval between segment submissions.
 	//
-	// VOICEVOX に API のレート制限はありません。自前で立てたエンジンで、
-	// サイドカー構成では同一インスタンス内にいます。外部仕様への準拠ではなく、
-	// エンジンを叩きすぎないための自主的な絞りです。
+	// VOICEVOX has no API rate limit. It is an engine we run ourselves, and in the sidecar
+	// setup it is in the same instance. This is not compliance with an external spec but
+	// voluntary throttling so as not to hammer the engine.
 	//
-	// スループットのつまみではありません。同時に飛ぶ数を縛るのは
-	// MaxParallelSegments のほうで、この間隔が効き始めるのは
-	// 「1 セグメントの所要時間 < 並列数 × 間隔」になったとき、つまり実測の
-	// 20〜25 秒が 1 秒を切るほど速くなったときだけです。
+	// It is not the throughput knob. What bounds the number in flight is
+	// MaxParallelSegments; this interval starts to matter only when
+	// "time per segment < parallelism × interval", i.e. only once the measured
+	// 20-25 seconds became faster than 1 second.
 	//
-	// それでも払う代償はあります。バーストが 1 なので、毎バッチの先頭には
-	// (並列数 - 1) × 間隔 の待ちがそのまま乗ります。旧既定の 500ms は、当時の
-	// 並列 8 で 3.5 秒、いまの並列 4 でも 1.5 秒でした。効かない絞りに毎ジョブ
-	// 数秒を払う形だったので、意図（起動時にエンジンを一斉に叩かない）を保てる
-	// 最小限として 100ms にしています（並列 4 なら 0.3 秒）。
+	// It still has a cost. The burst is 1, so the head of every batch carries a wait of
+	// (parallelism - 1) × interval. The old 500ms default cost 3.5 seconds at the then
+	// parallelism of 8, and 1.5 seconds even at today's 4. That paid seconds per job for a throttle
+	// that had no effect, so it is 100ms, the minimum that keeps the intent (not hitting the engine
+	// all at once at startup) (0.3 seconds at parallelism 4).
 	SegmentRateLimit time.Duration `env:"VOICEVOX_SEGMENT_RATE_LIMIT"`
 
-	// SegmentTimeout はセグメント 1 件あたりの上限です。
-	// サイドカーは起動時から待ち受けているため、コールドスタート分の余裕は不要です。
+	// SegmentTimeout is the limit per segment.
+	// The sidecar listens from startup, so no margin for a cold start is needed.
 	//
-	// 「1 件」はクエリ（audio_query）と合成（synthesis）の 2 往復ぶんで、それぞれ
-	// リトライが 1 回まで入ります。1 往復ぶんの上限は HTTP_TIMEOUT です—
-	// 小さいほうが先に効くので、こちらだけ延ばしても往復は延びません（HTTPConfig 参照）。
+	// "One segment" is two round trips, the query (audio_query) and synthesis, each
+	// with at most one retry. The limit per round trip is HTTP_TIMEOUT —
+	// the smaller one takes effect first, so raising only this does not lengthen a round trip (see HTTPConfig).
 	SegmentTimeout time.Duration `env:"VOICEVOX_SEGMENT_TIMEOUT"`
 }
 
-// PipelineConfig はジョブ 1 件の実行に関する設定です。
+// PipelineConfig is the configuration for running one job.
 type PipelineConfig struct {
-	// Timeout はジョブ 1 件の実行時間の上限です。
+	// Timeout is the cap on one job's run time.
 	//
-	// 三段のうち最も短く取ります。アプリが自分で先に諦めることで、失敗を記録して
-	// Slack へ通知してから終われます。逆順にすると Cloud Tasks が先にリクエストを
-	// 打ち切り、プロセスは SIGTERM で落ちて通知の機会を失います。voice-queue は
-	// max_attempts = 2 ですが、この不等式が守られていないと 2 回目が 1 回目と
-	// 重なりえます。再配信が直列に届くことに再実行ガードが依存しています。
+	// It is the shortest of the three tiers. By giving up first itself, the app can record the failure
+	// and notify Slack before it ends. In the reverse order Cloud Tasks cuts the request
+	// first, and the process dies on SIGTERM, losing the chance to notify. voice-queue has
+	// max_attempts = 2, but unless this inequality holds the second attempt may overlap
+	// the first. The re-run guard depends on redeliveries arriving serially.
 	Timeout time.Duration `env:"PIPELINE_TIMEOUT"`
 }
 
-// StorageConfig はストレージの設定です。
+// StorageConfig is the storage configuration.
 type StorageConfig struct {
-	// GCSBucket は成果物の置き場です。出力先は利用者に入力させません。
-	// ジョブ ID からパスを導くことで、1 ジョブの成果物が必ず 1 つのプレフィックスに
-	// まとまり、履歴の一覧や削除が中身を知らずに行えます。
+	// GCSBucket is where artifacts go. Users do not enter the output location.
+	// Deriving the path from the job ID guarantees one job's artifacts are gathered under one prefix,
+	// so the history listing and deletion work without knowing the contents.
 	GCSBucket string `env:"GCS_VOICE_BUCKET"`
-	// MusicBucket は、楽曲紹介モードの入力（music.Recipe 形式の recipe.json）を
-	// ジョブ ID から解決するために使います。
-	// 動画生成サービスと同じ環境変数・同じ規則です（gs://<MusicBucket>/music/<jobID>/recipe.json）。
-	// 読む側が 2 つに増えたので、片方だけ別名にすると設定を移すときに取り違えます。
-	// 既定値は持ちません（動画生成サービスと同じ）。バケット名はデプロイ先が決めるもので、
-	// 未設定ならそのタブがジョブ ID を受け付けないだけで、他のモードは動きます。
+	// MusicBucket is used to resolve the music promotion mode's input (a recipe.json in music.Recipe
+	// form) from a job ID.
+	// It is the same environment variable and rule as the video generation service's (gs://<MusicBucket>/music/<jobID>/recipe.json).
+	// There are now two readers, so renaming it on one side would cause mix-ups when moving settings.
+	// There is no default (as in the video generation service). The bucket name is the deployment's
+	// to decide; unset, that tab just does not accept job IDs, and the other modes work.
 	MusicBucket string `env:"AP_MUSIC_BUCKET"`
-	// FirestoreDatabase はジョブ状態を置く Firestore データベースです。
+	// FirestoreDatabase is the Firestore database that holds job states.
 	//
-	// 名前付きデータベースを使うのは、(default) の枠を占めないためです。
-	// コレクション名は設定にしません（サービスの身元であってデプロイごとに
-	// 変わる値ではないため。repository の statusCollection を参照）。
+	// A named database is used so as not to occupy the (default) slot.
+	// The collection name is not a setting (it is the service's identity, not a value that changes
+	// per deployment; see statusCollection in repository).
 	FirestoreDatabase string `env:"FIRESTORE_DATABASE" envDefault:"job-status"`
 }
 
-// AuthConfig は認証と認可の設定です。Web 面だけが読みます。
+// AuthConfig is the authentication and authorization configuration. Only the web side reads it.
 type AuthConfig struct {
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
-	// SessionDatabase は、セッションを置く Firestore データベースです。
+	// SessionDatabase is the Firestore database that holds sessions.
 	//
-	// ジョブ状態用とは別に取ります。データベース名は識別子で後から変えられないため、
-	// 兼ねると片方で名前が実態と合わなくなります。
+	// It is separate from the one for job states. A database name is an identifier that cannot be changed later,
+	// so sharing one would leave its name wrong for one of the uses.
 	SessionDatabase string `env:"SESSION_FIRESTORE_DATABASE" envDefault:"sessions"`
-	// SessionCollection は、セッションを置くコレクションです。
+	// SessionCollection is the collection that holds sessions.
 	SessionCollection string   `env:"SESSION_FIRESTORE_COLLECTION" envDefault:"sessions"`
 	AllowedEmails     []string `env:"ALLOWED_EMAILS"`
 	AllowedDomains    []string `env:"ALLOWED_DOMAINS"`
 
-	// AllowedM2MServiceAccounts は、ブラウザではなく機械が /api を叩くときに
-	// 許可するサービスアカウントです（MCP サーバーなど）。
+	// AllowedM2MServiceAccounts are the service accounts allowed when a machine rather than a browser
+	// calls /api (the MCP server and so on).
 	//
-	// 空でも起動します。未設定なら M2M の検証は常に失敗し、すべての
-	// リクエストがセッション認証へ落ちます。つまり API を使わない構成では
-	// 何も設定しなくてよく、使う構成で書き忘れると「エージェントだけが
-	// ログイン画面へ飛ばされる」形で現れます。兄弟アプリと同じ env 名です。
+	// It starts even when empty. Unset, M2M verification always fails and every
+	// request falls through to session authentication. So a setup that does not use the API
+	// needs nothing, and a setup that does but forgot it shows up as "only the agent gets
+	// sent to the login page". It is the same env name as in the sibling apps.
 	AllowedM2MServiceAccounts []string `env:"ALLOWED_M2M_SERVICE_ACCOUNTS"`
 }
 
-// NotificationConfig は通知の設定です。
+// NotificationConfig is the notification configuration.
 type NotificationConfig struct {
 	SlackWebhookURL string `env:"SLACK_WEBHOOK_URL"`
 }
 
-// HTTPConfig は外部 HTTP 通信の設定です。
+// HTTPConfig is the configuration for outgoing HTTP calls.
 //
-// 合成の上限は 2 段になっています。この値が縛るのは HTTP 1 往復だけ
-// （http.Client.Timeout）で、セグメント 1 件はクエリと合成の 2 往復、しかも
-// go-http-kit が 1 回ずつリトライするため（builder の WithMaxRetries(1)）、
-// セグメント全体を縛るのは VOICEVOX_SEGMENT_TIMEOUT のほうです。
+// Synthesis has a two-tier limit. This value bounds only one HTTP round trip
+// (http.Client.Timeout); a segment is two round trips, query and synthesis, and
+// go-http-kit retries each once (WithMaxRetries(1) in builder), so
+// what bounds the whole segment is VOICEVOX_SEGMENT_TIMEOUT.
 //
-// 60 秒と 120 秒は食い違いではなく、この 2 段です。往復の上限をセグメントの
-// 上限まで上げてはいけません — 最初の 1 往復が budget を使い切れるようになり、
-// 上限に達した往復のやり直しが入らなくなります。半分にしておけば、時間切れの
-// 往復をもう一度試してもセグメントの budget に収まります。
+// 60 seconds and 120 seconds are not a contradiction but these two tiers. Do not raise the
+// round-trip limit to the segment limit — the first round trip could then use up the budget,
+// leaving no room to retry a round trip that hit the limit. At half, retrying a timed-out
+// round trip still fits within the segment's budget.
 //
-// 段を跨いだ勘違いに注意してください。1 往復を 60 秒より延ばしたいときに
-// VOICEVOX_SEGMENT_TIMEOUT を上げても効きません（小さいほうが先に効きます）。
-// 逆にこの値を上げると通知にも効きます— Slack へ投げるのは同じクライアント
-// （リトライだけ外したもの）なので、Webhook が応答しないときの待ちが
-// そのまま伸びます。
+// Beware of confusing the tiers. To lengthen one round trip beyond 60 seconds, raising
+// VOICEVOX_SEGMENT_TIMEOUT does not work (the smaller one takes effect first).
+// Conversely, raising this value affects notifications too — Slack is called through the same
+// client (with only the retries removed), so the wait when the webhook does not respond
+// grows with it.
 //
-// なお実測のセグメントは最大 35.3 秒で、どちらの上限にも遠いところにあります。
-// 所要を決めているのは並列数のほうです（VoicevoxConfig を参照）。
+// For reference, the longest measured segment is 35.3 seconds, far from either limit.
+// What decides the duration is the parallelism (see VoicevoxConfig).
 type HTTPConfig struct {
-	// 既定値は LocationID と同じ理由で normalize が埋めます。
+	// The default is filled by normalize, for the same reason as LocationID.
 	Timeout time.Duration `env:"HTTP_TIMEOUT"`
 }
 
-// Config はアプリ設定です。
+// Config is the application configuration.
 //
-// 保持するのはデプロイ先が決める値だけで、入力元・出力先・生成モードといった
-// 実行ごとに変わる値は domain.Request が持ちます。両者を 1 つの構造体へ混ぜると、
-// 実行ごとの値が環境変数から来るように見えてしまいます。
+// It holds only values the deployment target decides; values that change per run, such as the input,
+// the output location and the generation mode, are held by domain.Request. Mixing the two in one
+// struct would make per-run values look as if they came from environment variables.
 type Config struct {
 	Server       ServerConfig
 	Tasks        TasksConfig
@@ -295,11 +295,11 @@ type Config struct {
 	HTTP         HTTPConfig
 }
 
-// LoadConfig は環境変数から設定を読み込みます。
+// LoadConfig loads the configuration from environment variables.
 func LoadConfig() (*Config, error) {
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
-		return nil, fmt.Errorf("環境変数の読み込みに失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to load environment variables: %w", err)
 	}
 
 	if err := cfg.normalize(); err != nil {
@@ -309,9 +309,9 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// normalize は読み込んだ値の表記ゆれを整えます。
+// normalize tidies up variations in how the loaded values are written.
 func (c *Config) normalize() error {
-	// 環境変数名はアプリ側の関心事なので、キットのエラーへここで文脈を足します。
+	// Environment variable names are the app's concern, so context is added to the kit's error here.
 	role, err := serverrole.Parse(string(c.Server.Role))
 	if err != nil {
 		return fmt.Errorf("SERVER_ROLE: %w", err)
@@ -343,7 +343,7 @@ func (c *Config) normalize() error {
 		c.GCP.LocationID = defaultLocationID
 	}
 
-	// env はカンマで分割するだけなので、前後の空白と重複はここで落とします。
+	// env only splits on commas, so surrounding whitespace and duplicates are dropped here.
 	c.AI.GeminiModels = strlist.Normalize(c.AI.GeminiModels)
 	c.AI.GeminiModel = firstModel(c.AI.GeminiModels)
 
@@ -368,8 +368,8 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// firstModel は一覧の先頭（＝既定として使うモデル）を返します。
-// 一覧が空になるのは設定漏れのときだけで、その値は使われる前に起動時検証で弾かれます。
+// firstModel returns the head of the list (= the model used as the default).
+// The list is empty only when misconfigured, and that value is rejected by startup validation before use.
 func firstModel(models []string) string {
 	if len(models) == 0 {
 		return ""
@@ -377,11 +377,11 @@ func firstModel(models []string) string {
 	return models[0]
 }
 
-// normalizeWorkerURL は配送先の worker サービス URL を整えます。返すのはサービスの
-// URL までで、タスクのパスは投入の直前（internal/builder）で継ぎ足します。
+// normalizeWorkerURL tidies the worker service URL tasks are delivered to. It returns only up to
+// the service URL; the task path is appended just before enqueueing (internal/builder).
 //
-// SERVICE_URL から導出するのは Worker 面を担うプロセスだけです。分割デプロイの
-// SERVICE_URL は公開側に固定されているため、web 専用で導出すると全件 404 になります。
+// Only a process that serves the worker side derives it from SERVICE_URL. On a split deployment
+// SERVICE_URL is pinned to the public side, so deriving it on web alone would make every task 404.
 func normalizeWorkerURL(role serverrole.Role, workerURL string, serviceURL string) (string, error) {
 	workerURL = strings.TrimSpace(workerURL)
 	if workerURL != "" {

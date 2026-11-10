@@ -13,59 +13,59 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// isPartial は、そのファイルがモードではなく部品かどうかを返します。
+// isPartial reports whether the file is a partial rather than a mode.
 //
-// 判定を二重に書きません。ビルダーが Build の対象から外すのと同じ関数を呼びます。
-// 自前で "_" 始まりを見ていた頃は、再帰読み込みで "en/_writing" のようなキーになった
-// 場合にライブラリ側とずれる状態でした。モード名はジャンル接頭辞（tech_ / news_ …）を
-// 持つので、"_" 始まりと衝突しません。
+// The check is not written twice: it calls the same function the builder uses to exclude files from Build.
+// Back when it checked for a leading "_" by hand, a key such as "en/_writing" from recursive loading
+// would have disagreed with the library. Mode names carry a genre prefix (tech_ / news_ …),
+// so they do not collide with a leading "_".
 func isPartial(key string) bool {
 	return prompts.IsPartial(key, prompts.DefaultPartialPrefix)
 }
 
-// ModeMetadata は、プロンプト冒頭の front matter に書くモードの説明です。
-// 姉妹サービスと同じ方式で、説明の置き場をプロンプト自身にします。
+// ModeMetadata is the mode description written in the front matter at the top of the prompt.
+// As in the sibling services, the description lives in the prompt itself.
 //
-// 画面側に一覧を持たせない理由は、モードの追加が prompts/<mode>.md を置くだけで
-// 済む仕組みだからです。説明を別ファイルに分けると、モードを足した人が説明を
-// 書き忘れても誰も気付かず、選択肢だけが増えていきます。
+// The page holds no list of its own because adding a mode is meant to be just placing
+// prompts/<mode>.md. With descriptions in a separate file, if whoever added a mode forgot the
+// description nobody would notice, and only the options would grow.
 type ModeMetadata struct {
-	// Order は選択肢に出す並び順です。1 から 10 刻みで振ります（間へ挿すときに
-	// 前後を振り直さずに済みます）。
+	// Order is the order among the options. It is numbered from 1 in steps of 10 (so inserting
+	// between two does not require renumbering the neighbours).
 	//
-	// ファイル名に番号を付けない理由がここです。ファイル名はそのままモードのキー、
-	// つまり Request.Mode に載る値であり /modes/{mode} の URL でもあります。並べ替えの
-	// ためにリネームすると、保存済みのジョブや外の呼び出し側（MCP の list_voice_modes が
-	// 返すキー）が一斉に指し先を失います。並び順は表示の都合なので、識別子ではなく
-	// label と同じ場所に置きます。
+	// This is why file names carry no number. The file name is the mode's key as is,
+	// i.e. the value on Request.Mode and the /modes/{mode} URL. Renaming to reorder would
+	// make stored jobs and outside callers (the keys MCP's list_voice_modes returns) lose
+	// their target all at once. Order is a display concern, so it sits with label rather than
+	// in the identifier.
 	Order int `yaml:"order"`
-	// Label は選択肢に出す名前です。キー（ファイル名）は英字で、誰が喋るのかまでは
-	// 読み取れないため、日本語の表示名を別に持ちます。
+	// Label is the name shown among the options. The key (file name) is ASCII and does not say
+	// who speaks, so a separate Japanese display name is kept.
 	Label string `yaml:"label"`
-	// Direction は何を作るモードなのかの一行説明です。
+	// Direction is a one-line description of what the mode makes.
 	Direction string `yaml:"direction"`
-	// UseWhen は、どういう入力・題材のときに選ぶかです。
+	// UseWhen says for which inputs and subjects to choose it.
 	UseWhen string `yaml:"use_when"`
-	// Input は、そのモードが受け取る入力の種類です。空なら InputText 扱いです。
+	// Input is the kind of input the mode takes. Empty is treated as InputText.
 	//
-	// ジャンルとは別の軸です。ファイル名の接頭辞（tech_ / news_ / comedy_ …）は
-	// ジャンルを表しますが、入力の型はそれと直交します — comedy_manzai と tech_solo は
-	// ジャンルが違っても同じ素のテキストを受け取ります。ディレクトリで分けると
-	// 軸を 1 本しか表せないため、ここに書きます。
+	// It is a different axis from the genre. The file name prefix (tech_ / news_ / comedy_ …)
+	// is the genre, while the input type is orthogonal to it — comedy_manzai and tech_solo
+	// take the same plain text despite different genres. Directories could express
+	// only one axis, so it is written here.
 	Input string `yaml:"input"`
 }
 
-// 入力の種類。画面のタブと、プロンプトへ渡すデータの型が、これで決まります。
+// Input kinds. They decide the page's tab and the type of data passed to the prompt.
 const (
-	// InputText は素のテキスト（Web 記事・文書）を受け取るモードです。
+	// InputText is a mode that takes plain text (web articles, documents).
 	InputText = "text"
-	// InputRecipe は楽曲レシピ（music.Recipe）を受け取るモードです。
-	// 素のテキストを渡すと、生成へ進む前にデコードで落ちます。
+	// InputRecipe is a mode that takes a music recipe (music.Recipe).
+	// Given plain text, it fails at decoding before reaching generation.
 	InputRecipe = "recipe"
 )
 
-// InputKind は、そのモードが受け取る入力の種類を返します。
-// front matter に input が無いモードは素のテキスト扱いです。
+// InputKind returns the kind of input the mode takes.
+// A mode whose front matter has no input is treated as plain text.
 func (m Mode) InputKind() string {
 	if m.Input == "" {
 		return InputText
@@ -73,13 +73,13 @@ func (m Mode) InputKind() string {
 	return m.Input
 }
 
-// NeedsRecipe は、そのモードが recipe.json を要求するかを返します。
+// NeedsRecipe reports whether the mode requires a recipe.json.
 func (m Mode) NeedsRecipe() bool { return m.InputKind() == InputRecipe }
 
-// FilterModes は、指定した入力種別のモードだけを返します。
+// FilterModes returns only the modes of the given input kind.
 //
-// 画面のタブごとの選択肢はこれで作ります。素のテキストのタブに
-// recipe.json のモードを出すと、選べるのに必ず失敗する組み合わせになります。
+// The options for each page tab are built with it. Showing recipe.json modes on the plain text
+// tab would offer combinations that are selectable but always fail.
 func FilterModes(modes []Mode, kind string) []Mode {
 	out := make([]Mode, 0, len(modes))
 	for _, m := range modes {
@@ -90,18 +90,18 @@ func FilterModes(modes []Mode, kind string) []Mode {
 	return out
 }
 
-// Mode は、フォームに出す 1 モードです。
+// Mode is one mode shown on the form.
 type Mode struct {
-	// Key は prompts/<key>.md のファイル名で、そのまま worker へ渡る値です。
+	// Key is the file name of prompts/<key>.md, and the value passed to the worker as is.
 	Key string
 	ModeMetadata
 }
 
-// sortOrder は並べ替えに使う順位です。order が無いモードは末尾へ回します。
+// sortOrder is the rank used for sorting. Modes without an order go last.
 //
-// 先頭ではなく末尾なのは、order を書き忘れたモードが既存の並びの先頭へ割り込むより、
-// 後ろに足されるほうが被害が小さいためです。DisplayName がキーで代替するのと同じで、
-// 書き忘れても選択肢自体は消えません。
+// Last rather than first because a mode with a forgotten order being appended does less harm
+// than it jumping ahead of the existing order. Like DisplayName falling back to the key,
+// forgetting it does not make the option disappear.
 func (m Mode) sortOrder() int {
 	if m.Order == 0 {
 		return math.MaxInt
@@ -109,10 +109,10 @@ func (m Mode) sortOrder() int {
 	return m.Order
 }
 
-// DisplayName は選択肢に表示する名前です。
+// DisplayName is the name shown among the options.
 //
-// front matter が無いプロンプトを置いてもキーで表示され、選択肢自体は消えません。
-// 説明の書き忘れで動くはずのモードが画面から消えるほうが困るためです。
+// A prompt without front matter is still shown by its key, so the option does not disappear.
+// A working mode vanishing from the page over a forgotten description would be worse.
 func (m Mode) DisplayName() string {
 	if m.Label != "" {
 		return m.Label
@@ -120,19 +120,19 @@ func (m Mode) DisplayName() string {
 	return m.Key
 }
 
-// promptSet は、埋め込みプロンプトの本文と front matter を分けて保持します。
+// promptSet holds the embedded prompts' bodies and front matter separately.
 type promptSet struct {
 	bodies map[string]string
 	fronts map[string]string
 }
 
-// loadPromptSet は、プロンプトの読み込みと front matter の切り離しを最初の呼び出しで
-// 1度だけ行います。本文（LoadPrompts）と説明（LoadModes）は別の入口ですが、
-// 出どころは同じディレクトリです。記憶しないと、アダプターと画面の組み立てで
-// 同じファイルを何度も読み直すことになります。
+// loadPromptSet loads the prompts and splits off the front matter once, on the first call.
+// The bodies (LoadPrompts) and descriptions (LoadModes) are separate entry points, but
+// they come from the same directory. Without memoising, the adapter and the page assembly
+// would read the same files again and again.
 //
-// 返す promptSet の中のマップは共有されるため、書き換えないでください
-// （LoadPrompts と LoadModes は、いずれも新しい入れ物へ写して使います）。
+// The maps in the returned promptSet are shared, so do not modify them
+// (LoadPrompts and LoadModes both copy into new containers before use).
 var loadPromptSet = sync.OnceValues(func() (promptSet, error) {
 	raw, err := resource.Load(PromptFiles, promptDir)
 	if err != nil {
@@ -143,14 +143,14 @@ var loadPromptSet = sync.OnceValues(func() (promptSet, error) {
 	return promptSet{bodies: bodies, fronts: fronts}, nil
 })
 
-// LoadPrompts は埋め込まれたプロンプトの本文だけを読み込みます。
+// LoadPrompts loads only the bodies of the embedded prompts.
 //
-// front matter は説明であってプロンプトではないので、ここで落とします。
-// 残したまま渡すと YAML が指示文の先頭に紛れ込みます。
+// Front matter is description, not prompt, so it is dropped here.
+// Passed along, the YAML would slip into the head of the instructions.
 //
-// 部品（_ 始まり）も含めて返します。モード本文が {{template "_writing" .}} で
-// 参照するため、ビルダーには全部渡す必要があります。選択肢に出さないのは
-// LoadModes の役目です。
+// Partials (leading _) are returned too. Mode bodies reference them with {{template "_writing" .}},
+// so the builder must receive all of them. Keeping them out of the options is
+// LoadModes's job.
 func LoadPrompts() (map[string]string, error) {
 	set, err := loadPromptSet()
 	if err != nil {
@@ -159,26 +159,26 @@ func LoadPrompts() (map[string]string, error) {
 	return maps.Clone(set.bodies), nil
 }
 
-// LoadModes は、各プロンプトの front matter を読み、order 順に並べて返します。
+// LoadModes reads each prompt's front matter and returns them sorted by order.
 //
-// 並びを固定するのは、map の走査順がそのまま選択肢の順になると、
-// 描画のたびに並びが変わるためです。order が同じものはキー順にします。
+// The order is fixed because, if the map's iteration order became the options' order,
+// it would change on every render. Ties in order are sorted by key.
 func LoadModes() ([]Mode, error) {
 	set, err := loadPromptSet()
 	if err != nil {
 		return nil, err
 	}
 
-	// 部品は選択肢に出さないので、説明の解析対象からも先に外します。
-	// 記憶したマップは共有されるため、削るのではなく別の入れ物へ写します。
+	// Partials are not offered as options, so they are excluded from description parsing first.
+	// The memoised map is shared, so it is copied into another container rather than trimmed.
 	fronts := maps.Clone(set.fronts)
 	maps.DeleteFunc(fronts, func(key, _ string) bool { return isPartial(key) })
 
-	// 黙って無視しません。書き間違えた説明が空欄になるだけだと、
-	// 画面を開くまで気付けません。
+	// It is not silently ignored. If a mistyped description just came out blank,
+	// it would go unnoticed until the page was opened.
 	metas, err := frontmatter.DecodeMap[ModeMetadata](fronts, yaml.Unmarshal)
 	if err != nil {
-		return nil, fmt.Errorf("prompts の front matter が読めません: %w", err)
+		return nil, fmt.Errorf("cannot read the prompts' front matter: %w", err)
 	}
 
 	modes := make([]Mode, 0, len(metas))
@@ -190,8 +190,8 @@ func LoadModes() ([]Mode, error) {
 		if oi, oj := modes[i].sortOrder(), modes[j].sortOrder(); oi != oj {
 			return oi < oj
 		}
-		// order が並びを決めきれないときの最後の拠り所です。ここを外すと、
-		// order を書き忘れたモード同士の順が描画のたびに入れ替わります。
+		// The last resort when order cannot settle the sequence. Without it,
+		// modes that forgot their order would swap places on every render.
 		return modes[i].Key < modes[j].Key
 	})
 	return modes, nil

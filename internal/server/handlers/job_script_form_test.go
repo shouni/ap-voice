@@ -12,8 +12,8 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// testHandler は、実際の話者一覧を積んだ Handler を返します。
-// 選択肢の妥当性を見るテストなので、ここは架空の一覧ではなく同梱の実物を使います。
+// testHandler returns a Handler loaded with the real speaker roster.
+// These tests check option validity, so they use the bundled roster rather than a fictional one.
 func testHandler(t *testing.T) *Handler {
 	t.Helper()
 
@@ -24,7 +24,7 @@ func testHandler(t *testing.T) *Handler {
 	return &Handler{speakers: registry}
 }
 
-// parseScript は scriptFromForm を呼ぶための薄い包みです。
+// parseScript is a thin wrapper for calling scriptFromForm.
 func parseScript(t *testing.T, h *Handler, values url.Values) (lines int, err error) {
 	t.Helper()
 
@@ -38,12 +38,12 @@ func parseScript(t *testing.T, h *Handler, values url.Values) (lines int, err er
 	return len(script.Lines), err
 }
 
-// TestScriptFromFormRejectsUnknownSpeakerAndStyle は、一覧に無い話者・スタイルを
-// 保存前に弾くことを検証します。
+// TestScriptFromFormRejectsUnknownSpeakerAndStyle verifies that speakers and styles not in the roster
+// are rejected before saving.
 //
-// 画面が選択肢で出していても、フォームは何でも送れます。実在しない組み合わせは
-// 合成時にその話者の既定スタイルへ黙って落ちるため、保存できてしまうと
-// 「指定したのに違う声で喋る」という気付きにくい形で現れます。
+// The page offers them as options, but a form can send anything. A non-existent pair silently
+// falls back to the speaker's default style at synthesis, so if it could be saved it would show up
+// in a hard-to-notice way: "it speaks in a different voice from the one I chose".
 func TestScriptFromFormRejectsUnknownSpeakerAndStyle(t *testing.T) {
 	t.Parallel()
 
@@ -55,29 +55,29 @@ func TestScriptFromFormRejectsUnknownSpeakerAndStyle(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "実在しない話者",
+			name: "speaker that does not exist",
 			values: url.Values{
 				"speaker": {"存在しない話者"}, "style": {"ノーマル"}, "text": {"本文"},
 			},
 			wantErr: "一覧にありません",
 		},
 		{
-			name: "話者が持たないスタイル",
+			name: "style the speaker does not have",
 			values: url.Values{
-				// 春日部つむぎの talk スタイルは「ノーマル」だけです。
+				// 春日部つむぎ's only talk style is 「ノーマル」.
 				"speaker": {"春日部つむぎ"}, "style": {"ヒソヒソ"}, "text": {"本文"},
 			},
 			wantErr: "というスタイルはありません",
 		},
 		{
-			name: "項目数が揃っていない",
+			name: "field counts do not match",
 			values: url.Values{
 				"speaker": {"ずんだもん", "四国めたん"}, "style": {"ノーマル"}, "text": {"本文"},
 			},
 			wantErr: "項目数が揃っていません",
 		},
 		{
-			name:    "空の台本",
+			name:    "empty script",
 			values:  url.Values{},
 			wantErr: "台本が空です",
 		},
@@ -89,16 +89,16 @@ func TestScriptFromFormRejectsUnknownSpeakerAndStyle(t *testing.T) {
 
 			_, err := parseScript(t, h, tt.values)
 			if err == nil {
-				t.Fatalf("エラーになりません（%s）", tt.name)
+				t.Fatalf("no error (%s)", tt.name)
 			}
 			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %v, want に %q を含む", err, tt.wantErr)
+				t.Errorf("error = %v, want it to contain %q", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-// TestScriptFromFormAcceptsValidLines は、実在する組み合わせが通ることを検証します。
+// TestScriptFromFormAcceptsValidLines verifies that existing pairs pass.
 func TestScriptFromFormAcceptsValidLines(t *testing.T) {
 	t.Parallel()
 
@@ -124,19 +124,19 @@ func TestScriptFromFormAcceptsValidLines(t *testing.T) {
 		t.Errorf("Title = %q", script.Title)
 	}
 	if len(script.Lines) != 2 {
-		t.Fatalf("行数 = %d, want 2", len(script.Lines))
+		t.Fatalf("line count = %d, want 2", len(script.Lines))
 	}
 	if script.Lines[0].Text != "前後の空白は落ちるのだ" {
-		t.Errorf("本文の前後の空白が残っています: %q", script.Lines[0].Text)
+		t.Errorf("surrounding whitespace remains in the text: %q", script.Lines[0].Text)
 	}
 	if script.Lines[0].Style != "あまあま" {
 		t.Errorf("Style = %q", script.Lines[0].Style)
 	}
 }
 
-// TestScriptFromFormDropsEmptyLines は、本文を空にした行が落ちることを検証します。
-// 画面の削除ボタンは行ごと送らないので通りませんが、本文を空にする消し方は
-// 画面を経由しない差し替え（API・台本 JSON）でも効きます。
+// TestScriptFromFormDropsEmptyLines verifies that a line whose text was emptied is dropped.
+// The page's delete button does not send the row at all, so it does not come this way, but emptying
+// the text also works for replacements that bypass the page (the API, the script JSON).
 func TestScriptFromFormDropsEmptyLines(t *testing.T) {
 	t.Parallel()
 
@@ -152,21 +152,21 @@ func TestScriptFromFormDropsEmptyLines(t *testing.T) {
 		t.Fatalf("scriptFromForm() error = %v", err)
 	}
 	if lines != 2 {
-		t.Errorf("行数 = %d, want 2", lines)
+		t.Errorf("line count = %d, want 2", lines)
 	}
 
-	// すべて空なら保存させません。空の台本で合成しても無音が出るだけです。
+	// If every line is empty, saving is refused. Synthesising an empty script only produces silence.
 	allEmpty := url.Values{
 		"speaker": {"ずんだもん"}, "style": {"ノーマル"}, "text": {"  "},
 	}
 	if _, err := parseScript(t, h, allEmpty); err == nil {
-		t.Error("全行が空でもエラーになりません")
+		t.Error("no error although every line is empty")
 	}
 }
 
-// TestScriptFromFormRejectsTooManyLines は、行数の上限を検証します。
-// フォームは任意の行数を組み立てられるため、上限が無いと 1 リクエストで
-// 際限なく合成を積めます。
+// TestScriptFromFormRejectsTooManyLines verifies the line limit.
+// A form can assemble any number of lines, so without a limit one request could queue
+// unbounded synthesis.
 func TestScriptFromFormRejectsTooManyLines(t *testing.T) {
 	t.Parallel()
 
@@ -180,15 +180,15 @@ func TestScriptFromFormRejectsTooManyLines(t *testing.T) {
 	}
 
 	if _, err := parseScript(t, h, values); err == nil {
-		t.Fatalf("%d 行が素通りしました（上限 %d）", n, maxScriptLines)
+		t.Fatalf("%d lines got through (limit %d)", n, maxScriptLines)
 	}
 }
 
-// TestAcceptedMessageTellsWhichButtonWasPressed は、受付の案内文が押したボタンで
-// 変わることを検証します。
+// TestAcceptedMessageTellsWhichButtonWasPressed verifies that the acknowledgement changes with
+// the button pressed.
 //
-// まとめて作った場合は音声まで待つため、「履歴に並びます」だけだと
-// 次に何を待てばよいのか分かりません。
+// When both are made together the wait lasts until the audio, so "it will appear in the history" alone
+// does not say what to wait for next.
 func TestAcceptedMessageTellsWhichButtonWasPressed(t *testing.T) {
 	t.Parallel()
 
@@ -196,14 +196,14 @@ func TestAcceptedMessageTellsWhichButtonWasPressed(t *testing.T) {
 	scriptOnly := acceptedMessage(domain.CommandGenerate, "voice-1")
 
 	if !strings.Contains(oneShot, "音声") || !strings.Contains(oneShot, "通知") {
-		t.Errorf("まとめて作成の案内が音声に触れていません: %q", oneShot)
+		t.Errorf("the combined message does not mention the audio: %q", oneShot)
 	}
 	if strings.Contains(scriptOnly, "音声") {
-		t.Errorf("台本のみの案内が音声に触れています: %q", scriptOnly)
+		t.Errorf("the script-only message mentions the audio: %q", scriptOnly)
 	}
 	for _, msg := range []string{oneShot, scriptOnly} {
 		if !strings.Contains(msg, "voice-1") {
-			t.Errorf("ジョブIDが入っていません: %q", msg)
+			t.Errorf("the job ID is missing: %q", msg)
 		}
 	}
 }

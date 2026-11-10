@@ -2,59 +2,59 @@ package domain
 
 import "github.com/shouni/gcp-kit/jobstatus"
 
-// JobStatus は、ジョブの進行状況に ap-voice の成果物の在り処を足した型です。
+// JobStatus is the job's progress plus where ap-voice's artifacts are.
 //
-// gcp-kit の Status は成果物の場所を持ちません。単一 URI・出力ディレクトリ・
-// 複数 URI とサービスごとに形が違うため、埋め込んだ型を利用側が定義する決まりです。
-// 埋め込みは Firestore でも JSON でもフラットに展開されるので、ドキュメントと
-// レスポンス JSON は同じ形になります。
+// gcp-kit's Status does not hold artifact locations. Their shape differs per service (a single URI,
+// an output directory, several URIs), so by convention the using side defines the embedding type.
+// Embedding flattens both in Firestore and in JSON, so the document and the response JSON
+// have the same shape.
 //
-// firestore タグを省かないでください。省くと保存されるフィールド名が Go の
-// 識別子（AudioURI）になり、json タグで組み立てた既存のレスポンスと食い違います。
+// Do not drop the firestore tags. Without them the stored field names become the Go identifiers
+// (AudioURI), which disagree with the existing responses built from the json tags.
 //
-// これが無いと「できた」としか言えません。状態だけ見ても音声の在り処が
-// 分からず、投入した側は成果物へ辿り着けません。
+// Without this, it could only say "done". The state alone does not say where the audio is,
+// and the enqueuer cannot reach the artifacts.
 type JobStatus struct {
 	jobstatus.Status
-	// AudioURI は音声の保存先（gs://）です。合成が完了したジョブにだけ入ります。
+	// AudioURI is where the audio is stored (gs://). Set only for jobs whose synthesis completed.
 	//
-	// 署名付き URL はここに置きません。1 時間で切れるうえ発行に計算が要るので、
-	// 30 秒ごとのポーリングで返すには向きません。再生できるリンクが要るときは
-	// 都度発行する別の口を使います。
+	// Signed URLs do not go here. They expire in an hour and cost computation to issue, so they
+	// do not suit being returned on a 30-second poll. When a playable link is needed, a separate
+	// endpoint issues one each time.
 	AudioURI string `json:"audio_uri,omitempty" firestore:"audio_uri,omitempty"`
-	// ScriptURI は台本の保存先（gs://）です。generate の時点から入ります。
+	// ScriptURI is where the script is stored (gs://). Set from generate onwards.
 	ScriptURI string `json:"script_uri,omitempty" firestore:"script_uri,omitempty"`
-	// InputURI は台本の元になった入力ソースです。generate 系のジョブにだけ入ります。
+	// InputURI is the input source the script was made from. Set only for generate-type jobs.
 	//
-	// これが無いと、失敗したジョブを画面からやり直せません。何を読ませたかは
-	// 台本にも成果物にも残らず、失敗したジョブには台本すらありません。投入した
-	// 画面を閉じた時点で、元の URL は利用者の記憶の中にしかなくなります。
+	// Without it a failed job cannot be retried from the page. What was read is left in neither
+	// the script nor the artifacts, and a failed job has no script at all. Once the submitting page
+	// is closed, the original URL exists only in the user's memory.
 	InputURI string `json:"input_uri,omitempty" firestore:"input_uri,omitempty"`
-	// AIModel は台本を書かせたモデルです。空なら投入時の既定モデルでした。
+	// AIModel is the model that wrote the script. Empty means the default at enqueue time.
 	//
-	// やり直しで同じモデルを使うために残します。既定モデルは GEMINI_MODELS の
-	// 先頭で、デプロイのたびに変わりうるので、「空＝そのときの既定」を後から
-	// 復元することはできません。
+	// It is kept so a retry uses the same model. The default model is the head of GEMINI_MODELS
+	// and may change with every deploy, so "empty = the default at the time" cannot be
+	// restored later.
 	AIModel string `json:"ai_model,omitempty" firestore:"ai_model,omitempty"`
-	// Mode は台本を作ったときの形式（tech_solo など）です。
+	// Mode is the format the script was made in (tech_solo and so on).
 	//
-	// 状態に残さないと、後から振り返る手段がありません。出来上がった台本から
-	// 分かるのは話者の組み合わせまでで、ずんだもん 1 人の台本が tech_solo だったか
-	// tech_howto だったかは区別できません。長さや口調の目安を実測で見直すには、
-	// どのモードが何を作ったかが要ります。
+	// Unless it is kept in the state, there is no way to look back. A finished script reveals only
+	// the combination of speakers; a script for ずんだもん alone cannot tell tech_solo from
+	// tech_howto. Revisiting length and tone targets against measurements needs to know which
+	// mode made what.
 	Mode string `json:"mode,omitempty" firestore:"mode,omitempty"`
 }
 
-// CarryFrom は、前回の記録から今回の組み立てでは分からない値を引き継ぎます。
+// CarryFrom carries over from the previous record the values this construction cannot know.
 //
-// ワーカーは状態が変わるたびにタスクから状態を組み立て直すため、これが無いと
-// running を書いた時点で前回の在り処が消えます。モードも同じです—
-// synthesize は台本がすでにある前提のコマンドなのでモードを持たず、
-// 引き継がないと generate → synthesize と二段で進めたジョブだけがモードを失います
-// （画面から作った場合は必ずこの経路です）。
+// The worker rebuilds the state from the task at every state change, so without this the
+// previous location disappears the moment running is written. The mode is the same —
+// synthesize is a command that assumes the script already exists, so it carries no mode,
+// and without carrying it over only jobs that went generate → synthesize in two stages lose their mode
+// (jobs made from the page always take this path).
 //
-// 埋まっている値は上書きしません。今回の組み立てで分かったことのほうが新しく、
-// 合成し直しで在り処が変わったのに古い値へ戻されては困ります。
+// Values already filled are not overwritten. What this construction learned is newer, and
+// if re-synthesis moved the location it must not be reverted to the old value.
 func (s *JobStatus) CarryFrom(prev *JobStatus) {
 	if prev == nil {
 		return
@@ -68,8 +68,8 @@ func (s *JobStatus) CarryFrom(prev *JobStatus) {
 	if s.Mode == "" {
 		s.Mode = prev.Mode
 	}
-	// 入力ソースとモデルも同じです。synthesize はどちらも持たないので、
-	// 引き継がないと 2 段で進めたジョブがやり直しの手がかりを失います。
+	// The same goes for the input source and the model. synthesize carries neither, so
+	// without carrying them over a job that went in two stages loses what it needs for a retry.
 	if s.InputURI == "" {
 		s.InputURI = prev.InputURI
 	}
@@ -78,12 +78,12 @@ func (s *JobStatus) CarryFrom(prev *JobStatus) {
 	}
 }
 
-// NewJobStatus は、リクエストから今回の記録ぶんの状態を組み立てます。
+// NewJobStatus builds this record's state from the request.
 //
-// 記録は Web 面（queued）と Worker 面（running / succeeded / failed）の両方が
-// 書き、どちらも毎回リクエストから組み立て直します。組み立てが 2 箇所にあると、
-// 残すべき値を足したときに片方だけが残す状態になり、そのときだけ値が消えます。
-// 引き継ぎ（CarryFrom）と対で、ここが「リクエストから分かること」の唯一の定義です。
+// Both the web side (queued) and the worker side (running / succeeded / failed) write the record,
+// and both rebuild it from the request every time. With two constructions, adding a value to keep
+// would keep it on one side only, and the value would vanish just then. Paired with CarryFrom,
+// this is the single definition of "what the request tells us".
 func NewJobStatus(req Request, state jobstatus.State) JobStatus {
 	return JobStatus{
 		JobID:    req.JobID,

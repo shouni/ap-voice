@@ -13,17 +13,17 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// 同じルートが、相手の求める表現で答えること。
+// The same route answers in the representation the other side asks for.
 //
-// MCP サーバーの baseClient は全リクエストに Accept: application/json を付けるため、
-// ルートを 1 本にしても機械側は JSON を受け取り続けます。
+// The MCP server's baseClient sends Accept: application/json on every request, so
+// even with a single route the machine side keeps receiving JSON.
 func TestScriptServesBothAudiences(t *testing.T) {
 	t.Parallel()
 
 	const jobID = "voice-20260814-020913-b1b8b2f9e8d7"
 	h := &Handler{repo: &storedScriptRepo{}}
 
-	t.Run("機械には素の JSON を返す", func(t *testing.T) {
+	t.Run("returns plain JSON to machines", func(t *testing.T) {
 		t.Parallel()
 
 		rec := httptest.NewRecorder()
@@ -33,12 +33,12 @@ func TestScriptServesBothAudiences(t *testing.T) {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
 		if got := rec.Header().Get("Content-Disposition"); got != "" {
-			t.Errorf("Content-Disposition = %q, want empty（機械はファイルとして受け取らない）", got)
+			t.Errorf("Content-Disposition = %q, want empty (machines do not receive it as a file)", got)
 		}
 	})
 
-	// 画面から開いたときに本文が表示されるだけだと、確認はできても手元に残せません。
-	t.Run("人にはファイルとして返す", func(t *testing.T) {
+	// If opening it from the page only displayed the body, it could be checked but not kept locally.
+	t.Run("returns a file to people", func(t *testing.T) {
 		t.Parallel()
 
 		rec := httptest.NewRecorder()
@@ -48,12 +48,12 @@ func TestScriptServesBothAudiences(t *testing.T) {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
 		if got := rec.Header().Get("Content-Disposition"); got == "" {
-			t.Error("Content-Disposition が無い（ダウンロードにならない）")
+			t.Error("no Content-Disposition (it would not download)")
 		}
 	})
 
-	// 同じ URL が Accept で中身を変えるため、キャッシュへ伝える必要があります。
-	t.Run("Vary: Accept を立てること", func(t *testing.T) {
+	// The same URL changes its content with Accept, so caches must be told.
+	t.Run("sets Vary: Accept", func(t *testing.T) {
 		t.Parallel()
 
 		rec := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestScriptServesBothAudiences(t *testing.T) {
 	})
 }
 
-// putScript は PUT /api/jobs/{jobID}/script を呼びます。
+// putScript calls PUT /api/jobs/{jobID}/script.
 func putScript(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -80,12 +80,12 @@ func putScript(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder
 	return rec
 }
 
-// TestAPIUpdateScriptSharesValidationWithTheForm は、API が画面と同じ検証を
-// 通ることを検証します。
+// TestAPIUpdateScriptSharesValidationWithTheForm verifies that the API goes through the same
+// validation as the page.
 //
-// 片方だけ緩いと、そちらから実在しない組み合わせが入ります。合成時に
-// 合成時に既定へ黙って落ちるため、保存できてしまうと「指定したのに
-// 違う声で喋る」形でしか現れません。
+// If one side were looser, non-existent pairs would get in through it. At synthesis
+// they silently fall back to the default, so once saved they show up only as
+// "it speaks in a different voice from the one I chose".
 func TestScriptUpdateSharesValidationWithTheForm(t *testing.T) {
 	t.Parallel()
 
@@ -96,26 +96,26 @@ func TestScriptUpdateSharesValidationWithTheForm(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name:       "実在しない話者",
+			name:       "speaker that does not exist",
 			body:       `{"title":"t","lines":[{"speaker":"存在しない","style":"ノーマル","text":"本文"}]}`,
 			wantStatus: http.StatusBadRequest,
 			wantErr:    "一覧にありません",
 		},
 		{
-			// 春日部つむぎの talk スタイルは「ノーマル」だけです。
-			name:       "話者が持たないスタイル",
+			// 春日部つむぎ's only talk style is 「ノーマル」.
+			name:       "style the speaker does not have",
 			body:       `{"title":"t","lines":[{"speaker":"春日部つむぎ","style":"ヒソヒソ","text":"本文"}]}`,
 			wantStatus: http.StatusBadRequest,
 			wantErr:    "というスタイルはありません",
 		},
 		{
-			name:       "空の台本",
+			name:       "empty script",
 			body:       `{"title":"t","lines":[]}`,
 			wantStatus: http.StatusBadRequest,
 			wantErr:    "台本が空です",
 		},
 		{
-			name:       "壊れたJSON",
+			name:       "broken JSON",
 			body:       `{"title":`,
 			wantStatus: http.StatusBadRequest,
 			wantErr:    "JSONの解釈に失敗しました",
@@ -133,18 +133,18 @@ func TestScriptUpdateSharesValidationWithTheForm(t *testing.T) {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
 			if !strings.Contains(rec.Body.String(), tt.wantErr) {
-				t.Errorf("body = %s, want に %q を含む", rec.Body.String(), tt.wantErr)
+				t.Errorf("body = %s, want it to contain %q", rec.Body.String(), tt.wantErr)
 			}
-			// 弾いたものは保存しません。
+			// What was rejected is not saved.
 			if repo.calls != 0 {
-				t.Errorf("検証に失敗したのに %d 回保存しています", repo.calls)
+				t.Errorf("saved %d times although validation failed", repo.calls)
 			}
 		})
 	}
 }
 
-// TestAPIUpdateScriptSavesAndReturnsTheCleanedScript は、通った台本が
-// 整えられた形で保存され、そのまま返ることを検証します。
+// TestAPIUpdateScriptSavesAndReturnsTheCleanedScript verifies that an accepted script is saved
+// in its cleaned-up form and returned as is.
 func TestScriptUpdateSavesAndReturnsTheCleanedScript(t *testing.T) {
 	t.Parallel()
 
@@ -162,29 +162,29 @@ func TestScriptUpdateSavesAndReturnsTheCleanedScript(t *testing.T) {
 
 	var got domain.Script
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("応答のデコードに失敗しました: %v", err)
+		t.Fatalf("failed to decode the response: %v", err)
 	}
 
-	// 本文が空の行は落ちます。行を消す手段でもあります。
+	// Lines with empty text are dropped. It is also the way to delete a line.
 	if len(got.Lines) != 2 {
-		t.Fatalf("行数 = %d, want 2", len(got.Lines))
+		t.Fatalf("line count = %d, want 2", len(got.Lines))
 	}
 	if got.Title != "題名" {
 		t.Errorf("Title = %q, want 題名", got.Title)
 	}
 	if got.Lines[0].Text != "前後の空白は落ちるのだ" {
-		t.Errorf("本文の前後の空白が残っています: %q", got.Lines[0].Text)
+		t.Errorf("surrounding whitespace remains in the text: %q", got.Lines[0].Text)
 	}
-	// 返したものと保存したものが同じであること。
+	// What was returned and what was saved are the same.
 	if repo.calls != 1 {
-		t.Fatalf("保存回数 = %d, want 1", repo.calls)
+		t.Fatalf("save count = %d, want 1", repo.calls)
 	}
 	if len(repo.saved.Lines) != len(got.Lines) || repo.saved.Title != got.Title {
-		t.Errorf("保存 %+v と応答 %+v が食い違います", repo.saved, got)
+		t.Errorf("saved %+v and response %+v disagree", repo.saved, got)
 	}
 }
 
-// TestAPIUpdateScriptRejectsBadJobID は、不正なジョブ ID を保存前に弾くことを検証します。
+// TestAPIUpdateScriptRejectsBadJobID verifies that an invalid job ID is rejected before saving.
 func TestScriptUpdateRejectsBadJobID(t *testing.T) {
 	t.Parallel()
 
@@ -203,16 +203,16 @@ func TestScriptUpdateRejectsBadJobID(t *testing.T) {
 		t.Errorf("status = %d, want 400", rec.Code)
 	}
 	if repo.calls != 0 {
-		t.Error("不正なジョブIDで保存しています")
+		t.Error("saved with an invalid job ID")
 	}
 }
 
-// TestSynthesizeDispatchesOnBody は、POST /jobs/{jobID}/synthesize が本文の形で
-// 経路を分けることを検証します。
+// TestSynthesizeDispatchesOnBody verifies that POST /jobs/{jobID}/synthesize routes by the body's
+// shape.
 //
-// JSON（本文なし）は保存済みの台本をそのまま合成し、フォームは編集中の台本を
-// 保存してから合成します。1 本の URL に寄せたので、この分岐が崩れると機械の
-// 呼び出しがフォームの解析へ落ちるか、画面の保存が黙って飛ばされます。
+// JSON (no body) synthesises the stored script as is, and the form saves the script being edited
+// before synthesising. They share one URL, so if this branch broke, machine calls would fall into
+// form parsing, or the page's save would be silently skipped.
 func TestSynthesizeDispatchesOnBody(t *testing.T) {
 	t.Parallel()
 
@@ -223,7 +223,7 @@ func TestSynthesizeDispatchesOnBody(t *testing.T) {
 		return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 	}
 
-	t.Run("JSON は保存済みの台本を合成する", func(t *testing.T) {
+	t.Run("JSON synthesises the stored script", func(t *testing.T) {
 		t.Parallel()
 
 		var order []string
@@ -240,7 +240,7 @@ func TestSynthesizeDispatchesOnBody(t *testing.T) {
 			t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 		}
 		if repo.calls != 0 {
-			t.Errorf("JSON なのに台本が保存されています（%d 回）", repo.calls)
+			t.Errorf("the script was saved although it is JSON (%d times)", repo.calls)
 		}
 		if loc := rec.Header().Get("Location"); loc != "/jobs/"+jobID {
 			t.Errorf("Location = %q, want /jobs/%s", loc, jobID)
@@ -254,7 +254,7 @@ func TestSynthesizeDispatchesOnBody(t *testing.T) {
 		}
 	})
 
-	t.Run("フォームは台本を保存してから合成する", func(t *testing.T) {
+	t.Run("the form saves the script before synthesising", func(t *testing.T) {
 		t.Parallel()
 
 		var order []string
@@ -276,18 +276,18 @@ func TestSynthesizeDispatchesOnBody(t *testing.T) {
 			t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 		}
 		if repo.calls != 1 {
-			t.Errorf("台本の保存回数 = %d, want 1", repo.calls)
+			t.Errorf("script save count = %d, want 1", repo.calls)
 		}
 		if len(order) != 1 || order[0] != "enqueue" {
-			t.Errorf("投入 = %v, want [enqueue]", order)
+			t.Errorf("enqueue = %v, want [enqueue]", order)
 		}
 		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-			t.Errorf("Content-Type = %q, want text/html（画面を描き直す）", ct)
+			t.Errorf("Content-Type = %q, want text/html (the page is re-rendered)", ct)
 		}
 	})
 }
 
-// getScript は GET /history/{jobID}/script を呼びます。
+// getScript calls GET /history/{jobID}/script.
 func getScript(t *testing.T, h *Handler, jobID string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -301,11 +301,11 @@ func getScript(t *testing.T, h *Handler, jobID string) *httptest.ResponseRecorde
 	return rec
 }
 
-// TestScriptDownloadsTheStoredScript は、保存済みの台本がそのまま JSON として
-// 落ちてくることを検証します。
+// TestScriptDownloadsTheStoredScript verifies that the stored script comes down as JSON
+// unchanged.
 //
-// ファイル名を付ける Content-Disposition が要ります。無いとブラウザは
-// JSON を画面に表示するだけで、ダウンロードにならない経路があります。
+// A Content-Disposition naming the file is needed. Without it, on some paths the browser just
+// displays the JSON instead of downloading it.
 func TestScriptDownloadsTheStoredScript(t *testing.T) {
 	t.Parallel()
 
@@ -329,15 +329,15 @@ func TestScriptDownloadsTheStoredScript(t *testing.T) {
 
 	var got domain.Script
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("台本が JSON として読めません: %v (body=%q)", err, rec.Body.String())
+		t.Fatalf("the script is not readable as JSON: %v (body=%q)", err, rec.Body.String())
 	}
 	if got.Title != want.Title || len(got.Lines) != len(want.Lines) || got.Lines[0] != want.Lines[0] {
 		t.Errorf("script = %+v, want %+v", got, want)
 	}
 }
 
-// TestScriptRejectsBadJobID は、ジョブ ID の検証を通ることを確認します。
-// ID はそのままファイル名になるため、素通りさせられません。
+// TestScriptRejectsBadJobID confirms that the job ID goes through validation.
+// The ID becomes the file name as is, so it cannot be let through.
 func TestScriptRejectsBadJobID(t *testing.T) {
 	t.Parallel()
 

@@ -11,47 +11,47 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// apiTimeFormat は、一覧が返す時刻の書式です。
+// apiTimeFormat is the time format the listing returns.
 const apiTimeFormat = "2006-01-02T15:04:05Z07:00"
 
-// apiJob は一覧の 1 件です。
+// apiJob is one entry of the listing.
 type apiJob struct {
 	JobID     string `json:"job_id"`
 	Title     string `json:"title"`
 	CreatedAt string `json:"created_at"`
 	HasAudio  bool   `json:"has_audio"`
-	// State は進行状態です。成果物の有無だけでは、実行中なのか失敗したのかを
-	// 区別できません。1 件ずつ status を引かずに一覧で見分けるために載せます。
-	// 記録の無い古いジョブでは空になるので omitempty です。
+	// State is the progress state. Whether artifacts exist cannot tell running from failed.
+	// It is included so the listing can tell them apart without fetching each status.
+	// Old jobs without a record leave it empty, hence omitempty.
 	State string `json:"state,omitempty"`
 }
 
-// apiJobPage は、ページ付きの一覧応答です。
+// apiJobPage is the paged listing response.
 //
-// メタデータの形は gcp-kit の PageMeta です。JSON タグは姉妹サービスと同じ
-// JSON なので、呼び出し側はサービスごとに読み方を変えずに済みます。
+// The metadata has the shape of gcp-kit's PageMeta. The JSON tags give the same JSON as the
+// sibling services, so callers do not need to read each service differently.
 type apiJobPage struct {
 	Jobs []apiJob           `json:"jobs"`
 	Page jobstatus.PageMeta `json:"page"`
 }
 
-// historyPerPage は 1 ページに出す件数です。
+// historyPerPage is the number of entries per page.
 //
-// 一覧は成果物を読まないので、増やしても効くのは記録の読み取り件数だけです
-// （1 件は 1 行で、題名・状態・音声の有無しか使いません）。ページ送りを
-// 押す回数が半分になるほうが、ページあたり 50 件の読み取りより価値があります。
+// The listing does not read artifacts, so raising it only increases the number of records read
+// (one entry is one row and uses only the title, state and whether audio exists). Halving the
+// number of page-forward clicks is worth more than 50 reads per page.
 const historyPerPage = 100
 
-// maxPerPage は ?per_page= で要求できる上限です。
+// maxPerPage is the upper bound that ?per_page= can request.
 //
-// 上限が無いと、1 リクエストが倉庫への際限のない 1 クエリになります。既定と
-// 同じ値ですが、別の定数のままにします — 片方は「何も指定しなかったとき」、
-// もう片方は「いくらまで指定できるか」で、変える理由が別だからです。
-// 画面は既定しか使わないので、これが効くのは機械から叩く経路だけです。
+// Without a bound, one request becomes one unbounded query on the store. It equals the default
+// but stays a separate constant — one is "what happens when nothing is given", the other
+// "how much can be asked for", and they change for different reasons.
+// The pages use only the default, so this matters only on the machine path.
 const maxPerPage = 100
 
-// pageParam は ?page= を読みます。不正な値は 1 ページ目として扱います。
-// 一覧の閲覧でエラー画面を出しても、利用者にできることがありません。
+// pageParam reads ?page=. An invalid value is treated as page 1.
+// Showing an error page while browsing a listing leaves the user nothing to do.
 func pageParam(r *http.Request) int {
 	page, err := strconv.Atoi(r.URL.Query().Get("page"))
 	if err != nil || page < 1 {
@@ -60,20 +60,20 @@ func pageParam(r *http.Request) int {
 	return page
 }
 
-// historyView は履歴一覧に渡す値です。
+// historyView is the value passed to the history listing.
 type historyView struct {
 	baseView
 	Jobs []repository.Job
 	Page jobstatus.PageMeta
-	// Filter は絞り込み中の状態です（空なら全件）。ページ送りのリンクに
-	// 引き継がないと、2 ページ目で絞り込みが外れます。
+	// Filter is the active filter (empty means everything). Unless the pager links carry it,
+	// the filter drops on page 2.
 	Filter string
 }
 
-// listableStates は ?state= に指定できる値です。
+// listableStates are the values ?state= accepts.
 //
-// jobstatus の語彙をそのまま使います。ここで独自の綴りを作ると、記録に
-// 書かれている値と画面が受け付ける値が別物になります。
+// It uses jobstatus's vocabulary as is. Inventing a spelling here would make the values written
+// in the records differ from the values the page accepts.
 func listableStates() []string {
 	return []string{
 		string(jobstatus.StateQueued),
@@ -83,10 +83,10 @@ func listableStates() []string {
 	}
 }
 
-// stateParam は ?state= を読みます。空なら絞り込みなし、未知の値は false です。
+// stateParam reads ?state=. Empty means no filter; an unknown value returns false.
 //
-// page と違って黙って無視しません。打ち間違えた絞り込みが全件を返すと、
-// 「失敗したジョブは無い」と読めてしまいます。
+// Unlike page, it is not silently ignored. A mistyped filter returning everything would read
+// as "there are no failed jobs".
 func stateParam(r *http.Request) (jobstatus.State, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get("state"))
 	if value == "" {
@@ -98,12 +98,12 @@ func stateParam(r *http.Request) (jobstatus.State, bool) {
 	return jobstatus.State(value), true
 }
 
-// JobList は、ジョブを新しい順に返します（GET /jobs）。?page= と ?per_page= を受けます。
+// JobList returns jobs newest first (GET /jobs). It accepts ?page= and ?per_page=.
 func (h *Handler) JobList(w http.ResponseWriter, r *http.Request) {
 	perPage := historyPerPage
 	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
-		// 上限で頭打ちにします。何でも通していた頃は ?per_page=100000 が
-		// そのまま 1 クエリになり、呼び出し側の打ち間違いを倉庫が引き受けていました。
+		// Capped at the bound. When anything passed, ?per_page=100000 became a single query
+		// as is, and the store absorbed the caller's typo.
 		perPage = min(n, maxPerPage)
 	}
 
@@ -120,8 +120,8 @@ func (h *Handler) JobList(w http.ResponseWriter, r *http.Request) {
 
 	jobs, meta, err := h.repo.List(r.Context(), pageParam(r), perPage, opts...)
 	if err != nil {
-		// 絞り込みは複合索引を要ります（state と queued_at）。索引はデプロイ設定が
-		// 持つので、無い環境では絞り込んだときだけここに来ます。
+		// The filter needs a composite index (state and queued_at). The index belongs to the deployment
+		// configuration, so in an environment without it this is reached only when filtering.
 		respond.ServerError(w, r, http.StatusBadGateway, err, "履歴の取得に失敗しました", "state", state)
 		return
 	}

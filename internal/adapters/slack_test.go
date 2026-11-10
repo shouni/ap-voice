@@ -13,29 +13,29 @@ import (
 	"github.com/shouni/ap-voice/internal/domain"
 )
 
-// recordingNotifier は送信された notify.Message を記録するフェイクです。
-// Slack 記法への変換は go-notify 側の責務なので、ここでは ap-voice が
-// 組み立てた見出しと本文だけを検証します。
+// recordingNotifier is a fake that records the notify.Message sent.
+// Converting to Slack markup is go-notify's job, so this only verifies the title and body
+// ap-voice assembled.
 type recordingNotifier struct {
 	got []notify.Message
 }
 
-// Notify は notify.Notifier を実装し、受け取った Message を記録します。
+// Notify implements notify.Notifier and records the Message it receives.
 func (r *recordingNotifier) Notify(_ context.Context, msg notify.Message) error {
 	r.got = append(r.got, msg)
 	return nil
 }
 
-// last は最後に送信された Message を返します。
+// last returns the last Message sent.
 func (r *recordingNotifier) last(t *testing.T) notify.Message {
 	t.Helper()
 	if len(r.got) == 0 {
-		t.Fatal("通知が送信されていません")
+		t.Fatal("no notification was sent")
 	}
 	return r.got[len(r.got)-1]
 }
 
-// newTestAdapter は記録用 Notifier を差し込んだアダプターを返します。
+// newTestAdapter returns an adapter with a recording Notifier plugged in.
 func newTestAdapter() (*SlackAdapter, *recordingNotifier) {
 	rec := &recordingNotifier{}
 	return &SlackAdapter{
@@ -44,7 +44,7 @@ func newTestAdapter() (*SlackAdapter, *recordingNotifier) {
 	}, rec
 }
 
-// testRequest はテストで使う共通のリクエストです。
+// testRequest is the request shared by the tests.
 func testRequest() domain.Request {
 	return domain.Request{
 		Command:   domain.CommandGenerate,
@@ -56,10 +56,10 @@ func testRequest() domain.Request {
 	}
 }
 
-// TestNewSlackAdapterDisabledWhenWebhookURLEmpty は、Webhook URL が未設定なら
-// エラーにならず通知が無効化されることを検証します。
-// 以前は builder 側に専用の Noop 実装と分岐がありましたが、この振る舞いは
-// アダプターの責務に移っています。
+// TestNewSlackAdapterDisabledWhenWebhookURLEmpty verifies that an unset webhook URL disables
+// notifications without an error.
+// The builder used to have its own Noop implementation and branch, but this behaviour has
+// moved into the adapter.
 func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -68,7 +68,7 @@ func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 		t.Fatalf("NewSlackAdapter failed: %v", err)
 	}
 	if adapter.pipeline.Enabled() {
-		t.Fatal("Webhook URL 未設定なのに通知が有効になっています")
+		t.Fatal("notifications are enabled although the webhook URL is unset")
 	}
 
 	ctx := context.Background()
@@ -81,18 +81,18 @@ func TestNewSlackAdapterDisabledWhenWebhookURLEmpty(t *testing.T) {
 	}
 }
 
-// TestNewSlackAdapterRequiresHTTPClientWhenWebhookSet は、Webhook URL があるのに
-// HTTP クライアントが nil の場合はエラーになることを検証します。
+// TestNewSlackAdapterRequiresHTTPClientWhenWebhookSet verifies that a nil HTTP client is an
+// error when a webhook URL is set.
 func TestNewSlackAdapterRequiresHTTPClientWhenWebhookSet(t *testing.T) {
 	t.Parallel()
 
 	if _, err := NewSlackAdapter(nil, "https://hooks.slack.example/webhook", "https://ap-voice.example.run.app"); err == nil {
-		t.Fatal("HTTPクライアントが nil なのにエラーになりません")
+		t.Fatal("no error although the HTTP client is nil")
 	}
 }
 
-// TestNotifySendsPublicURLAndMetadata は、完了通知が公開URLと共通メタデータを
-// 含めて送信されることを検証します。
+// TestNotifySendsPublicURLAndMetadata verifies that the completion notification is sent with the
+// public URL and the shared metadata.
 func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -106,16 +106,16 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 		t.Errorf("Title = %q, want %q", msg.Title, slackTitles.Success)
 	}
 
-	// リンクの表示名は署名付き URL ではなく gs:// のパスです。署名付き URL は
-	// クエリだけで 1000 文字を超え、本文が URL で埋まるためです。
-	// 出力はファイル名まで出しません。generate の時点では音声がまだ無く、
-	// audio.wav を示すと存在しないものを案内することになります。
-	// 並びは「どのジョブか → 何ができたか → どう作ったか」です。
+	// The link text is the gs:// path, not the signed URL. The signed URL's
+	// query alone exceeds 1000 characters and would fill the body.
+	// The output does not go down to the file name. At generate time there is no audio yet, and
+	// pointing at audio.wav would direct people to something that does not exist.
+	// The order is "which job → what was made → how it was made".
 	want := "**詳細:** [job-1](https://ap-voice.example.run.app/jobs/job-1)\n" +
 		"**処理:** `generate`\n" +
 		"**ジョブID:** `job-1`\n" +
 		"**音声:** [gs://out/voice.wav](https://example.com/voice.wav)\n" +
-		// gs:// は Slack では文字列なので、表示はそのままリンク先だけコンソールへ向けます。
+		// gs:// is plain text in Slack, so the display stays as is and only the link target goes to the console.
 		"**出力先:** [gs://out/](https://console.cloud.google.com/storage/browser/out/)\n" +
 		"**入力URI:** [gs://in/article.txt](https://console.cloud.google.com/storage/browser/_details/in/article.txt)\n" +
 		"**モード:** `dialogue`\n" +
@@ -125,9 +125,9 @@ func TestNotifySendsPublicURLAndMetadata(t *testing.T) {
 	}
 }
 
-// TestNotifyOmitsPublicURLWhenEmpty は、音声が無い場合に行ごと省かれることを検証します。
-// generate はここを通ります。台本しか作らないため署名付き URL を返さず、
-// 存在しない audio.wav のリンクを配らないようにしています。
+// TestNotifyOmitsPublicURLWhenEmpty verifies that the line is omitted when there is no audio.
+// generate takes this path. It makes only the script, so it returns no signed URL and
+// does not hand out a link to a non-existent audio.wav.
 func TestNotifyOmitsPublicURLWhenEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -138,15 +138,15 @@ func TestNotifyOmitsPublicURLWhenEmpty(t *testing.T) {
 
 	body := rec.last(t).Body
 	if strings.Contains(body, "**音声:**") {
-		t.Errorf("Body = %q, 音声の行が残っています", body)
+		t.Errorf("Body = %q, the audio line remains", body)
 	}
-	// generate は台本までなので、この経路が既定です。詳細画面が入口になります。
+	// generate ends at the script, so this path is the default. The detail page is the entry point.
 	if !strings.HasPrefix(body, "**詳細:**") {
-		t.Errorf("Body = %q, want 詳細 から始まること", body)
+		t.Errorf("Body = %q, want it to start with 詳細", body)
 	}
 }
 
-// TestNotifyFailureAppendsCause は、失敗通知がエラー内容を追記することを検証します。
+// TestNotifyFailureAppendsCause verifies that the failure notification appends the error.
 func TestNotifyFailureAppendsCause(t *testing.T) {
 	t.Parallel()
 
@@ -168,9 +168,9 @@ func TestNotifyFailureAppendsCause(t *testing.T) {
 	}
 }
 
-// TestNotifyFailureWithNilCause は、原因が nil でも通知が壊れないことを検証します。
-// 旧実装は fmt.Sprintf("%v", nil) の結果である <nil> をそのまま送っており、
-// Slack 側でリンク構文と誤認される文字列になっていました。
+// TestNotifyFailureWithNilCause verifies that a nil cause does not break the notification.
+// The old implementation sent <nil>, the result of fmt.Sprintf("%v", nil), as is,
+// a string Slack mistook for link syntax.
 func TestNotifyFailureWithNilCause(t *testing.T) {
 	t.Parallel()
 
@@ -184,8 +184,8 @@ func TestNotifyFailureWithNilCause(t *testing.T) {
 	}
 }
 
-// TestNotifySetsLevel は、3 つの結果それぞれが種別を伴って送信されることを検証します。
-// Slack 側はこれを attachment の色に落とすため、見出しの絵文字とは別に必要です。
+// TestNotifySetsLevel verifies that each outcome is sent with its level.
+// Slack turns it into the attachment colour, so it is needed separately from the title's emoji.
 func TestNotifySetsLevel(t *testing.T) {
 	tests := []struct {
 		name string
@@ -193,14 +193,14 @@ func TestNotifySetsLevel(t *testing.T) {
 		want notify.Level
 	}{
 		{
-			name: "完了",
+			name: "success",
 			call: func(a *SlackAdapter) error {
 				return a.Notify(context.Background(), testRequest(), "https://example.com/voice.wav")
 			},
 			want: notify.LevelSuccess,
 		},
 		{
-			name: "失敗",
+			name: "failure",
 			call: func(a *SlackAdapter) error {
 				return a.NotifyFailure(context.Background(), testRequest(), errors.New("boom"))
 			},
@@ -213,7 +213,7 @@ func TestNotifySetsLevel(t *testing.T) {
 			adapter, rec := newTestAdapter()
 
 			if err := tt.call(adapter); err != nil {
-				t.Fatalf("通知に失敗しました: %v", err)
+				t.Fatalf("notification failed: %v", err)
 			}
 			if got := rec.last(t).Level; got != tt.want {
 				t.Errorf("Level = %v, want %v", got, tt.want)
@@ -222,12 +222,12 @@ func TestNotifySetsLevel(t *testing.T) {
 	}
 }
 
-// gs:// URI → Cloud Console URL の変換規則（末尾スラッシュでバケットブラウザと
-// 詳細ページを使い分ける等）は notify.Body.URIField に移管し、go-notify 側の
-// テストが検証します。ここでは通知本文レベルの配線だけを確認します。
+// The gs:// URI → Cloud Console URL rules (choosing the bucket browser or the details page by a
+// trailing slash and so on) moved to notify.Body.URIField and are verified by go-notify's
+// tests. This only checks the wiring at the notification body level.
 
-// TestNotifyKeepsNonGCSInputAsPlainValue は、コンソールへ飛ばせない入力ソースが
-// リンクではなく素の値として残ることを検証します。
+// TestNotifyKeepsNonGCSInputAsPlainValue verifies that an input source that cannot be linked to
+// the console stays a plain value rather than a link.
 func TestNotifyKeepsNonGCSInputAsPlainValue(t *testing.T) {
 	t.Parallel()
 
@@ -240,14 +240,14 @@ func TestNotifyKeepsNonGCSInputAsPlainValue(t *testing.T) {
 	}
 
 	if body := rec.last(t).Body; !strings.Contains(body, "**入力URI:** https://example.com/tech-news\n") {
-		t.Errorf("Body = %q, want plain 入力URI", body)
+		t.Errorf("Body = %q, want a plain 入力URI", body)
 	}
 }
 
-// TestNotifyFailureDistinguishesTimeout は、打ち切りが専用の見出しで届くことを検証します。
+// TestNotifyFailureDistinguishesTimeout verifies that a cut-off run arrives with its own title.
 //
-// 時間切れと本当の失敗は対処が違います。前者は流し直せば通ることがあり、
-// 後者は入力か設定を直す必要があります。同じ ❌ で並ぶと、一覧では区別できません。
+// A timeout and a real failure call for different responses. The former may pass when run again,
+// the latter needs the input or settings fixed. With the same ❌ for both, a list cannot tell them apart.
 func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -258,29 +258,29 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 		wantGuide bool
 	}{
 		{
-			name: "打ち切り",
-			// Lifecycle が PIPELINE_TIMEOUT で打ち切ると、元のエラーに worker.ErrTimedOut の
-			// 印が付いて Finish へ届きます（文面はそのまま）。
-			cause:     timedOut{fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded)},
+			name: "cut off",
+			// When Lifecycle cuts the run at PIPELINE_TIMEOUT, the original error reaches Finish
+			// marked with worker.ErrTimedOut (the text is unchanged).
+			cause:     timedOut{fmt.Errorf("speech synthesis failed: %w", context.DeadlineExceeded)},
 			wantTitle: timeoutTitles.Failure,
 			wantGuide: true,
 		},
 		{
-			// 下流 1 回の期限切れ（VOICEVOX の 60 秒など）は、同じ DeadlineExceeded でも
-			// パイプラインの打ち切りではありません。以前はこれも「時間切れ」と出ていました。
-			name:      "下流の期限切れは本当の失敗",
-			cause:     fmt.Errorf("音声合成に失敗しました: %w", context.DeadlineExceeded),
+			// A single downstream deadline (VOICEVOX's 60 seconds and so on) is the same DeadlineExceeded
+			// but not a pipeline cutoff. It used to be reported as a "timeout" too.
+			name:      "a downstream deadline is a real failure",
+			cause:     fmt.Errorf("speech synthesis failed: %w", context.DeadlineExceeded),
 			wantTitle: slackTitles.Failure,
 			wantGuide: false,
 		},
 		{
-			name:      "Cloud Run の停止",
-			cause:     fmt.Errorf("中断されました: %w", context.Canceled),
+			name:      "Cloud Run shutdown",
+			cause:     fmt.Errorf("interrupted: %w", context.Canceled),
 			wantTitle: timeoutTitles.Failure,
 			wantGuide: true,
 		},
 		{
-			name:      "本当の失敗",
+			name:      "real failure",
 			cause:     errors.New("VOICEVOX に接続できません"),
 			wantTitle: slackTitles.Failure,
 			wantGuide: false,
@@ -301,13 +301,13 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 				t.Errorf("Title = %q, want %q", msg.Title, tt.wantTitle)
 			}
 			if got := strings.Contains(msg.Body, timeoutGuidance); got != tt.wantGuide {
-				t.Errorf("案内の有無 = %v, want %v", got, tt.wantGuide)
+				t.Errorf("guidance present = %v, want %v", got, tt.wantGuide)
 			}
-			// 原因はどちらの場合も本文に残ります。
+			// The cause stays in the body either way.
 			if !strings.Contains(msg.Body, "**エラー内容:**") {
-				t.Errorf("エラー内容が欠けています: %q", msg.Body)
+				t.Errorf("the error details are missing: %q", msg.Body)
 			}
-			// 見出しが変わっても種別は失敗のままです（Slack の色に効きます）。
+			// The level stays failure even when the title changes (it drives Slack's colour).
 			if msg.Level != notify.LevelFailure {
 				t.Errorf("Level = %v, want %v", msg.Level, notify.LevelFailure)
 			}
@@ -315,18 +315,18 @@ func TestNotifyFailureDistinguishesTimeout(t *testing.T) {
 	}
 }
 
-// TestNotifyGroupsFieldsByPurpose は、項目が「どのジョブか → 何ができたか →
-// どう作ったか」の順に並ぶことを検証します。
+// TestNotifyGroupsFieldsByPurpose verifies that the fields are ordered "which job → what was made →
+// how it was made".
 //
-// synthesize では最後の組がまるごと消えます。入力URI・モード・モデルを
-// 持たないためで、識別と成果物だけが残ります。生成条件が途中に挟まっていると、
-// 項目が欠けているのか、そもそも持たないのかを読み分けられません。
+// For synthesize the last group vanishes entirely, since it has no input URI, mode or model,
+// leaving the identification and the artifacts. With generation settings in the middle,
+// you could not tell whether a field is missing or simply does not apply.
 func TestNotifyGroupsFieldsByPurpose(t *testing.T) {
 	t.Parallel()
 
 	adapter, rec := newTestAdapter()
 	req := testRequest()
-	// synthesize は保存済みの台本から作るため、生成条件を持ちません。
+	// synthesize builds from a stored script, so it has no generation settings.
 	req.Command = domain.CommandSynthesize
 	req.InputURI = ""
 	req.Mode = ""
@@ -346,7 +346,7 @@ func TestNotifyGroupsFieldsByPurpose(t *testing.T) {
 	}
 }
 
-// timedOut は、worker.Lifecycle が Timeout の発火時に付ける印と同じ形のテスト用エラーです。
+// timedOut is a test error shaped like the mark worker.Lifecycle attaches when Timeout fires.
 type timedOut struct{ cause error }
 
 func (e timedOut) Error() string        { return e.cause.Error() }

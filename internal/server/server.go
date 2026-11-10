@@ -11,7 +11,7 @@ import (
 	"github.com/shouni/ap-voice/internal/config"
 )
 
-// Run はサーバーの構築、起動、およびライフサイクル管理を行います。
+// Run builds the server, starts it and manages its lifecycle.
 func Run(ctx context.Context, cfg *config.Config) error {
 	appCtx, err := builder.BuildContainer(ctx, cfg)
 	if err != nil {
@@ -32,7 +32,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		"role", cfg.Server.Role,
 		"service_url", cfg.Server.ServiceURL)
 
-	// 起動・シグナル待ち・正常停止（猶予を超えたら強制クローズ）は cloudrun が持ちます。
+	// cloudrun owns startup, waiting for signals and graceful shutdown (forcing a close once the grace period runs out).
 	return cloudrun.Serve(ctx, cloudrun.Config{
 		Port:    cfg.Server.Port,
 		Handler: NewRouter(h, cfg.GCP.ProjectID),

@@ -1,4 +1,4 @@
-// Package builder は、設定値から各クライアントと DI コンテナを組み立てます。
+// Package builder assembles each client and the DI container from the configuration.
 package builder
 
 import (
@@ -23,7 +23,7 @@ import (
 	"github.com/shouni/ap-voice/internal/repository"
 )
 
-// BuildContainer は外部サービスとの接続を確立し、依存関係を組み立てた app.Container を返します。
+// BuildContainer connects to the external services, assembles the dependencies and returns the app.Container.
 func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Container, err error) {
 	var resources []io.Closer
 	defer func() {
@@ -49,21 +49,21 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("failed to initialize IO components: %w", err)
 	}
 
-	// ジョブ状態の置き場。成果物は GCS のまま、状態だけを Firestore に持ちます。
-	// 両ロールで要ります— web は queued を書いて履歴を読み、worker は
-	// running / succeeded / failed を書いて再実行ガードのために読みます。
+	// Where job states live. Artifacts stay in GCS; only the state is kept in Firestore.
+	// Both roles need it — web writes queued and reads the history, the worker writes
+	// running / succeeded / failed and reads it for the re-run guard.
 	jobStatus, err := jobstatus.New(ctx,
 		jobstatus.WithProjectID(cfg.GCP.ProjectID),
 		jobstatus.WithDatabase(cfg.Storage.FirestoreDatabase),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("firestore の初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize firestore: %w", err)
 	}
 	resources = append(resources, jobStatus)
 
 	jobStatusClient, err := jobStatus.Client()
 	if err != nil {
-		return nil, fmt.Errorf("firestore クライアントの取得に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to get the firestore client: %w", err)
 	}
 
 	httpClient := httpkit.New(
@@ -78,29 +78,29 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		return nil, fmt.Errorf("failed to initialize notifier: %w", err)
 	}
 
-	// 話者一覧は埋め込みリソースなので、外部接続より先に組みます。
-	// 壊れていれば起動時に落とし、合成を始めてから気付くことがないようにします。
+	// The speaker roster is an embedded resource, so it is built before any external connection.
+	// If it is broken, startup fails rather than it being noticed after synthesis starts.
 	speakers, err := speaker.NewRegistry(assets.SpeakersJSON)
 	if err != nil {
-		return nil, fmt.Errorf("話者一覧の読み込みに失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to load the speaker roster: %w", err)
 	}
 
-	// プロンプトの組み立ても埋め込みリソースだけで作れます。生成する段と
-	// カタログの両方が同じものを使うので、ここで 1 つだけ組みます。
+	// Prompt assembly can also be built from embedded resources alone. The generating step and
+	// the catalogue use the same one, so exactly one is built here.
 	prompt, err := adapters.NewPromptAdapter()
 	if err != nil {
-		return nil, fmt.Errorf("プロンプトの組み立てに失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to assemble the prompts: %w", err)
 	}
 
-	// 成果物の読み出しは両ロールで使います。web は履歴の表示に、
-	// worker は synthesize が保存済み台本を読むために。
+	// Both roles read artifacts: web to show the history,
+	// the worker for synthesize to read stored scripts.
 	//
-	// ジョブ状態のストアは 1 つだけ作り、Recorder と Repository の両方へ渡します。
-	// Recorder には包まずに渡します（repository.NewJobStatusStore を参照）。
+	// Exactly one job state store is built and handed to both the Recorder and the Repository.
+	// It is passed to the Recorder unwrapped (see repository.NewJobStatusStore).
 	statusStore := repository.NewJobStatusStore(jobStatusClient)
 	repo, err := repository.NewRepository(store, cfg.Storage.GCSBucket, statusStore)
 	if err != nil {
-		return nil, fmt.Errorf("リポジトリの初期化に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to initialize the repository: %w", err)
 	}
 
 	appCtx := &app.Container{
@@ -113,20 +113,20 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		Store:      store,
 		HTTPClient: httpClient,
 		Notifier:   notifier,
-		// Store はファクトリが持つクライアントを包むだけで、寿命はファクトリ側にあります。
-		// 組み立てに失敗したときは resources 側が storage を直接閉じるため、
-		// Closers は成功して返ったあとの解放だけを受け持ちます。
+		// Store only wraps the client the factory holds; its lifetime belongs to the factory.
+		// When assembly fails, the resources side closes storage directly, so
+		// Closers only handles release after a successful return.
 		Closers: []io.Closer{storage, jobStatus},
 	}
 
-	// タスクを投入するのは Web 面だけです。Worker 面は受け取る側なので、組み立てないことで
-	// 未使用の Cloud Tasks クライアントと CLOUD_TASKS_QUEUE_ID への依存を持たずに済みます。
-	// セッションはジョブ状態とは別のデータベースに置きます（SessionDatabase）。
+	// Only the web side enqueues tasks. The worker side receives them, so by not building it
+	// the worker carries no unused Cloud Tasks client and no dependency on CLOUD_TASKS_QUEUE_ID.
+	// Sessions live in a different database from job states (SessionDatabase).
 	var sessionStore session.Store
 	if cfg.Server.Role.ServesWeb() {
 		fsClient, fsErr := firestore.NewClientWithDatabase(ctx, cfg.GCP.ProjectID, cfg.Auth.SessionDatabase)
 		if fsErr != nil {
-			return nil, fmt.Errorf("セッション用 Firestore の初期化に失敗しました: %w", fsErr)
+			return nil, fmt.Errorf("failed to initialize the session Firestore: %w", fsErr)
 		}
 		resources = append(resources, fsClient)
 		appCtx.Closers = append(appCtx.Closers, fsClient)
@@ -136,7 +136,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 			Collection: cfg.Auth.SessionCollection,
 		})
 		if fsErr != nil {
-			return nil, fmt.Errorf("セッションストアの構築に失敗しました: %w", fsErr)
+			return nil, fmt.Errorf("failed to build the session store: %w", fsErr)
 		}
 		appCtx.SessionStore = sessionStore
 	}
@@ -160,10 +160,10 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 		resources = append(resources, queue)
 	}
 
-	// パイプラインを実行するのは Worker 面だけです。Web 面は組み立てないことで、
-	// 未使用の Gemini クライアントと VOICEVOX エンジンへの接続を持たずに済みます。
-	// VOICEVOX の初期化は /speakers を叩くため、公開側で組むと起動のたびに
-	// エンジンのコールドスタートを踏むことにもなります。
+	// Only the worker side runs the pipeline. By not building it, the web side carries
+	// no unused Gemini client and no connection to the VOICEVOX engine.
+	// Initialising VOICEVOX calls /speakers, so building it on the public side would also
+	// hit the engine's cold start on every startup.
 	if cfg.Server.Role.ServesWorker() {
 		p, err := buildPipeline(ctx, appCtx)
 		if err != nil {
@@ -175,11 +175,11 @@ func BuildContainer(ctx context.Context, cfg *config.Config) (container *app.Con
 	return appCtx, nil
 }
 
-// buildNotifier は、通知機能を初期化します。
-// webhookURL が未設定の場合、アダプター側が通知を行わない実装を返します。
+// buildNotifier initialises notifications.
+// When webhookURL is unset, the adapter returns an implementation that sends nothing.
 func buildNotifier(httpClient httpkit.Poster, webhookURL, serviceURL string) (domain.Notifier, error) {
 	if webhookURL == "" {
-		slog.Info("Slack Webhook URL が未設定のため、通知は無効化されます。")
+		slog.Info("Slack webhook URL is unset; notifications are disabled")
 	}
 
 	return adapters.NewSlackAdapter(httpClient, webhookURL, serviceURL)

@@ -6,10 +6,10 @@ import (
 	"github.com/shouni/go-serve-kit/respond"
 )
 
-// Audio は、生成済み音声の署名付き URL を返します。
+// Audio returns a signed URL for the generated audio.
 //
-// 人にはその URL へ転送し、機械には URL そのものを返します。転送で返すと、
-// 呼び出し側は URL を受け取るために転送を追わない設定を書く必要があります。
+// A person is redirected to the URL and a machine gets the URL itself. With a redirect,
+// the caller would have to configure itself not to follow redirects just to receive the URL.
 func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := h.jobID(w, r)
 	if !ok {
@@ -18,8 +18,8 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 
 	wantsJSON := respond.WantsJSON(w, r)
 	if wantsJSON {
-		// 画面はリンクを出す前に一覧で有無を知っていますが、機械は知りません。
-		// 無い場合に署名付き URL を返すと、開いた先で 404 に当たります。
+		// The page knows from the listing whether audio exists before it shows a link; a machine does not.
+		// Returning a signed URL when there is none would hit a 404 at the other end.
 		hasAudio, err := h.repo.HasAudio(r.Context(), jobID)
 		if err != nil {
 			respond.ServerError(w, r, http.StatusBadGateway, err, "音声の有無を確認できませんでした", "job_id", jobID)
@@ -49,13 +49,13 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-// apiAudio は GET /jobs/{jobID}/audio の JSON 応答です。
+// apiAudio is the JSON response of GET /jobs/{jobID}/audio.
 type apiAudio struct {
 	JobID string `json:"job_id"`
-	// AudioURI は保存先です。期限が無いので、記録や再取得の手掛かりになります。
+	// AudioURI is where it is stored. It does not expire, so it serves as a record and a handle to fetch it again.
 	AudioURI string `json:"audio_uri"`
-	// SignedURL は誰でも再生・取得できるリンクです。期限があります。
+	// SignedURL is a link anyone can play or download. It expires.
 	SignedURL string `json:"signed_url"`
-	// ExpiresInSeconds は SignedURL の有効期間です。
+	// ExpiresInSeconds is how long SignedURL stays valid.
 	ExpiresInSeconds int `json:"expires_in_seconds"`
 }

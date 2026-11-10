@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// TestRequestValidate は、コマンドごとに揃っているべき入力を検証します。
+// TestRequestValidate verifies the input each command must have.
 //
-// 揃っていない入力は何度実行しても同じように失敗するため、外部を 1 つも
-// 叩く前に弾きます。この判断は Web フォーム・API・Worker の 3 つが同じ関数で
-// 行うので、ここが緩むと 3 つとも緩みます。
+// Incomplete input fails the same way however many times it runs, so it is rejected before
+// any external call. The web form, the API and the worker all decide this with the same function,
+// so loosening it here loosens all three.
 func TestRequestValidate(t *testing.T) {
 	t.Parallel()
 
@@ -20,60 +20,60 @@ func TestRequestValidate(t *testing.T) {
 	tests := []struct {
 		name string
 		req  Request
-		// wantErr が空なら通ること、そうでなければその文言を含むこと。
+		// If wantErr is empty it must pass; otherwise the error must contain that text.
 		wantErr string
-		// unknown は ErrUnknownCommand で包まれているべきかです。
+		// unknown is whether it must be wrapped in ErrUnknownCommand.
 		unknown bool
 	}{
 		{
-			name: "generate は入力ソースと出力先が要る",
+			name: "generate needs an input source and an output",
 			req:  Request{Command: CommandGenerate, JobID: jobID, InputURI: "https://example.com", OutputURI: output},
 		},
 		{
-			name:    "generate に入力ソースが無い",
+			name:    "generate without an input source",
 			req:     Request{Command: CommandGenerate, JobID: jobID, OutputURI: output},
 			wantErr: "入力ソース",
 		},
 		{
-			name: "generate_and_synthesize も入力ソースが要る",
+			name: "generate_and_synthesize needs an input source too",
 			req:  Request{Command: CommandGenerateAndSynthesize, JobID: jobID, InputURI: "https://example.com", OutputURI: output},
 		},
 		{
-			name:    "generate_and_synthesize に入力ソースが無い",
+			name:    "generate_and_synthesize without an input source",
 			req:     Request{Command: CommandGenerateAndSynthesize, JobID: jobID, OutputURI: output},
 			wantErr: "入力ソース",
 		},
 		{
-			// 台本はペイロードに載りません。在り処はジョブ ID だけです。
-			name: "synthesize はジョブIDで台本を指す",
+			// The script does not ride in the payload. Its location is the job ID alone.
+			name: "synthesize names the script by job ID",
 			req:  Request{Command: CommandSynthesize, JobID: jobID, OutputURI: output},
 		},
 		{
-			name:    "synthesize に台本の在り処が無い",
+			name:    "synthesize without the script's location",
 			req:     Request{Command: CommandSynthesize, OutputURI: output},
 			wantErr: "台本が特定できません",
 		},
 		{
-			// 空白だけの値は「指定した」とみなしません。フォームから来ます。
-			name:    "空白だけのジョブID",
+			// A whitespace-only value does not count as "given". It comes from the form.
+			name:    "whitespace-only job ID",
 			req:     Request{Command: CommandSynthesize, JobID: "   ", OutputURI: output},
 			wantErr: "台本が特定できません",
 		},
 		{
-			name:    "出力先が無い",
+			name:    "no output",
 			req:     Request{Command: CommandGenerate, JobID: jobID, InputURI: "https://example.com"},
 			wantErr: "出力先",
 		},
 		{
-			// 空を generate とみなしません。持ち込んだ台本が黙って捨てられ、
-			// 課金と出力の両方が変わる取り違えになります。
-			name:    "command が空",
+			// Empty is not taken as generate. A supplied script would be silently discarded,
+			// a mix-up that changes both the billing and the output.
+			name:    "empty command",
 			req:     Request{JobID: jobID, InputURI: "https://example.com", OutputURI: output},
 			wantErr: "command が指定されていません",
 			unknown: true,
 		},
 		{
-			name:    "未知の command",
+			name:    "unknown command",
 			req:     Request{Command: "compose", JobID: jobID, OutputURI: output},
 			wantErr: `"compose"`,
 			unknown: true,
@@ -92,13 +92,13 @@ func TestRequestValidate(t *testing.T) {
 				return
 			}
 			if err == nil {
-				t.Fatalf("Validate() = nil, want %q を含むエラー", tt.wantErr)
+				t.Fatalf("Validate() = nil, want an error containing %q", tt.wantErr)
 			}
 			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("Validate() error = %v, want に %q を含む", err, tt.wantErr)
+				t.Errorf("Validate() error = %v, want it to contain %q", err, tt.wantErr)
 			}
-			// 未知のコマンドは型で見分けられる必要があります。文言で判別すると、
-			// 文言を直した時点で呼び出し側の分岐が黙って外れます。
+			// An unknown command must be distinguishable by type. Telling it apart by text would
+			// silently break the caller's branch the moment the text is edited.
 			if got := errors.Is(err, ErrUnknownCommand); got != tt.unknown {
 				t.Errorf("errors.Is(err, ErrUnknownCommand) = %v, want %v", got, tt.unknown)
 			}
@@ -106,21 +106,21 @@ func TestRequestValidate(t *testing.T) {
 	}
 }
 
-// TestRequestValidateNamesEveryCommand は、コマンドの取り違えを直せる案内が
-// 出ることを検証します。
+// TestRequestValidateNamesEveryCommand verifies that the error guides the caller to fix a
+// mistaken command.
 //
-// 受け付ける値が 3 つあり、そのうちどれなのかはエラー文にしか出ません。
-// 増えたコマンドを案内に足し忘れると、呼び出し側は存在しない値だと思い込みます。
+// Three values are accepted, and which they are appears only in the error text.
+// Forget to add a new command to the guidance and callers will assume the value does not exist.
 func TestRequestValidateNamesEveryCommand(t *testing.T) {
 	t.Parallel()
 
 	err := Request{OutputURI: "gs://bucket/o.wav"}.Validate()
 	if err == nil {
-		t.Fatal("command が空なのにエラーになりません")
+		t.Fatal("no error although command is empty")
 	}
 	for _, command := range []Command{CommandGenerate, CommandSynthesize, CommandGenerateAndSynthesize} {
 		if !strings.Contains(err.Error(), string(command)) {
-			t.Errorf("案内に %q がありません: %v", command, err)
+			t.Errorf("the guidance lacks %q: %v", command, err)
 		}
 	}
 }

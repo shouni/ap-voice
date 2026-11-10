@@ -1,12 +1,12 @@
-// 生成モードの説明を、選択に合わせて差し替えます。
+// Swaps the generation mode's description to match the selection.
 //
-// 説明そのものはプロンプト（prompts/<mode>.md）の front matter が持っていて、
-// option の data 属性で運ばれてきます。ここは表示だけを担当するので、
-// モードを足しても JS は触りません。
+// The description itself lives in the front matter of the prompt (prompts/<mode>.md) and
+// arrives through the option's data attributes. This only handles display, so
+// adding a mode does not touch the JS.
 (() => {
     'use strict';
 
-    // appendLine は空でない説明だけを 1 行として足します。
+    // appendLine adds a non-empty description as one line.
     const appendLine = (target, text, className) => {
         if (!text) {
             return;
@@ -15,7 +15,7 @@
         if (className) {
             line.className = className;
         }
-        // front matter は書き手のものですが、HTML として解釈させる理由はありません。
+        // The front matter belongs to its author, but there is no reason to have it interpreted as HTML.
         line.textContent = text;
         target.appendChild(line);
     };
@@ -42,7 +42,7 @@
                 continue;
             }
             select.addEventListener('change', () => render(select, target));
-            // 初回描画。選択済みの状態（投入後の再描画を含む）に合わせます。
+            // First render. Matches the selected state (including the re-render after submission).
             render(select, target);
         }
     });

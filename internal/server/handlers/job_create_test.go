@@ -11,12 +11,11 @@ import (
 	"github.com/shouni/gcp-kit/jobstatus"
 )
 
-// TestAPIEnqueueRecordsQueuedBeforeEnqueueing は、状態を投入より先に書くことを
-// 検証します。
+// TestAPIEnqueueRecordsQueuedBeforeEnqueueing verifies that the state is written before the enqueue.
 //
-// Worker は配信されたタスクより先に状態を読みます。Cloud Tasks は数十ミリ秒で
-// 届くため、順序が逆だと Worker が書いた running を、あとから届いた queued が
-// 上書きしかねません。ap-story が同じ順序で実際に踏んでいます。
+// The worker reads the state before the delivered task. Cloud Tasks delivers within tens of
+// milliseconds, so in the opposite order a queued arriving late could overwrite the running the
+// worker wrote. ap-story actually hit this with the same ordering.
 func TestJobCreateJSONRecordsQueuedBeforeEnqueueing(t *testing.T) {
 	t.Parallel()
 
@@ -36,10 +35,10 @@ func TestJobCreateJSONRecordsQueuedBeforeEnqueueing(t *testing.T) {
 		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 	}
 	if len(order) != 2 || order[0] != "status" || order[1] != "enqueue" {
-		t.Errorf("順序 = %v, want [status enqueue]", order)
+		t.Errorf("order = %v, want [status enqueue]", order)
 	}
 
-	// 応答は姉妹サービスと同じ封筒（status + job_id）であること。
+	// The response is the same envelope as the sibling services (status + job_id).
 	var body map[string]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
@@ -48,26 +47,26 @@ func TestJobCreateJSONRecordsQueuedBeforeEnqueueing(t *testing.T) {
 		t.Errorf("status = %q, want %q", body["status"], jobstatus.StateQueued)
 	}
 	if body["job_id"] == "" {
-		t.Error("job_id が空です")
+		t.Error("job_id is empty")
 	}
-	// 本文を読まなくてもポーリング先が分かるように、Location にジョブの URL を載せます。
+	// The job URL goes in Location so the polling target is known without reading the body.
 	if loc := rec.Header().Get("Location"); loc != "/jobs/"+body["job_id"] {
 		t.Errorf("Location = %q, want /jobs/%s", loc, body["job_id"])
 	}
-	// モードは投入の時点でしか分かりません。ここで載せ損なうと、
-	// 出来上がった台本から話者の組み合わせを推し量るしかなくなります。
+	// The mode is known only at enqueue time. Miss it here and
+	// the only way left is to infer the speaker combination from the finished script.
 	if saved.Mode != "tech_solo" {
 		t.Errorf("Mode = %q, want tech_solo", saved.Mode)
 	}
 }
 
-// TestAPIEnqueueCreatesJobFromSuppliedScript は、持ち込んだ台本から新しいジョブを
-// 作れることを検証します。
+// TestAPIEnqueueCreatesJobFromSuppliedScript verifies that a new job can be created from
+// a supplied script.
 //
-// 既存ジョブが要りません。保存先はジョブ ID から決まるだけで、SaveScript は
-// ジョブの存在を確かめないため、ID を発行して保存すればそれが新規作成になります。
-// これが無いと、自分で書いた台本を喋らせるのに、捨てる前提の生成を 1 回
-// 走らせてから上書きする迂回が要りました。
+// No existing job is needed. The location follows from the job ID alone and SaveScript does not
+// check that the job exists, so minting an ID and saving is the creation.
+// Without this, having your own script spoken required the detour of running a throwaway
+// generation once and then overwriting it.
 func TestJobCreateJSONCreatesJobFromSuppliedScript(t *testing.T) {
 	t.Parallel()
 
@@ -88,13 +87,13 @@ func TestJobCreateJSONCreatesJobFromSuppliedScript(t *testing.T) {
 		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
 	}
 
-	// 台本は投入より先に保存されます。タスクには載せないため、
-	// worker は保存済みの台本を読む既存の経路をそのまま使えます。
+	// The script is saved before the enqueue. It does not ride on the task, so
+	// the worker can use its existing path of reading the stored script as is.
 	if len(repo.saved.Lines) != 2 || repo.saved.Title != "漫才" {
-		t.Errorf("保存された台本が違います: %+v", repo.saved)
+		t.Errorf("the saved script differs: %+v", repo.saved)
 	}
 	if len(order) != 2 || order[0] != "status" || order[1] != "enqueue" {
-		t.Errorf("順序 = %v, want [status enqueue]", order)
+		t.Errorf("order = %v, want [status enqueue]", order)
 	}
 
 	var body map[string]string
@@ -102,15 +101,15 @@ func TestJobCreateJSONCreatesJobFromSuppliedScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	if body["job_id"] == "" {
-		t.Error("新しいジョブ ID が返っていません")
+		t.Error("no new job ID returned")
 	}
 	if body["command"] != string(domain.CommandSynthesize) {
 		t.Errorf("command = %q", body["command"])
 	}
 }
 
-// TestAPIEnqueueRejectsBadSuppliedScript は、持ち込んだ台本にも同じ検証が
-// かかることを検証します。片方だけ緩いと、そちらから実在しない組み合わせが入ります。
+// TestAPIEnqueueRejectsBadSuppliedScript verifies that a supplied script goes through the same
+// validation. If one side were looser, non-existent pairs would get in through it.
 func TestJobCreateJSONRejectsBadSuppliedScript(t *testing.T) {
 	t.Parallel()
 
@@ -120,18 +119,18 @@ func TestJobCreateJSONRejectsBadSuppliedScript(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "script が無い",
+			name:    "no script",
 			body:    `{"command":"synthesize"}`,
 			wantErr: "script が要ります",
 		},
 		{
-			name:    "実在しない話者",
+			name:    "speaker that does not exist",
 			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"誰か","style":"ノーマル","text":"本文"}]}}`,
 			wantErr: "一覧にありません",
 		},
 		{
-			// 春日部つむぎの talk スタイルは「ノーマル」だけです。
-			name:    "話者が持たないスタイル",
+			// 春日部つむぎ's only talk style is 「ノーマル」.
+			name:    "style the speaker does not have",
 			body:    `{"command":"synthesize","script":{"lines":[{"speaker":"春日部つむぎ","style":"セクシー","text":"本文"}]}}`,
 			wantErr: "というスタイルはありません",
 		},
@@ -150,21 +149,21 @@ func TestJobCreateJSONRejectsBadSuppliedScript(t *testing.T) {
 				t.Errorf("status = %d, want 400", rec.Code)
 			}
 			if !strings.Contains(rec.Body.String(), tt.wantErr) {
-				t.Errorf("body = %s, want に %q を含む", rec.Body.String(), tt.wantErr)
+				t.Errorf("body = %s, want it to contain %q", rec.Body.String(), tt.wantErr)
 			}
 			if repo.calls != 0 {
-				t.Error("弾いたのに保存しています")
+				t.Error("saved although it was rejected")
 			}
 		})
 	}
 }
 
-// TestAPIEnqueueResolvesRecipeFromMusicJobID は、楽曲のジョブ ID から
-// レシピの場所が組み立てられることを検証します。
+// TestAPIEnqueueResolvesRecipeFromMusicJobID verifies that the recipe's location is built from
+// a music job ID.
 //
-// 規則は ap-voice が持ちます。呼び出し側に gs:// を組み立てさせると、
-// 置き場を変えるときに全員へ知らせて回ることになります。画面の
-// 「楽曲レシピ」タブと同じ関数を通るので、両者がずれることもありません。
+// ap-voice owns the rule. Making callers assemble the gs:// would mean telling everyone
+// whenever the location changes. It goes through the same function as the page's
+// 「楽曲レシピ」 tab, so the two cannot drift.
 func TestJobCreateJSONResolvesRecipeFromMusicJobID(t *testing.T) {
 	t.Parallel()
 
@@ -188,8 +187,8 @@ func TestJobCreateJSONResolvesRecipeFromMusicJobID(t *testing.T) {
 	}
 }
 
-// TestAPIEnqueueRejectsBadMusicJobID は、形式の違うジョブ ID を投入前に
-// 弾くことを検証します。存在しない場所を指すジョブを作らないためです。
+// TestAPIEnqueueRejectsBadMusicJobID verifies that a malformed job ID is rejected before the
+// enqueue, so that no job points at a location that does not exist.
 func TestJobCreateJSONRejectsBadMusicJobID(t *testing.T) {
 	t.Parallel()
 
@@ -208,6 +207,6 @@ func TestJobCreateJSONRejectsBadMusicJobID(t *testing.T) {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
 	}
 	if queue.calls != 0 {
-		t.Errorf("弾いたのに投入しています: %d 回", queue.calls)
+		t.Errorf("enqueued although it was rejected: %d times", queue.calls)
 	}
 }

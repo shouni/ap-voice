@@ -41,7 +41,7 @@ func TestPublishStepRun(t *testing.T) {
 		{Speaker: "ずんだもん", Style: "ノーマル", Text: "generated script"},
 	}
 
-	t.Run("正常系: 音声とスクリプトを書き込み署名付きURLを返すこと", func(t *testing.T) {
+	t.Run("ok: writes audio and script and returns a signed URL", func(t *testing.T) {
 		t.Parallel()
 
 		wavCalled := false
@@ -94,7 +94,7 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("正常系: signer が nil ならURLなしで成功すること", func(t *testing.T) {
+	t.Run("ok: succeeds without a URL when signer is nil", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewPublishStep(
@@ -114,7 +114,7 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("正常系: signer エラー時も公開成功としてURLなしで返すこと", func(t *testing.T) {
+	t.Run("ok: a signer error still publishes, without a URL", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewPublishStep(
@@ -138,7 +138,7 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: outputURI が空ならエラーになること", func(t *testing.T) {
+	t.Run("error: empty outputURI is an error", func(t *testing.T) {
 		t.Parallel()
 
 		runner := NewPublishStep(
@@ -155,7 +155,7 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: UploadWav 失敗を返すこと", func(t *testing.T) {
+	t.Run("error: returns the UploadWav failure", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("wav failed")
@@ -173,7 +173,7 @@ func TestPublishStepRun(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: UploadScript 失敗を返すこと", func(t *testing.T) {
+	t.Run("error: returns the UploadScript failure", func(t *testing.T) {
 		t.Parallel()
 
 		expectedErr := errors.New("script failed")
@@ -192,13 +192,12 @@ func TestPublishStepRun(t *testing.T) {
 	})
 }
 
-// TestPublishStepRunSavesScriptBeforeAudio は、台本を音声より先に保存することを
-// 検証します。
+// TestPublishStepRunSavesScriptBeforeAudio verifies that the script is stored before the audio.
 //
-// 台本と音声をまとめて作る経路では、生成した台本はまだどこにも無い状態です。
-// 音声を先に作ると、合成が上限に達した時点で Gemini の生成結果ごと失われ、
-// もう一度生成し直すしかなくなります。先に保存しておけば、詳細画面から
-// 合成だけをやり直せます。
+// On the path that makes script and audio together, the generated script exists nowhere yet.
+// If the audio were made first, synthesis hitting its limit would lose Gemini's output with it,
+// leaving regeneration as the only option. Stored first, synthesis alone can be redone
+// from the detail page.
 func TestPublishStepRunSavesScriptBeforeAudio(t *testing.T) {
 	t.Parallel()
 
@@ -210,7 +209,7 @@ func TestPublishStepRunSavesScriptBeforeAudio(t *testing.T) {
 		},
 		uploadWavFunc: func(_ context.Context, _ string, _ []domain.ScriptLine) error {
 			order = append(order, "wav")
-			return errors.New("合成が打ち切られました")
+			return errors.New("synthesis was cut off")
 		},
 	}
 
@@ -220,14 +219,14 @@ func TestPublishStepRunSavesScriptBeforeAudio(t *testing.T) {
 		Lines: []domain.ScriptLine{{Speaker: "ずんだもん", Style: "ノーマル", Text: "本文"}},
 	})
 	if err == nil {
-		t.Fatal("合成が失敗したのにエラーになりません")
+		t.Fatal("synthesis failed but no error was returned")
 	}
 
 	if len(order) == 0 || order[0] != "script" {
-		t.Fatalf("保存の順序 = %v, want 台本が先", order)
+		t.Fatalf("save order = %v, want the script first", order)
 	}
-	// 合成が落ちても、台本は既に保存されています。
+	// Even when synthesis fails, the script is already stored.
 	if len(order) != 2 {
-		t.Errorf("順序 = %v, want [script wav]", order)
+		t.Errorf("order = %v, want [script wav]", order)
 	}
 }

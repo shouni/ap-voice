@@ -8,18 +8,18 @@ import (
 	"testing"
 )
 
-// このファイルは、埋め込みテンプレートが CSP の前提を満たし続けることを見ます。
+// This file checks that the embedded templates keep meeting the CSP's assumptions.
 //
-// secureheaders が組み立てる CSP は script-src を 'self' だけにしています。
-// インラインの <script> や on* 属性が 1 つでも入るとその画面のスクリプトが実行されず、
-// しかもテンプレートを足した本人には気付けません（他の画面は正常に動くため）。
+// The CSP secureheaders builds limits script-src to 'self'.
+// A single inline <script> or on* attribute stops that page's scripts from running,
+// and whoever added the template cannot notice (the other pages keep working).
 //
-// このアプリは実際に踏んでいます。2026-08-24 まで detail.html が
-// `<script>window.apVoiceStyles = ...</script>` を持っており、CSP を入れる前に
-// data 属性（#voice-styles）へ移す必要がありました。同じ日に調べた 5 アプリのうち
-// 違反が残っていたのは、このガードを持たない ap-voice と adk-review だけでした。
+// This app has actually hit it. Until 2026-08-24 detail.html had
+// `<script>window.apVoiceStyles = ...</script>`, which had to move to a data attribute
+// (#voice-styles) before the CSP could go in. Of the 5 apps checked that day, the only ones
+// still violating it were ap-voice and adk-review, the two without this guard.
 
-// templateNames は、埋め込まれている全テンプレートのパスを返します。
+// templateNames returns the paths of every embedded template.
 func templateNames(t *testing.T) []string {
 	t.Helper()
 
@@ -34,45 +34,45 @@ func templateNames(t *testing.T) []string {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("テンプレートを列挙できない: %v", err)
+		t.Fatalf("cannot list the templates: %v", err)
 	}
 	if len(names) == 0 {
-		t.Fatal("テンプレートが 1 つも見つからない（embed の指定を疑う）")
+		t.Fatal("no templates found (suspect the embed directive)")
 	}
 	return names
 }
 
-// TestTemplatesHaveNoInlineScripts は、振る舞いをテンプレートの外に置き続けることを
-// 保証します。インラインのままだと画面の構造と振る舞いが同じファイルに混ざり、
-// テンプレートの値を JS の文字列リテラルへ埋め込む書き方（onclick="del('{{.JobID}}')"）
-// を誘発します。CSP の script-src を 'self' に保つ前提条件でもあります。
+// TestTemplatesHaveNoInlineScripts keeps behaviour outside the templates. Inline, a page's
+// structure and behaviour mix in one file, and it invites embedding template values in JS
+// string literals (onclick="del('{{.JobID}}')").
+// It is also the precondition for keeping the CSP's script-src at 'self'.
 func TestTemplatesHaveNoInlineScripts(t *testing.T) {
 	t.Parallel()
 
 	scriptTag := regexp.MustCompile(`<script\b[^>]*>`)
-	// 属性位置の on*= だけを拾います（本文中の英単語を巻き込まないよう空白を要求）。
+	// Pick up only on*= in attribute position (whitespace is required so English words in text are not caught).
 	eventAttribute := regexp.MustCompile(`\son[a-z]+\s*=\s*["']`)
 
 	for _, name := range templateNames(t) {
 		t.Run(name, func(t *testing.T) {
 			body, err := Templates.ReadFile(name)
 			if err != nil {
-				t.Fatalf("読めない: %v", err)
+				t.Fatalf("cannot read: %v", err)
 			}
 			for _, tag := range scriptTag.FindAllString(string(body), -1) {
 				if !strings.Contains(tag, "src=") {
-					t.Errorf("インラインスクリプトが残っています: %s", tag)
+					t.Errorf("an inline script remains: %s", tag)
 				}
 			}
 			for _, attribute := range eventAttribute.FindAllString(string(body), -1) {
-				t.Errorf("イベントハンドラ属性が残っています: %s", strings.TrimSpace(attribute))
+				t.Errorf("an event handler attribute remains: %s", strings.TrimSpace(attribute))
 			}
 		})
 	}
 }
 
-// TestTemplatesReferenceNoExternalOrigins は、Bootstrap を自前配信へ移した状態を保ちます。
-// 外部オリジンへの参照が復活すると CSP が実行時にそれを落とすので、CI で気付けるようにします。
+// TestTemplatesReferenceNoExternalOrigins keeps Bootstrap self-hosted.
+// If a reference to an external origin came back, the CSP would drop it at run time, so CI catches it.
 func TestTemplatesReferenceNoExternalOrigins(t *testing.T) {
 	t.Parallel()
 
@@ -82,18 +82,18 @@ func TestTemplatesReferenceNoExternalOrigins(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			body, err := Templates.ReadFile(name)
 			if err != nil {
-				t.Fatalf("読めない: %v", err)
+				t.Fatalf("cannot read: %v", err)
 			}
 			for _, ref := range external.FindAllStringSubmatch(string(body), -1) {
-				t.Errorf("外部オリジンへの参照が復活しています: %s", ref[1])
+				t.Errorf("a reference to an external origin is back: %s", ref[1])
 			}
 		})
 	}
 }
 
-// TestTemplateLocalAssetsExist は、テンプレートが指す /static/... が実在することを見ます。
-// vendor のバージョン更新はテンプレートとディレクトリ名の両方を直す必要があり、
-// 片方だけ直すと 404 になります（ブラウザで開くまで気付けません）。
+// TestTemplateLocalAssetsExist checks that the /static/... the templates point at exist.
+// A vendor version bump has to fix both the templates and the directory name, and
+// fixing only one gives a 404 (unnoticed until opened in a browser).
 func TestTemplateLocalAssetsExist(t *testing.T) {
 	t.Parallel()
 
@@ -102,23 +102,23 @@ func TestTemplateLocalAssetsExist(t *testing.T) {
 	for _, name := range templateNames(t) {
 		body, err := Templates.ReadFile(name)
 		if err != nil {
-			t.Fatalf("読めない: %v", err)
+			t.Fatalf("cannot read: %v", err)
 		}
 		for _, match := range ref.FindAllStringSubmatch(string(body), -1) {
 			asset := path.Join("static", match[1])
 			if _, err := fs.Stat(StaticFiles, asset); err != nil {
-				t.Errorf("%s が指す %s が存在しません: %v", name, asset, err)
+				t.Errorf("%s points at %s, which does not exist: %v", name, asset, err)
 			}
 		}
 	}
 }
 
-// TestPagesUseTheSharedLayout は、画面が外枠を自前で持たないことを保証します。
+// TestPagesUseTheSharedLayout ensures pages do not carry their own outer frame.
 //
-// 2026-08-24 まで 5 つの画面がそれぞれ <!doctype html> から </html> まで丸ごと持っており、
-// head の違いは <title> だけでした。Bootstrap を CDN から自前配信へ移したとき同じ 3 行を
-// 5 ファイル直すことになり、1 つ直し漏らせばその画面だけスタイルが崩れる状態でした。
-// 外枠は layout.html だけが持ちます。
+// Until 2026-08-24 each of 5 pages carried everything from <!doctype html> to </html>, and their
+// heads differed only in <title>. Moving Bootstrap from a CDN to self-hosting meant fixing the same
+// 3 lines in 5 files, and missing one would break that page's styling alone.
+// Only layout.html holds the outer frame.
 func TestPagesUseTheSharedLayout(t *testing.T) {
 	t.Parallel()
 
@@ -131,30 +131,30 @@ func TestPagesUseTheSharedLayout(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			body, err := Templates.ReadFile(name)
 			if err != nil {
-				t.Fatalf("読めない: %v", err)
+				t.Fatalf("cannot read: %v", err)
 			}
 			text := string(body)
 
 			if strings.Contains(strings.ToLower(text), "<!doctype") {
-				t.Error("画面が外枠を自前で持っています（layout.html に寄せてください）")
+				t.Error("the page carries its own outer frame (move it to layout.html)")
 			}
-			// layout.html は title と content を呼びます。1 つでも欠けるとその画面だけ
-			// 描画時に落ちます（他の画面は無事なので気付きにくい）。
+			// layout.html calls title and content. Missing even one makes that page alone
+			// fail at render time (easy to miss, since the other pages are fine).
 			//
-			// スクリプトはここにありません。どの画面が何を読むかは handlers の
-			// pageScripts が持ち、レイアウトが .JS から読み込みます。
+			// Scripts are not here. Which page loads what is held by handlers'
+			// pageScripts, and the layout loads them from .JS.
 			for _, block := range []string{"title", "content"} {
 				if !strings.Contains(text, `{{ define "`+block+`" }}`) {
-					t.Errorf("%q を define していません", block)
+					t.Errorf("does not define %q", block)
 				}
 			}
 		})
 	}
 }
 
-// TestParsePagesCoversEveryScreen は、画面テンプレートが 1 枚残らず組み立てられることを見ます。
-// 共通部品を片方の画面にだけ置くと、もう片方のセットから引けず描画時に落ちます
-// （input_badge を modes.html に置いたまま mode_detail.html から呼んで実際に踏みました）。
+// TestParsePagesCoversEveryScreen checks that every page template is assembled.
+// A shared part placed with only one page cannot be found from the other set and fails at render time
+// (actually hit by leaving input_badge in modes.html while calling it from mode_detail.html).
 func TestParsePagesCoversEveryScreen(t *testing.T) {
 	t.Parallel()
 
@@ -171,11 +171,11 @@ func TestParsePagesCoversEveryScreen(t *testing.T) {
 		base := path.Base(name)
 		tmpl, ok := pages[base]
 		if !ok {
-			t.Errorf("%s のテンプレートセットがありません", base)
+			t.Errorf("no template set for %s", base)
 			continue
 		}
 		if tmpl.Lookup(PageTemplate) == nil {
-			t.Errorf("%s のセットに %s がありません", base, PageTemplate)
+			t.Errorf("the set for %s lacks %s", base, PageTemplate)
 		}
 	}
 }
