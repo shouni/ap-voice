@@ -73,7 +73,7 @@ require (
 	github.com/ikawaha/kagome/v2 v2.11.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/shouni/audio v1.5.2 // indirect
+	github.com/shouni/audio v1.5.3 // indirect
 	github.com/shouni/netarmor v1.4.4 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
