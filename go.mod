@@ -7,12 +7,12 @@ require (
 	github.com/caarlos0/env/v11 v11.4.2
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/go-cmp v0.7.0
-	github.com/shouni/gcp-kit v1.21.5
+	github.com/shouni/gcp-kit v1.21.6
 	github.com/shouni/genai-kit v1.8.3
 	github.com/shouni/go-http-kit v1.13.6
 	github.com/shouni/go-notify v1.6.6
 	github.com/shouni/go-prompt-kit v1.7.3
-	github.com/shouni/go-remote-io v1.13.18
+	github.com/shouni/go-remote-io v1.13.19
 	github.com/shouni/go-serve-kit v1.3.1
 	github.com/shouni/go-utils v1.8.2
 	github.com/shouni/go-voicevox v1.12.7
@@ -93,7 +93,7 @@ require (
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	google.golang.org/api v0.314.0 // indirect
+	google.golang.org/api v0.315.0 // indirect
 	google.golang.org/genai v1.77.0 // indirect
 	google.golang.org/genproto v0.0.0-20261110000943-09e21b237f2c // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261110000943-09e21b237f2c // indirect
