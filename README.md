@@ -8,9 +8,7 @@
 
 English | [日本語](README.ja.md)
 
-## 🚀 About
-
-**Write the script first, check it, then give it a voice.**
+## 🚀 About - write the script first, check it, then give it a voice
 
 **AP Voice** is a service on Cloud Run + Cloud Tasks that turns documents into narration audio.
 
